@@ -1,6 +1,7 @@
+// schema.prisma
+
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -8,10 +9,175 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Post {
-  id      Int    @id @default(autoincrement())
-  title   String
-  content String
-  published Boolean @default(false)
-  upvotes Int @default(0)
+// =======================
+// 1. ACTORS (Users)
+// =======================
+
+model User {
+  user_id       Int           @id @default(autoincrement())
+  username      String        @unique
+  password_hash String
+  role          String        @default("CASHIER") // 'ADMIN', 'CASHIER'
+  
+  // Relations
+  transactions  Transaction[] // Sales handled by this staff
+  
+  @@map("users")
+}
+
+model Customer {
+  customer_id     Int           @id @default(autoincrement())
+  name            String
+  contact_details String?
+  
+  // Auth for Vendors (Pre-orders)
+  email           String?       @unique 
+  password_hash   String?       
+  is_vendor       Boolean       @default(false)
+  
+  // Relations
+  transactions    Transaction[] // History of what they bought
+  orders          Order[]       // History of what they pre-ordered
+
+  @@map("customers")
+}
+
+// =======================
+// 2. PRODUCTS & INVENTORY
+// =======================
+
+model Product {
+  product_id      Int      @id @default(autoincrement())
+  product_name    String
+  category        String   // 'SODA', 'SNACK', etc.
+  retail_price    Decimal  // Price for walk-ins
+  wholesale_price Decimal  // Price for vendors
+  barcode         String?  @unique // Product barcode (EAN, UPC, etc.)
+  image_url       String?  // Product image URL
+  
+  // Relations
+  inventory        Inventory?
+  transactionItems TransactionItem[]
+  orderItems       OrderItem[]
+  salesForecasts   SalesForecast[]
+  
+  @@map("products")
+}
+
+model Inventory {
+  inventory_id   Int      @id @default(autoincrement())
+  product_id     Int      @unique
+  
+  current_stock  Int      @default(0)
+  reorder_level  Int      @default(10) // Alert threshold
+  last_restock   DateTime @updatedAt
+
+  product        Product  @relation(fields: [product_id], references: [product_id])
+
+  @@map("inventory")
+}
+
+// =======================
+// 3. PRE-ORDERS (Vendor Side)
+// =======================
+
+model Order {
+  order_id      Int      @id @default(autoincrement())
+  customer_id   Int
+  order_date    DateTime @default(now())
+  status        String   @default("PENDING") // PENDING, READY, COMPLETED, CANCELLED
+  total_amount  Decimal
+
+  // Relations
+  items         OrderItem[]
+  customer      Customer    @relation(fields: [customer_id], references: [customer_id])
+  
+  // Optional: Link to the transaction if this order was paid/completed
+  transaction   Transaction?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  order_item_id Int     @id @default(autoincrement())
+  order_id      Int
+  product_id    Int
+  quantity      Int
+  price         Decimal // Estimated price at time of order
+
+  order   Order   @relation(fields: [order_id], references: [order_id])
+  product Product @relation(fields: [product_id], references: [product_id])
+
+  @@map("order_items")
+}
+
+// =======================
+// 4. POS & TRANSACTIONS (Actual Sales)
+// =======================
+
+model Transaction {
+  transaction_id   Int      @id @default(autoincrement())
+  receipt_no       String   @unique @default(uuid())
+  created_at       DateTime @default(now())
+  
+  // Links
+  user_id          Int      // Cashier who processed it
+  customer_id      Int?     // Optional (Walk-ins = null)
+  order_id         Int?     @unique // Optional: If this sale came from a pre-order
+
+  total_amount     Decimal
+  status           String   @default("COMPLETED") // COMPLETED, VOID
+
+  // Relations
+  items       TransactionItem[]
+  payment     Payment?
+  
+  user        User      @relation(fields: [user_id], references: [user_id])
+  customer    Customer? @relation(fields: [customer_id], references: [customer_id])
+  order       Order?    @relation(fields: [order_id], references: [order_id])
+
+  @@map("transactions")
+}
+
+model TransactionItem {
+  transaction_item_id Int @id @default(autoincrement())
+  transaction_id      Int
+  product_id          Int
+  
+  quantity      Int
+  price_at_sale Decimal // Captured price
+  subtotal      Decimal
+
+  transaction   Transaction @relation(fields: [transaction_id], references: [transaction_id])
+  product       Product     @relation(fields: [product_id], references: [product_id])
+
+  @@map("transaction_items")
+}
+
+model Payment {
+  payment_id      Int      @id @default(autoincrement())
+  transaction_id  Int      @unique
+  
+  payment_method  String   // CASH, GCASH
+  amount_tendered Decimal
+  change          Decimal
+  
+  transaction     Transaction @relation(fields: [transaction_id], references: [transaction_id])
+
+  @@map("payments")
+}
+
+// =======================
+// 5. ANALYTICS
+// =======================
+
+model SalesForecast {
+  sales_forecast_id Int      @id @default(autoincrement())
+  product_id        Int
+  forecast_date     DateTime
+  expected_sales    Int
+
+  product Product @relation(fields: [product_id], references: [product_id])
+
+  @@map("sales_forecasts")
 }
