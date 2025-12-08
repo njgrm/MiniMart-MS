@@ -156,16 +156,42 @@ export function CSVImportDialog({
     return { valid, errors };
   };
 
+  // Helper to clean CSV content (remove BOM, normalize line endings, fix wrapped lines)
+  const cleanCsvContent = (content: string): string => {
+    // Remove BOM (Byte Order Mark) if present
+    let cleaned = content.replace(/^\uFEFF/, "");
+    // Normalize line endings to \n
+    cleaned = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Trim whitespace
+    cleaned = cleaned.trim();
+    
+    // Fix rows that are entirely wrapped in quotes (e.g., "name,category,..." -> name,category,...)
+    // This happens when entire CSV lines are quoted
+    const lines = cleaned.split("\n");
+    const fixedLines = lines.map((line) => {
+      const trimmed = line.trim();
+      // If line starts and ends with quotes, and contains commas, unwrap it
+      if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.includes(",")) {
+        // Remove outer quotes
+        return trimmed.slice(1, -1);
+      }
+      return trimmed;
+    });
+    
+    return fixedLines.join("\n");
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setFileName(file.name);
       const reader = new FileReader();
       reader.onload = (event) => {
-        setCsvContent(event.target?.result as string);
+        const content = cleanCsvContent(event.target?.result as string);
+        setCsvContent(content);
         setValidationErrors([]);
       };
-      reader.readAsText(file);
+      reader.readAsText(file, "UTF-8");
     }
   };
 
@@ -178,10 +204,11 @@ export function CSVImportDialog({
       setFileName(file.name);
       const reader = new FileReader();
       reader.onload = (event) => {
-        setCsvContent(event.target?.result as string);
+        const content = cleanCsvContent(event.target?.result as string);
+        setCsvContent(content);
         setValidationErrors([]);
       };
-      reader.readAsText(file);
+      reader.readAsText(file, "UTF-8");
     } else {
       toast.error("Please drop a valid CSV file");
     }
@@ -208,12 +235,20 @@ export function CSVImportDialog({
       const result = Papa.parse<ParsedRow>(csvContent, {
         header: true,
         skipEmptyLines: true,
+        delimiter: ",", // Explicitly set comma as delimiter
+        quoteChar: '"',
+        escapeChar: '"',
         transformHeader: (header) => header.toLowerCase().trim().replace(/\s+/g, "_").replace(/^["']|["']$/g, ""),
         transform: (value) => value.trim().replace(/^["']|["']$/g, ""), // Strip surrounding quotes
       });
 
-      if (result.errors.length > 0) {
-        toast.error("CSV parsing error: " + result.errors[0].message);
+      // Filter out minor parsing errors (like empty rows)
+      const criticalErrors = result.errors.filter(
+        (e) => e.type !== "FieldMismatch" && e.code !== "TooFewFields"
+      );
+
+      if (criticalErrors.length > 0) {
+        toast.error("CSV parsing error: " + criticalErrors[0].message);
         return;
       }
 

@@ -134,6 +134,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
           product_id: newProduct.product_id,
           current_stock: initial_stock,
           reorder_level,
+          last_restock: new Date(),
         },
       });
 
@@ -243,6 +244,7 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
           product_id,
           current_stock,
           reorder_level,
+          last_restock: new Date(),
         },
       });
     });

@@ -100,6 +100,7 @@ export async function bulkCreateProducts(
             product_id: newProduct.product_id,
             current_stock: product.stock,
             reorder_level: product.reorder_level ?? 10,
+            last_restock: new Date(),
           },
         });
       });
