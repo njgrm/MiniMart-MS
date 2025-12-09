@@ -353,12 +353,18 @@ export function CSVImportDialog({
               }
             `}
           >
+            <label htmlFor="csv-upload-input" className="sr-only">
+              Upload CSV file
+            </label>
             <input
+              id="csv-upload-input"
               type="file"
               accept=".csv"
               onChange={handleFileChange}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               disabled={isPending}
+              aria-label="Upload CSV file"
+              title="Upload CSV file"
             />
             
             {fileName ? (

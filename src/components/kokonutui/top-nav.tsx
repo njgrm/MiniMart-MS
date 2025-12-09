@@ -44,7 +44,7 @@ export default function TopNav({ user }: TopNavProps) {
   return (
     <div className="h-full flex items-center justify-between px-6 bg-card">
       {/* Left side - Breadcrumb */}
-      <div className="flex-1 mt-4 min-w-0">
+      <div className="flex-1 mt-4 ml-1.5 min-w-0">
         <DynamicBreadcrumb />
       </div>
 

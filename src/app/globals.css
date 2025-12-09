@@ -66,14 +66,14 @@
   /* Background: Soft Beige #EDE5D8 */
   --background: hsl(37 37% 89%);
   
-  /* Foreground: Dark Charcoal / Espresso #2B2726 - warm, not pure black */
-  --foreground: hsl(12 6% 16%);
+  /* Foreground: Dark Coffee Brown #2D1B1A */
+  --foreground: hsl(4 27% 14%);
 
   /* Card/Popover: Warm Alabaster #F9F6F0 - reduced eye strain */
   --card: hsl(40 33% 96%);
-  --card-foreground: hsl(12 6% 16%);
+  --card-foreground: hsl(4 27% 14%);
   --popover: hsl(40 33% 96%);
-  --popover-foreground: hsl(12 6% 16%);
+  --popover-foreground: hsl(4 27% 14%);
 
   /* Input Background: Pure White #FFFFFF for Layer 3 depth */
   --input-bg: hsl(0 0% 100%);
@@ -88,8 +88,8 @@
 
   /* Muted: Slightly darker beige for subtle backgrounds */
   --muted: hsl(37 25% 85%);
-  /* Muted Foreground: Medium Warm Brown #685D55 - "faded ink" look */
-  --muted-foreground: hsl(25 10% 37%);
+  /* Muted Foreground: Medium Warm Brown #6D5A50 */
+  --muted-foreground: hsl(21 15% 37%);
 
   /* Accent: Aqua Blue #2EAFC5 */
   --accent: hsl(189 62% 48%);
@@ -103,9 +103,9 @@
   --warning: hsl(43 96% 56%);
   --warning-foreground: hsl(12 6% 16%);
 
-  /* Border: Warm Brown Beige #D6CDBF - no cool gray lines */
-  --border: hsl(37 25% 79%);
-  --input: hsl(37 25% 79%);
+  /* Border: Warm Brown Beige #D8C6B9 - no cool gray lines */
+  --border: hsl(25 29% 79%);
+  --input: hsl(25 29% 79%);
   
   /* Ring: Primary color for focus states */
   --ring: hsl(357 84% 37%);
@@ -119,12 +119,12 @@
 
   /* Sidebar: Warm Alabaster to match cards */
   --sidebar: hsl(40 33% 96%);
-  --sidebar-foreground: hsl(12 6% 16%);
+  --sidebar-foreground: hsl(4 27% 14%);
   --sidebar-primary: hsl(357 84% 37%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
   --sidebar-accent: hsl(37 25% 90%);
   --sidebar-accent-foreground: hsl(12 6% 16%);
-  --sidebar-border: hsl(37 25% 82%);
+  --sidebar-border: hsl(25 29% 82%);
   --sidebar-ring: hsl(357 84% 37%);
 }
 
@@ -144,8 +144,8 @@
   /* Input Background: Slightly lighter for depth */
   --input-bg: hsl(12 6% 22%);
 
-  /* Primary: Brighter Crimson for dark mode visibility */
-  --primary: hsl(357 75% 50%);
+  /* Primary: Match light mode crimson for consistency */
+  --primary: hsl(357 84% 37%);
   --primary-foreground: hsl(0 0% 100%);
 
   /* Secondary: Warm Orange - keep white text for contrast */

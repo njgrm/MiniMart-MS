@@ -1,5 +1,6 @@
 "use client";
-
+import { useEffect, useState, useTransition } from "react";
+import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,6 +14,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
+import logo from "../../../assets/christian_minimart_logo_words.png";
+import logoDark from "../../../assets/christian_minimart_logo_dark_words.png";
 
 interface NavItem {
   href: string;
@@ -62,21 +66,28 @@ interface SidebarProps {
 
 export default function Sidebar({ pendingOrdersCount = 0 }: SidebarProps) {
   const pathname = usePathname();
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <aside className="w-64 border-r border-border bg-card flex flex-col">
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-6 border-b border-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-warm-icon dark:shadow-primary-glow">
-          <Store className="size-5 text-primary-foreground" />
-        </div>
+        
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-foreground">
-            Christian Minimart
+          <Image
+              src={mounted && resolvedTheme === "dark" ? logoDark : logo}
+              alt="Christian Minimart logo"
+              className="w-40"
+              priority
+            />
           </span>
-          <span className="text-xs text-muted-foreground">
-            Management System
-          </span>
+       
         </div>
       </div>
 

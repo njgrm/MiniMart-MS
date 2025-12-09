@@ -9,69 +9,69 @@ export default function AdminDashboard() {
       <div className="space-y-6">
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E]">
+          <Card className="bg-card border-border shadow-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">
                 Total Products
               </CardTitle>
-              <Package className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+              <Package className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              <div className="text-2xl font-bold text-foreground">
                 --
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Items in inventory
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E]">
+          <Card className="bg-card border-border shadow-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">
                 Today&apos;s Sales
               </CardTitle>
-              <ShoppingCart className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              <div className="text-2xl font-bold text-foreground">
                 ₱0.00
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 0 transactions
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E]">
+          <Card className="bg-card border-border shadow-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">
                 Pending Orders
               </CardTitle>
-              <Users className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              <div className="text-2xl font-bold text-foreground">
                 --
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Awaiting processing
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E]">
+          <Card className="bg-card border-border shadow-card">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              <CardTitle className="text-sm font-semibold text-muted-foreground">
                 Low Stock Items
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+              <div className="text-2xl font-bold text-warning">
                 --
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Need restocking
               </p>
             </CardContent>
@@ -80,27 +80,27 @@ export default function AdminDashboard() {
 
         {/* Placeholder sections */}
         <div className="grid gap-4 md:grid-cols-2">
-          <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E]">
+          <Card className="bg-card border-border shadow-card">
             <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-zinc-100">
+              <CardTitle className="text-foreground">
                 Recent Sales
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="text-sm text-muted-foreground">
                 No recent sales to display.
               </p>
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E]">
+          <Card className="bg-card border-border shadow-card">
             <CardHeader>
-              <CardTitle className="text-zinc-900 dark:text-zinc-100">
+              <CardTitle className="text-foreground">
                 Low Stock Alerts
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              <p className="text-sm text-muted-foreground">
                 No low stock alerts.
               </p>
             </CardContent>

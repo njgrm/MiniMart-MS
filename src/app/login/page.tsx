@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Store, Eye, EyeOff, User } from "lucide-react";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,12 +17,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { login } from "@/actions/auth";
+import Image from "next/image";
+import logo from "../../../assets/christian_minimart_logo.png";
+import logoDark from "../../../assets/christian_minimart_logo_dark.png";
 
 export default function LoginPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Form state
   const [identifier, setIdentifier] = useState("");
@@ -56,11 +66,13 @@ export default function LoginPage() {
       <div className="flex w-full max-w-md flex-col gap-6">
         {/* Logo/Brand */}
         <div className="flex items-center gap-3 self-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-warm-icon dark:shadow-primary-glow">
-            <Store className="size-5 text-primary-foreground" />
-          </div>
           <span className="text-xl font-semibold tracking-tight text-foreground">
-            Christian Minimart
+            <Image
+              src={mounted && resolvedTheme === "dark" ? logoDark : logo}
+              alt="Christian Minimart logo"
+              className="w-80"
+              priority
+            />
           </span>
         </div>
 
@@ -68,7 +80,7 @@ export default function LoginPage() {
         <Card className="shadow-card-hover">
           <CardHeader className="text-center pb-2">
             <CardTitle className="text-2xl font-bold text-foreground">
-              Welcome Back
+              Welcome Back!
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               Sign in with your username or email

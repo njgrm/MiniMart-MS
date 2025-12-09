@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { vendorRegister } from "@/actions/auth";
+import Image from "next/image";
+import logo from "../../../assets/christian_minimart_logo.png";
+
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -87,14 +90,11 @@ export default function RegisterPage() {
         <ThemeToggle />
       </div>
 
-      <div className="flex w-full max-w-md flex-col gap-6">
+      <div className="flex w-full max-w-md flex-col  gap-6">
         {/* Logo/Brand */}
         <div className="flex items-center gap-3 self-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-warm-icon dark:shadow-primary-glow">
-            <Store className="size-5 text-primary-foreground" />
-          </div>
           <span className="text-xl font-semibold tracking-tight text-foreground">
-            Christian Minimart
+        
           </span>
         </div>
 
