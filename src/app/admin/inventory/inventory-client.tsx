@@ -6,7 +6,7 @@ import { ProductsTable } from "./products-table";
 import { ProductDialog } from "./product-dialog";
 import { DeleteProductDialog } from "./delete-product-dialog";
 import { CSVImportDialog } from "./csv-import-dialog";
-import { PageHeader } from "@/components/page-header";
+import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
 
 export interface ProductData {
   product_id: number;
@@ -67,10 +67,7 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <PageHeader
-        title="Inventory"
-        description="Manage your products and stock levels."
-      />
+      
 
       <div className="flex-1 flex flex-col min-h-0">
         {/* Products Table */}

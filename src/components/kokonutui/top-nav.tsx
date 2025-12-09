@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePageHeader } from "@/contexts/page-header-context";
+import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
 
 interface TopNavProps {
   user?: {
@@ -26,8 +26,6 @@ interface TopNavProps {
 export default function TopNav({ user }: TopNavProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const { header } = usePageHeader();
-
   const handleLogout = async () => {
     await signOut({ redirect: false });
     router.push("/login");
@@ -45,14 +43,9 @@ export default function TopNav({ user }: TopNavProps) {
 
   return (
     <div className="h-full flex items-center justify-between px-6 bg-card">
-      {/* Left side - Dynamic page title and description */}
-      <div className="flex flex-col justify-center">
-        <h1 className="text-lg font-semibold text-foreground leading-tight">
-          {header.title}
-        </h1>
-        <p className="text-sm text-muted-foreground leading-tight">
-          {header.description}
-        </p>
+      {/* Left side - Breadcrumb */}
+      <div className="flex-1 mt-4 min-w-0">
+        <DynamicBreadcrumb />
       </div>
 
       {/* Right side */}

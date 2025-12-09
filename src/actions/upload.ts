@@ -24,6 +24,11 @@ export async function uploadImage(file: File): Promise<UploadResult> {
       return { success: false, error: "Only image files are allowed" };
     }
 
+    // Guard against zero-length files
+    if (!file.size || Number.isNaN(file.size)) {
+      return { success: false, error: "File is empty or invalid" };
+    }
+
     // Basic size guard: 10MB limit server-side
     const maxBytes = 10 * 1024 * 1024;
     if (file.size > maxBytes) {
@@ -36,7 +41,8 @@ export async function uploadImage(file: File): Promise<UploadResult> {
     const uploadsDir = path.join(process.cwd(), "public", "uploads");
     await mkdir(uploadsDir, { recursive: true });
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+    const rawExt = file.name.split(".").pop() || "";
+    const ext = rawExt.toLowerCase().replace(/[^a-z0-9]/gi, "") || "bin";
     const filename = `${randomUUID()}.${ext}`;
     const filePath = path.join(uploadsDir, filename);
 

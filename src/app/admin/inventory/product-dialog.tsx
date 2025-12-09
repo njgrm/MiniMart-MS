@@ -93,12 +93,18 @@ export function ProductDialog({
       let imagePath: string | null = imageUrl || null;
 
       if (imageFile) {
-        const upload = await uploadImage(imageFile);
-        if (!upload.success || !upload.path) {
-          setError(upload.error || "Failed to upload image");
+        try {
+          const upload = await uploadImage(imageFile);
+          if (!upload.success || !upload.path) {
+            setError(upload.error || "Failed to upload image");
+            return;
+          }
+          imagePath = upload.path;
+        } catch (err) {
+          console.error("Upload image failed:", err);
+          setError("Failed to upload image. Please try again.");
           return;
         }
-        imagePath = upload.path;
       }
 
       if (isEditing && product) {

@@ -2,16 +2,10 @@
 
 import { Package, ShoppingCart, Users, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader } from "@/components/page-header";
 
 export default function AdminDashboard() {
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        description="Welcome back! Here's an overview of your store."
-      />
-      
       <div className="space-y-6">
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

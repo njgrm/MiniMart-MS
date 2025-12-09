@@ -487,7 +487,7 @@ export function ProductsTable({
         <div className="h-8 w-px bg-border mx-1" />
 
         {/* KPI Cards - Solid in light mode, transparent in dark mode */}
-        <div className="flex items-center gap-2 h-10 px-3 rounded-lg bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none">
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none">
           <Boxes className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">{totalProducts}</span>
           <span className="text-xs text-muted-foreground">Products</span>
@@ -498,14 +498,14 @@ export function ProductsTable({
           onClick={() => {
             table.getColumn("status")?.setFilterValue("LOW_STOCK");
           }}
-          className="flex items-center gap-2 h-10 px-3 rounded-lg bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none hover:bg-secondary/90 dark:hover:bg-secondary/30 transition-colors cursor-pointer"
+          className="flex items-center gap-2 h-10 px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none hover:bg-secondary/90 dark:hover:bg-secondary/30 transition-colors cursor-pointer"
         >
           <AlertTriangle className="h-4 w-4" />
           <span className="text-sm font-medium">{lowStockItems}</span>
           <span className="text-xs opacity-90 dark:opacity-80">Low Stock</span>
         </button>
 
-        <div className="flex items-center gap-2 h-10 px-3 rounded-lg bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">
           <Coins className="h-4 w-4" />
           <span className="text-sm font-medium">₱{inventoryValue.toLocaleString()}</span>
         </div>
