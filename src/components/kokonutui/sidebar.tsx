@@ -64,17 +64,17 @@ export default function Sidebar({ pendingOrdersCount = 0 }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 border-r border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#0F0F12] flex flex-col">
+    <aside className="w-64 border-r border-border bg-card flex flex-col">
       {/* Logo */}
-      <div className="h-16 flex items-center gap-3 px-6 border-b border-gray-200 dark:border-[#1F1F23]">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 dark:bg-zinc-100">
-          <Store className="size-5 text-white dark:text-zinc-900" />
+      <div className="h-16 flex items-center gap-3 px-6 border-b border-border">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-warm-icon dark:shadow-primary-glow">
+          <Store className="size-5 text-primary-foreground" />
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          <span className="text-sm font-semibold text-foreground">
             Christian Minimart
           </span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          <span className="text-xs text-muted-foreground">
             Management System
           </span>
         </div>
@@ -93,13 +93,13 @@ export default function Sidebar({ pendingOrdersCount = 0 }: SidebarProps) {
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
                 isActive
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 hover:text-zinc-900 dark:hover:text-zinc-100",
-                item.highlight && !isActive && "ring-2 ring-emerald-500/50 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
+                  ? "bg-primary text-primary-foreground shadow-warm-md dark:shadow-primary-glow"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                item.highlight && !isActive && "ring-2 ring-secondary/50 bg-secondary/10 text-secondary hover:bg-secondary/20"
               )}
             >
               <span className={cn(
-                item.highlight && !isActive && "text-emerald-600 dark:text-emerald-400"
+                item.highlight && !isActive && "text-secondary"
               )}>
                 {item.icon}
               </span>
@@ -113,7 +113,7 @@ export default function Sidebar({ pendingOrdersCount = 0 }: SidebarProps) {
                 </Badge>
               )}
               {item.highlight && !isActive && (
-                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="flex h-2 w-2 rounded-full bg-secondary animate-pulse" />
               )}
             </Link>
           );
@@ -121,13 +121,11 @@ export default function Sidebar({ pendingOrdersCount = 0 }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200 dark:border-[#1F1F23]">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center">
+      <div className="p-4 border-t border-border">
+        <p className="text-xs text-muted-foreground text-center">
           © 2025 Christian Minimart
         </p>
       </div>
     </aside>
   );
 }
-
-

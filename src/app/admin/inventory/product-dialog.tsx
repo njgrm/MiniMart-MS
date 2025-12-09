@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import Image from "next/image";
-import { Camera, ImageIcon, X, Wand2 } from "lucide-react";
+import { Camera, X, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,8 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createProduct, updateProduct } from "@/actions/product";
+import { uploadImage } from "@/actions/upload";
 import { PRODUCT_CATEGORIES } from "@/lib/validations/product";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { ImageUpload } from "@/components/ui/image-upload";
 import type { ProductData } from "./inventory-client";
 
 interface ProductDialogProps {
@@ -52,8 +53,8 @@ export function ProductDialog({
   const [stock, setStock] = useState("");
   const [reorderLevel, setReorderLevel] = useState("10");
   const [barcode, setBarcode] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [imageError, setImageError] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // Reset form when dialog opens/closes or product changes
   useEffect(() => {
@@ -66,7 +67,8 @@ export function ProductDialog({
         setStock(product.current_stock.toString());
         setReorderLevel(product.reorder_level.toString());
         setBarcode(product.barcode || "");
-        setImageUrl(product.image_url || "");
+        setImageUrl(product.image_url || null);
+        setImageFile(null);
       } else {
         setProductName("");
         setCategory("");
@@ -75,23 +77,30 @@ export function ProductDialog({
         setStock("");
         setReorderLevel("10");
         setBarcode("");
-        setImageUrl("");
+        setImageUrl(null);
+        setImageFile(null);
       }
       setError(null);
-      setImageError(false);
     }
   }, [open, product]);
-
-  // Reset image error when URL changes
-  useEffect(() => {
-    setImageError(false);
-  }, [imageUrl]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     startTransition(async () => {
+      // Handle image upload if a new file was chosen
+      let imagePath: string | null = imageUrl || null;
+
+      if (imageFile) {
+        const upload = await uploadImage(imageFile);
+        if (!upload.success || !upload.path) {
+          setError(upload.error || "Failed to upload image");
+          return;
+        }
+        imagePath = upload.path;
+      }
+
       if (isEditing && product) {
         const result = await updateProduct({
           product_id: product.product_id,
@@ -102,7 +111,7 @@ export function ProductDialog({
           current_stock: parseInt(stock),
           reorder_level: parseInt(reorderLevel),
           barcode: barcode || null,
-          image_url: imageUrl || null,
+          image_url: imagePath,
         });
 
         if (result.success) {
@@ -117,7 +126,7 @@ export function ProductDialog({
             current_stock: stockNum,
             reorder_level: reorderNum,
             barcode: barcode || null,
-            image_url: imageUrl || null,
+            image_url: imagePath,
             status: stockNum <= reorderNum ? "LOW_STOCK" : "IN_STOCK",
           });
           onOpenChange(false);
@@ -133,7 +142,7 @@ export function ProductDialog({
           initial_stock: parseInt(stock),
           reorder_level: parseInt(reorderLevel),
           barcode: barcode || null,
-          image_url: imageUrl || null,
+          image_url: imagePath,
         });
 
         if (result.success && result.data) {
@@ -149,7 +158,7 @@ export function ProductDialog({
             current_stock: stockNum,
             reorder_level: reorderNum,
             barcode: barcode || null,
-            image_url: imageUrl || null,
+            image_url: imagePath,
             status: stockNum <= reorderNum ? "LOW_STOCK" : "IN_STOCK",
           });
           onOpenChange(false);
@@ -164,17 +173,15 @@ export function ProductDialog({
     setBarcode(scannedBarcode);
   };
 
-  const isValidImageUrl = imageUrl && !imageError;
-
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white dark:bg-[#1A1A1E] border-gray-200 dark:border-[#1F1F23]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-zinc-900 dark:text-zinc-100">
+            <DialogTitle>
               {isEditing ? "Edit Product" : "Add New Product"}
             </DialogTitle>
-            <DialogDescription className="text-zinc-500 dark:text-zinc-400">
+            <DialogDescription>
               {isEditing
                 ? "Update the product details below."
                 : "Fill in the details to add a new product."}
@@ -183,57 +190,28 @@ export function ProductDialog({
 
           <form onSubmit={handleSubmit}>
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-600 dark:text-red-400">
+              <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
             <div className="grid gap-4 py-4">
-              {/* Image URL with Preview */}
+              {/* Image Upload */}
               <div className="grid gap-2">
-                <Label htmlFor="image_url">Product Image URL</Label>
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <Input
-                      id="image_url"
-                      value={imageUrl}
-                      onChange={(e) => setImageUrl(e.target.value)}
-                      placeholder="https://example.com/image.jpg"
-                      disabled={isPending}
-                    />
-                  </div>
-                  {imageUrl && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setImageUrl("")}
-                      className="shrink-0"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                {/* Image Preview */}
-                {imageUrl && (
-                  <div className="mt-2 relative w-32 h-32 rounded-lg overflow-hidden border border-gray-200 dark:border-[#1F1F23] bg-zinc-100 dark:bg-zinc-800">
-                    {isValidImageUrl ? (
-                      <Image
-                        src={imageUrl}
-                        alt="Product preview"
-                        fill
-                        className="object-cover"
-                        onError={() => setImageError(true)}
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-zinc-400">
-                        <ImageIcon className="h-8 w-8 mb-1" />
-                        <span className="text-xs">Invalid URL</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <Label>Product Image</Label>
+                <ImageUpload
+                  value={imageUrl || undefined}
+                  onChange={(file) => {
+                    setImageFile(file);
+                    if (!file) {
+                      setImageUrl(null);
+                    } else {
+                      // Clear existing URL when a new file is chosen
+                      setImageUrl(null);
+                    }
+                  }}
+                  disabled={isPending}
+                />
               </div>
 
               {/* Barcode with Scanner and Generator */}
@@ -275,7 +253,7 @@ export function ProductDialog({
                     <span className="hidden sm:inline">Generate</span>
                   </Button>
                 </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-xs text-muted-foreground">
                   Scan retail products or generate for custom bundles
                 </p>
               </div>

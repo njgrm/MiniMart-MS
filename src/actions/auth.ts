@@ -23,7 +23,8 @@ export type ActionResult = {
 export async function login(data: LoginInput): Promise<ActionResult> {
   const parsed = loginSchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    const firstError = parsed.error.errors?.[0]?.message ?? parsed.error.message ?? "Validation failed";
+    return { success: false, error: firstError };
   }
 
   try {
@@ -47,7 +48,8 @@ export async function login(data: LoginInput): Promise<ActionResult> {
 export async function vendorRegister(data: VendorRegisterInput): Promise<ActionResult> {
   const parsed = vendorRegisterSchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    const firstError = parsed.error.errors?.[0]?.message ?? parsed.error.message ?? "Validation failed";
+    return { success: false, error: firstError };
   }
 
   const { name, email, password, contactDetails } = parsed.data;

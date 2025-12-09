@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* 
+ * Warm Organic Theme - Custom Color Palette
+ * ==========================================
+ * Background: #EDE5D8 (Soft Beige)
+ * Foreground: #2B2726 (Dark Charcoal)
+ * Card: #F9F6F0 (Warm Alabaster) - reduced eye strain
+ * Primary: #AC0F16 (Deep Crimson)
+ * Secondary: #F1782F (Warm Orange)
+ * Accent: #2EAFC5 (Aqua Blue)
+ * Destructive: #EF4444 (Bright Red)
+ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -25,6 +37,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -37,6 +52,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-input-bg: var(--input-bg);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -44,79 +60,226 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  /* Modern rounded corners - 12px base */
+  --radius: 0.75rem;
+
+  /* Background: Soft Beige #EDE5D8 */
+  --background: hsl(37 37% 89%);
+  
+  /* Foreground: Dark Charcoal / Espresso #2B2726 - warm, not pure black */
+  --foreground: hsl(12 6% 16%);
+
+  /* Card/Popover: Warm Alabaster #F9F6F0 - reduced eye strain */
+  --card: hsl(40 33% 96%);
+  --card-foreground: hsl(12 6% 16%);
+  --popover: hsl(40 33% 96%);
+  --popover-foreground: hsl(12 6% 16%);
+
+  /* Input Background: Pure White #FFFFFF for Layer 3 depth */
+  --input-bg: hsl(0 0% 100%);
+
+  /* Primary: Deep Crimson #AC0F16 */
+  --primary: hsl(357 84% 37%);
+  --primary-foreground: hsl(0 0% 100%);
+
+  /* Secondary: Warm Orange #F1782F */
+  --secondary: hsl(23 87% 56%);
+  --secondary-foreground: hsl(0 0% 100%);
+
+  /* Muted: Slightly darker beige for subtle backgrounds */
+  --muted: hsl(37 25% 85%);
+  /* Muted Foreground: Medium Warm Brown #685D55 - "faded ink" look */
+  --muted-foreground: hsl(25 10% 37%);
+
+  /* Accent: Aqua Blue #2EAFC5 */
+  --accent: hsl(189 62% 48%);
+  --accent-foreground: hsl(0 0% 100%);
+
+  /* Destructive: Bright Red #EF4444 */
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  /* Warning: Amber Yellow #F59E0B */
+  --warning: hsl(43 96% 56%);
+  --warning-foreground: hsl(12 6% 16%);
+
+  /* Border: Warm Brown Beige #D6CDBF - no cool gray lines */
+  --border: hsl(37 25% 79%);
+  --input: hsl(37 25% 79%);
+  
+  /* Ring: Primary color for focus states */
+  --ring: hsl(357 84% 37%);
+
+  /* Chart colors - warm palette */
+  --chart-1: hsl(357 84% 37%);
+  --chart-2: hsl(23 87% 56%);
+  --chart-3: hsl(189 62% 48%);
+  --chart-4: hsl(37 60% 50%);
+  --chart-5: hsl(160 50% 45%);
+
+  /* Sidebar: Warm Alabaster to match cards */
+  --sidebar: hsl(40 33% 96%);
+  --sidebar-foreground: hsl(12 6% 16%);
+  --sidebar-primary: hsl(357 84% 37%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(37 25% 90%);
+  --sidebar-accent-foreground: hsl(12 6% 16%);
+  --sidebar-border: hsl(37 25% 82%);
+  --sidebar-ring: hsl(357 84% 37%);
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  /* Background: Dark Charcoal */
+  --background: hsl(12 6% 12%);
+  
+  /* Foreground: Light Cream */
+  --foreground: hsl(37 30% 92%);
+
+  /* Card: Slightly elevated dark surface */
+  --card: hsl(12 6% 18%);
+  --card-foreground: hsl(37 30% 92%);
+  --popover: hsl(12 6% 20%);
+  --popover-foreground: hsl(37 30% 92%);
+
+  /* Input Background: Slightly lighter for depth */
+  --input-bg: hsl(12 6% 22%);
+
+  /* Primary: Brighter Crimson for dark mode visibility */
+  --primary: hsl(357 75% 50%);
+  --primary-foreground: hsl(0 0% 100%);
+
+  /* Secondary: Warm Orange - keep white text for contrast */
+  --secondary: hsl(23 80% 55%);
+  --secondary-foreground: hsl(0 0% 100%);
+
+  /* Muted: Dark muted surface */
+  --muted: hsl(12 5% 22%);
+  --muted-foreground: hsl(37 15% 60%);
+
+  /* Accent: Aqua Blue */
+  --accent: hsl(189 60% 50%);
+  --accent-foreground: hsl(0 0% 100%);
+
+  /* Destructive: Bright Red (kept visible) */
+  --destructive: hsl(0 72% 55%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  /* Warning: Amber Yellow */
+  --warning: hsl(43 96% 58%);
+  --warning-foreground: hsl(12 6% 12%);
+
+  /* Border/Input: Subtle warm borders */
+  --border: hsl(12 6% 25%);
+  --input: hsl(12 6% 25%);
+  
+  /* Ring: Primary color */
+  --ring: hsl(357 75% 50%);
+
+  /* Chart colors - adjusted for dark mode */
+  --chart-1: hsl(357 75% 55%);
+  --chart-2: hsl(23 80% 60%);
+  --chart-3: hsl(189 60% 55%);
+  --chart-4: hsl(37 55% 55%);
+  --chart-5: hsl(160 45% 50%);
+
+  /* Sidebar */
+  --sidebar: hsl(12 6% 14%);
+  --sidebar-foreground: hsl(37 30% 92%);
+  --sidebar-primary: hsl(357 75% 50%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(12 5% 20%);
+  --sidebar-accent-foreground: hsl(37 30% 92%);
+  --sidebar-border: hsl(12 6% 22%);
+  --sidebar-ring: hsl(357 75% 50%);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Custom warm shadows using Dark Charcoal #2B2726 at low opacity (5-8%) */
+@layer utilities {
+  .shadow-warm-sm {
+    box-shadow: 0 1px 2px 0 rgba(43, 39, 38, 0.05),
+                0 1px 3px 0 rgba(43, 39, 38, 0.06);
+  }
+  
+  .shadow-warm-md {
+    box-shadow: 0 4px 6px -1px rgba(43, 39, 38, 0.06),
+                0 2px 4px -2px rgba(43, 39, 38, 0.08);
+  }
+  
+  .shadow-warm-lg {
+    box-shadow: 0 10px 15px -3px rgba(43, 39, 38, 0.08),
+                0 4px 6px -4px rgba(43, 39, 38, 0.08);
+  }
+  
+  .shadow-warm-xl {
+    box-shadow: 0 20px 25px -5px rgba(43, 39, 38, 0.08),
+                0 8px 10px -6px rgba(43, 39, 38, 0.08);
+  }
+  
+  /* Normal warm shadow for logo/icons in LIGHT mode */
+  .shadow-warm-icon {
+    box-shadow: 0 4px 12px -2px rgba(43, 39, 38, 0.12),
+                0 2px 6px -2px rgba(43, 39, 38, 0.08);
+  }
+  
+  /* Primary glow for DARK mode logos/highlights */
+  .shadow-primary-glow {
+    box-shadow: 0 4px 14px 0 rgba(172, 15, 22, 0.35);
+  }
+  
+  .shadow-primary-glow-lg {
+    box-shadow: 0 6px 20px 0 rgba(172, 15, 22, 0.45);
+  }
+  
+  .shadow-card {
+    box-shadow: 0 2px 8px -2px rgba(43, 39, 38, 0.06),
+                0 4px 12px -4px rgba(43, 39, 38, 0.05);
+  }
+  
+  .shadow-card-hover {
+    box-shadow: 0 8px 24px -4px rgba(43, 39, 38, 0.1),
+                0 6px 16px -6px rgba(43, 39, 38, 0.08);
+  }
+
+  .transition-theme {
+    transition: background-color 0.3s ease, 
+                color 0.3s ease, 
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+  }
+}
+
+/* Card component enhancement - ensure depth on beige background */
+@layer components {
+  .card-interactive {
+    @apply transition-all duration-200;
+  }
+  
+  .card-interactive:hover {
+    box-shadow: 0 8px 24px -4px rgba(43, 39, 38, 0.1),
+                0 6px 16px -6px rgba(43, 39, 38, 0.08);
+  }
+
+  /* Destructive button - ensure it stands out from primary */
+  .btn-destructive-outline {
+    @apply border-2 border-destructive text-destructive bg-transparent;
+  }
+  
+  .btn-destructive-outline:hover {
+    @apply bg-destructive text-destructive-foreground;
+  }
+  
+  /* Primary focus ring */
+  .focus-ring-primary {
+    @apply focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
   }
 }

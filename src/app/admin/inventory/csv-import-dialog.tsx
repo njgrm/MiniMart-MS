@@ -309,34 +309,34 @@ export function CSVImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] bg-white dark:bg-[#1A1A1E] border-gray-200 dark:border-[#1F1F23]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+          <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
             Import Products from CSV
           </DialogTitle>
-          <DialogDescription className="text-zinc-500 dark:text-zinc-400">
+          <DialogDescription>
             Upload a CSV file to bulk import products into your inventory.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Helper Text */}
-          <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800 p-3 text-sm">
-            <p className="font-medium text-zinc-900 dark:text-zinc-100 mb-1">
+          <div className="rounded-lg bg-muted p-3 text-sm">
+            <p className="font-medium text-foreground mb-1">
               Required Columns:
             </p>
-            <p className="text-zinc-600 dark:text-zinc-400">
-              <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">name</code>,{" "}
-              <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">category</code>,{" "}
-              <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">retail_price</code>,{" "}
-              <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">wholesale_price</code>,{" "}
-              <code className="text-xs bg-zinc-200 dark:bg-zinc-700 px-1 rounded">stock</code>
+            <p className="text-muted-foreground">
+              <code className="text-xs bg-background px-1 rounded border border-border">name</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">category</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">retail_price</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">wholesale_price</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">stock</code>
             </p>
-            <p className="text-zinc-500 dark:text-zinc-500 text-xs mt-1">
-              Optional: <code className="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">barcode</code> (auto-generated if empty),{" "}
-              <code className="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">image_url</code>,{" "}
-              <code className="bg-zinc-200 dark:bg-zinc-700 px-1 rounded">reorder_level</code>
+            <p className="text-muted-foreground text-xs mt-1">
+              Optional: <code className="bg-background px-1 rounded border border-border">barcode</code> (auto-generated if empty),{" "}
+              <code className="bg-background px-1 rounded border border-border">image_url</code>,{" "}
+              <code className="bg-background px-1 rounded border border-border">reorder_level</code>
             </p>
           </div>
 
@@ -348,8 +348,8 @@ export function CSVImportDialog({
             className={`
               relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
               ${isDragging
-                ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
-                : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-600"
+                ? "border-accent bg-accent/10"
+                : "border-border hover:border-primary/50"
               }
             `}
           >
@@ -363,10 +363,10 @@ export function CSVImportDialog({
             
             {fileName ? (
               <div className="flex items-center justify-center gap-2">
-                <FileText className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                <FileText className="h-8 w-8 text-accent" />
                 <div className="text-left">
-                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{fileName}</p>
-                  <p className="text-xs text-zinc-500">Click or drop to replace</p>
+                  <p className="font-medium text-foreground">{fileName}</p>
+                  <p className="text-xs text-muted-foreground">Click or drop to replace</p>
                 </div>
                 <Button
                   type="button"
@@ -383,10 +383,10 @@ export function CSVImportDialog({
               </div>
             ) : (
               <>
-                <Upload className="h-10 w-10 mx-auto text-zinc-400 mb-2" />
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
                   Drop your CSV file here, or{" "}
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="text-primary font-medium">
                     click to browse
                   </span>
                 </p>
@@ -397,10 +397,10 @@ export function CSVImportDialog({
           {/* Or paste CSV content */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-zinc-200 dark:border-zinc-700" />
+              <span className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white dark:bg-[#1A1A1E] px-2 text-zinc-500">
+              <span className="bg-card px-2 text-muted-foreground">
                 Or paste CSV content
               </span>
             </div>
@@ -414,21 +414,21 @@ export function CSVImportDialog({
               setValidationErrors([]);
             }}
             placeholder="name,category,retail_price,wholesale_price,stock,barcode&#10;Coca-Cola 350ml,SODA,25.00,20.00,100,4800016123456&#10;Lucky Me Pancit Canton,INSTANT_NOODLES,15.00,12.00,50,"
-            className="w-full h-32 p-3 text-sm font-mono rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full h-32 p-3 text-sm font-mono rounded-lg border border-border bg-muted text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             disabled={isPending}
           />
 
           {/* Validation Errors */}
           {validationErrors.length > 0 && (
-            <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
               <div className="flex items-center gap-2 mb-2">
-                <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <span className="text-sm font-medium text-destructive">
                   {validationErrors.length} Error{validationErrors.length !== 1 ? "s" : ""} Found
                 </span>
               </div>
               <ScrollArea className="h-32">
-                <ul className="space-y-1 text-xs text-red-600 dark:text-red-400">
+                <ul className="space-y-1 text-xs text-destructive">
                   {validationErrors.map((err, idx) => (
                     <li key={idx}>
                       Row {err.row}: {err.message}

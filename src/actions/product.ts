@@ -79,7 +79,8 @@ export async function getProductById(productId: number) {
 export async function createProduct(data: CreateProductInput): Promise<ActionResult> {
   const parsed = createProductSchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    const message = parsed.error?.errors?.[0]?.message ?? "Invalid product data";
+    return { success: false, error: message };
   }
 
   const { 
@@ -167,7 +168,8 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
 export async function updateProduct(data: UpdateProductInput): Promise<ActionResult> {
   const parsed = updateProductSchema.safeParse(data);
   if (!parsed.success) {
-    return { success: false, error: parsed.error.errors[0].message };
+    const message = parsed.error?.errors?.[0]?.message ?? "Invalid product data";
+    return { success: false, error: message };
   }
 
   const {

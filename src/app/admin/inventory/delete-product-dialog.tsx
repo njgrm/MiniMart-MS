@@ -48,17 +48,17 @@ export function DeleteProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px] bg-white dark:bg-[#1A1A1E] border-gray-200 dark:border-[#1F1F23]">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-warning/20">
+              <AlertTriangle className="h-5 w-5 text-warning" />
             </div>
             <div>
-              <DialogTitle className="text-zinc-900 dark:text-zinc-100">
+              <DialogTitle>
                 Delete Product
               </DialogTitle>
-              <DialogDescription className="text-zinc-500 dark:text-zinc-400">
+              <DialogDescription>
                 This action cannot be undone.
               </DialogDescription>
             </div>
@@ -66,15 +66,15 @@ export function DeleteProductDialog({
         </DialogHeader>
 
         {error && (
-          <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-600 dark:text-red-400">
+          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
         <div className="py-4">
-          <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          <p className="text-sm text-muted-foreground">
             Are you sure you want to delete{" "}
-            <span className="font-semibold">{product?.product_name}</span>? This
+            <span className="font-semibold text-foreground">{product?.product_name}</span>? This
             will permanently remove the product and its inventory data.
           </p>
         </div>
@@ -90,7 +90,7 @@ export function DeleteProductDialog({
           </Button>
           <Button
             type="button"
-            variant="destructive"
+            variant="warning"
             onClick={handleDelete}
             disabled={isPending}
           >

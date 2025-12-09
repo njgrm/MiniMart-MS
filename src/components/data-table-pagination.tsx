@@ -80,11 +80,11 @@ export function DataTablePagination<TData>({
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
       {/* Left: Showing info + Rows per page */}
-      <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400">
+      <div className="flex items-center gap-4 text-sm text-muted-foreground">
         <span>
-          Showing <span className="font-medium text-zinc-900 dark:text-zinc-100">{totalRows > 0 ? start : 0}</span> to{" "}
-          <span className="font-medium text-zinc-900 dark:text-zinc-100">{end}</span> of{" "}
-          <span className="font-medium text-zinc-900 dark:text-zinc-100">{totalRows}</span> products
+          Showing <span className="font-medium text-foreground">{totalRows > 0 ? start : 0}</span> to{" "}
+          <span className="font-medium text-foreground">{end}</span> of{" "}
+          <span className="font-medium text-foreground">{totalRows}</span> products
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs">Rows per page</span>
@@ -140,7 +140,7 @@ export function DataTablePagination<TData>({
             page === "ellipsis" ? (
               <span
                 key={`ellipsis-${idx}`}
-                className="px-2 text-zinc-400 dark:text-zinc-500"
+                className="px-2 text-muted-foreground"
               >
                 ...
               </span>

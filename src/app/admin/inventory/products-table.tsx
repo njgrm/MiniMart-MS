@@ -143,7 +143,7 @@ export function ProductsTable({
         cell: ({ row }) => {
           const imageUrl = row.getValue("image_url") as string | null;
           return (
-            <div className="w-10 h-10 rounded-md overflow-hidden bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 rounded-md overflow-hidden bg-muted flex items-center justify-center flex-shrink-0">
               {imageUrl ? (
                 <Image
                   src={imageUrl}
@@ -154,7 +154,7 @@ export function ProductsTable({
                   unoptimized
                 />
               ) : (
-                <Package className="h-4 w-4 text-zinc-400" />
+                <Package className="h-4 w-4 text-muted-foreground" />
               )}
             </div>
           );
@@ -167,14 +167,16 @@ export function ProductsTable({
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8"
+            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
           >
             Name
-            <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+            <ArrowUpDown className="ml-2 h-3 w-3" />
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="font-medium truncate max-w-[200px]">{row.getValue("product_name")}</div>
+          <div className="text-sm font-medium text-foreground truncate max-w-[200px]">
+            {row.getValue("product_name")}
+          </div>
         ),
       },
       {
@@ -183,11 +185,11 @@ export function ProductsTable({
         cell: ({ row }) => {
           const barcode = row.getValue("barcode") as string | null;
           return barcode ? (
-            <code className="text-xs bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono">
+            <code className="text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded font-mono">
               {barcode}
             </code>
           ) : (
-            <span className="text-zinc-400 text-xs">—</span>
+            <span className="text-muted-foreground text-xs">—</span>
           );
         },
       },
@@ -195,9 +197,9 @@ export function ProductsTable({
         accessorKey: "category",
         header: "Category",
         cell: ({ row }) => (
-          <Badge variant="outline" className="capitalize text-xs">
+          <span className="text-sm text-muted-foreground capitalize">
             {(row.getValue("category") as string).toLowerCase().replace("_", " ")}
-          </Badge>
+          </span>
         ),
         filterFn: (row, id, value) => {
           return value === "all" || row.getValue(id) === value;
@@ -209,23 +211,40 @@ export function ProductsTable({
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8"
+            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
           >
             Retail
-            <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+            <ArrowUpDown className="ml-2 h-3 w-3" />
           </Button>
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("retail_price"));
-          return <div className="tabular-nums">₱{amount.toFixed(2)}</div>;
+          return (
+            <div className="text-sm font-normal tracking-wider tabular-nums">
+              ₱{amount.toFixed(2)}
+            </div>
+          );
         },
       },
       {
         accessorKey: "wholesale_price",
-        header: "Wholesale",
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
+          >
+            Wholesale
+            <ArrowUpDown className="ml-2 h-3 w-3" />
+          </Button>
+        ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("wholesale_price"));
-          return <div className="tabular-nums">₱{amount.toFixed(2)}</div>;
+          return (
+            <div className="text-sm font-normal tracking-wider tabular-nums">
+              ₱{amount.toFixed(2)}
+            </div>
+          );
         },
       },
       {
@@ -234,17 +253,17 @@ export function ProductsTable({
           <Button
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8"
+            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
           >
             Stock
-            <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+            <ArrowUpDown className="ml-2 h-3 w-3" />
           </Button>
         ),
         cell: ({ row }) => {
           const stock = row.getValue("current_stock") as number;
           const reorderLevel = row.original.reorder_level;
           return (
-            <div className={`tabular-nums ${stock <= reorderLevel ? "text-amber-600 dark:text-amber-400 font-medium" : ""}`}>
+            <div className={`text-sm font-medium tabular-nums ${stock <= reorderLevel ? "text-secondary" : ""}`}>
               {stock}
             </div>
           );
@@ -257,12 +276,8 @@ export function ProductsTable({
           const status = row.getValue("status") as string;
           return (
             <Badge
-              variant={status === "LOW_STOCK" ? "destructive" : "default"}
-              className={`text-xs ${
-                status === "IN_STOCK"
-                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-100"
-                  : ""
-              }`}
+              variant={status === "LOW_STOCK" ? "secondary" : "accent"}
+              className="text-xs"
             >
               {status === "LOW_STOCK" ? "Low" : "In Stock"}
             </Badge>
@@ -291,7 +306,7 @@ export function ProductsTable({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => onDelete(product)}
-                  className="text-red-600 dark:text-red-400"
+                  variant="destructive"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
@@ -373,8 +388,8 @@ export function ProductsTable({
     <div className="h-full flex flex-col gap-3">
       {/* Selection Toolbar - Only visible when items are selected */}
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 px-3 h-10 shrink-0">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 px-3 h-10 shrink-0">
+          <span className="text-sm text-muted-foreground">
             {selectedCount} product{selectedCount !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-2">
@@ -387,7 +402,7 @@ export function ProductsTable({
               Clear
             </Button>
             <Button
-              variant="destructive"
+              variant="warning"
               size="sm"
               className="h-8 gap-1.5"
               onClick={() => setShowDeleteDialog(true)}
@@ -403,12 +418,12 @@ export function ProductsTable({
       <div className="flex flex-wrap items-center gap-2 shrink-0">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by name or barcode..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9 h-[38px] w-full"
+            className="pl-9 h-10 w-full"
           />
         </div>
 
@@ -419,7 +434,7 @@ export function ProductsTable({
             table.getColumn("category")?.setFilterValue(value === "all" ? "" : value)
           }
         >
-          <SelectTrigger className="h-[38px] w-[140px]">
+          <SelectTrigger className="h-10 w-[140px]">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
@@ -445,7 +460,7 @@ export function ProductsTable({
             table.getColumn("status")?.setFilterValue(value === "all" ? "" : value)
           }
         >
-          <SelectTrigger className="h-[38px] w-[120px]">
+          <SelectTrigger className="h-10 w-[120px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -459,8 +474,8 @@ export function ProductsTable({
         {hasActiveFilters && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-[38px] px-2"
+            size="icon"
+            className="h-10 w-10"
             onClick={resetFilters}
           >
             <X className="h-4 w-4" />
@@ -469,46 +484,52 @@ export function ProductsTable({
         )}
 
         {/* Separator */}
-        <div className="h-7 w-px bg-zinc-200 dark:bg-zinc-700 mx-1" />
+        <div className="h-8 w-px bg-border mx-1" />
 
-        {/* KPI Cards - Inline single row */}
-        <div className="flex items-center gap-2 h-[38px] px-3 rounded-md bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
-          <Boxes className="h-4 w-4 text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{totalProducts}</span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">Products</span>
+        {/* KPI Cards - Solid in light mode, transparent in dark mode */}
+        <div className="flex items-center gap-2 h-10 px-3 rounded-lg bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none">
+          <Boxes className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">{totalProducts}</span>
+          <span className="text-xs text-muted-foreground">Products</span>
         </div>
 
-        <div className="flex items-center gap-2 h-[38px] px-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500" />
-          <span className="text-sm font-medium text-amber-700 dark:text-amber-400">{lowStockItems}</span>
-          <span className="text-xs text-amber-600 dark:text-amber-500">Low Stock</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            table.getColumn("status")?.setFilterValue("LOW_STOCK");
+          }}
+          className="flex items-center gap-2 h-10 px-3 rounded-lg bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none hover:bg-secondary/90 dark:hover:bg-secondary/30 transition-colors cursor-pointer"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          <span className="text-sm font-medium">{lowStockItems}</span>
+          <span className="text-xs opacity-90 dark:opacity-80">Low Stock</span>
+        </button>
 
-        <div className="flex items-center gap-2 h-[38px] px-3 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-          <Coins className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
-          <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">₱{inventoryValue.toLocaleString()}</span>
+        <div className="flex items-center gap-2 h-10 px-3 rounded-lg bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">
+          <Coins className="h-4 w-4" />
+          <span className="text-sm font-medium">₱{inventoryValue.toLocaleString()}</span>
         </div>
 
         {/* Separator */}
-        <div className="h-7 w-px bg-zinc-200 dark:bg-zinc-700 mx-1" />
+        <div className="h-8 w-px bg-border mx-1" />
 
         {/* Import CSV */}
         {onImportClick && (
           <Button
             variant="outline"
             onClick={onImportClick}
-            className="h-[38px] gap-1.5"
+            className="h-10 gap-1.5"
           >
             <Upload className="h-4 w-4" />
             Import CSV
           </Button>
         )}
 
-        {/* Add Product */}
+        {/* Add Product - Using primary (crimson) color */}
         {onAddClick && (
           <Button
             onClick={onAddClick}
-            className="h-[38px] gap-1.5"
+            className="h-10 gap-1.5"
           >
             <Plus className="h-4 w-4" />
             Add Product
@@ -517,14 +538,14 @@ export function ProductsTable({
       </div>
 
       {/* Table Container with Internal Scroll */}
-      <div className="flex-1 min-h-0 rounded-md border border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E] overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 rounded-xl border border-border bg-card shadow-card overflow-hidden flex flex-col">
         <div className="flex-1 overflow-auto">
           <Table>
-            <TableHeader className="sticky top-0 bg-white dark:bg-[#1A1A1E] z-10">
+            <TableHeader className="sticky top-0 bg-card z-10">
               {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="border-gray-200 dark:border-[#1F1F23] hover:bg-transparent">
+                <TableRow key={headerGroup.id} className="hover:bg-transparent">
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="text-zinc-500 dark:text-zinc-400 h-10 bg-white dark:bg-[#1A1A1E]">
+                    <TableHead key={header.id} className="h-10 bg-muted/30">
                       {header.isPlaceholder
                         ? null
                         : flexRender(header.column.columnDef.header, header.getContext())}
@@ -539,10 +560,9 @@ export function ProductsTable({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
-                    className="border-gray-200 dark:border-[#1F1F23] hover:bg-zinc-50 dark:hover:bg-zinc-800/50 data-[state=selected]:bg-zinc-100 dark:data-[state=selected]:bg-zinc-800"
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="text-zinc-900 dark:text-zinc-100 py-2">
+                      <TableCell key={cell.id} className="py-2">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}
@@ -551,7 +571,7 @@ export function ProductsTable({
               ) : (
                 <TableRow>
                   <TableCell colSpan={columns.length} className="h-24 text-center">
-                    <p className="text-zinc-500 dark:text-zinc-400">No results.</p>
+                    <p className="text-muted-foreground">No results.</p>
                   </TableCell>
                 </TableRow>
               )}
@@ -567,14 +587,14 @@ export function ProductsTable({
 
       {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="bg-white dark:bg-[#1A1A1E] border-gray-200 dark:border-[#1F1F23]">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-zinc-900 dark:text-zinc-100">
+            <AlertDialogTitle>
               Are you absolutely sure?
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-500 dark:text-zinc-400">
+            <AlertDialogDescription>
               This action cannot be undone. It will permanently delete{" "}
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              <span className="font-semibold text-foreground">
                 {selectedCount} product{selectedCount !== 1 ? "s" : ""}
               </span>{" "}
               from the database.
@@ -585,7 +605,7 @@ export function ProductsTable({
             <AlertDialogAction
               onClick={handleBulkDelete}
               disabled={isPending}
-              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700"
+              className="bg-warning text-warning-foreground hover:bg-warning/90 focus-visible:ring-warning/40"
             >
               {isPending ? (
                 <>

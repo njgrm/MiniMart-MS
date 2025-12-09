@@ -18,13 +18,13 @@ export default function AdminLayoutClient({ children, user }: AdminLayoutClientP
   return (
     <SessionProvider>
       <PageHeaderProvider>
-        <div className="flex h-screen bg-white dark:bg-[#0F0F12]">
+        <div className="flex h-screen bg-card dark:bg-background">
           <Sidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
-            <header className="h-16 border-b border-gray-200 dark:border-[#1F1F23]">
+            <header className="h-16 border-b border-border">
               <TopNav user={user} />
             </header>
-            <main className="flex-1 overflow-hidden p-6 bg-zinc-50 dark:bg-[#0F0F12]">
+            <main className="flex-1 overflow-hidden p-6 bg-background">
               <div className="h-full flex flex-col overflow-hidden">
                 {children}
               </div>

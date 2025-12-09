@@ -22,6 +22,12 @@ export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 /**
  * Create Product Schema
  */
+// Helper to allow File on client but not require it on server
+const fileSchema = z.custom<File>((val) => {
+  if (typeof File === "undefined") return false;
+  return val instanceof File;
+}, "Invalid file");
+
 export const createProductSchema = z.object({
   product_name: z
     .string()
@@ -53,9 +59,10 @@ export const createProductSchema = z.object({
     .optional()
     .nullable(),
   image_url: z
-    .string()
-    .url("Must be a valid URL")
-    .max(500, "Image URL must be less than 500 characters")
+    .union([
+      z.string().max(500, "Image path must be less than 500 characters"),
+      fileSchema,
+    ])
     .optional()
     .nullable()
     .or(z.literal("")),
@@ -95,9 +102,10 @@ export const updateProductSchema = z.object({
     .optional()
     .nullable(),
   image_url: z
-    .string()
-    .url("Must be a valid URL")
-    .max(500, "Image URL must be less than 500 characters")
+    .union([
+      z.string().max(500, "Image path must be less than 500 characters"),
+      fileSchema,
+    ])
     .optional()
     .nullable()
     .or(z.literal("")),

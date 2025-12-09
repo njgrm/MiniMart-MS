@@ -47,7 +47,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-zinc-50 dark:bg-[#0F0F12] p-6 md:p-10">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background p-6 md:p-10">
       {/* Theme Toggle - Top Right */}
       <div className="fixed top-4 right-4">
         <ThemeToggle />
@@ -56,35 +56,35 @@ export default function LoginPage() {
       <div className="flex w-full max-w-md flex-col gap-6">
         {/* Logo/Brand */}
         <div className="flex items-center gap-3 self-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-900 dark:bg-zinc-100 shadow-lg">
-            <Store className="size-5 text-white dark:text-zinc-900" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary shadow-warm-icon dark:shadow-primary-glow">
+            <Store className="size-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <span className="text-xl font-semibold tracking-tight text-foreground">
             Christian Minimart
           </span>
         </div>
 
         {/* Login Card */}
-        <Card className="border-gray-200 dark:border-[#1F1F23] bg-white dark:bg-[#1A1A1E] shadow-xl">
+        <Card className="shadow-card-hover">
           <CardHeader className="text-center pb-2">
-            <CardTitle className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+            <CardTitle className="text-2xl font-bold text-foreground">
               Welcome Back
             </CardTitle>
-            <CardDescription className="text-zinc-500 dark:text-zinc-400">
+            <CardDescription className="text-muted-foreground">
               Sign in with your username or email
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
             {/* Error Message */}
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-600 dark:text-red-400">
+              <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="identifier" className="text-zinc-700 dark:text-zinc-300">
+                <Label htmlFor="identifier" className="text-foreground">
                   Username or Email
                 </Label>
                 <div className="relative">
@@ -96,14 +96,14 @@ export default function LoginPage() {
                     onChange={(e) => setIdentifier(e.target.value)}
                     required
                     disabled={isPending}
-                    className="h-11 pl-10 bg-white dark:bg-[#0F0F12] border-gray-200 dark:border-[#1F1F23]"
+                    className="h-11 pl-10"
                   />
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-zinc-700 dark:text-zinc-300">
+                <Label htmlFor="password" className="text-foreground">
                   Password
                 </Label>
                 <div className="relative">
@@ -115,12 +115,12 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={isPending}
-                    className="h-11 pr-10 bg-white dark:bg-[#0F0F12] border-gray-200 dark:border-[#1F1F23]"
+                    className="h-11 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showPassword ? (
                       <EyeOff className="size-4" />
@@ -133,7 +133,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                className="w-full h-11 font-medium bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 dark:text-zinc-900"
+                className="w-full h-11 font-medium"
                 disabled={isPending}
               >
                 {isPending ? (
@@ -149,12 +149,12 @@ export default function LoginPage() {
 
             {/* Sign up link for vendors */}
             <div className="mt-6 text-center text-sm">
-              <span className="text-zinc-500 dark:text-zinc-400">
+              <span className="text-muted-foreground">
                 Vendor without an account?{" "}
               </span>
               <Link
                 href="/register"
-                className="font-medium text-zinc-900 dark:text-zinc-100 underline-offset-4 hover:underline"
+                className="font-medium text-primary underline-offset-4 hover:underline"
               >
                 Sign up here
               </Link>
@@ -163,13 +163,13 @@ export default function LoginPage() {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-center text-xs text-muted-foreground">
           By signing in, you agree to our{" "}
-          <Link href="#" className="underline underline-offset-4 hover:text-zinc-700 dark:hover:text-zinc-200">
+          <Link href="#" className="underline underline-offset-4 hover:text-foreground transition-colors">
             Terms of Service
           </Link>{" "}
           and{" "}
-          <Link href="#" className="underline underline-offset-4 hover:text-zinc-700 dark:hover:text-zinc-200">
+          <Link href="#" className="underline underline-offset-4 hover:text-foreground transition-colors">
             Privacy Policy
           </Link>
         </p>
