@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/sidebar";
 import logoFull from "../../assets/christian_minimart_logo_words.png";
 import logoFullDark from "../../assets/christian_minimart_logo_dark_words.png";
-import logoIcon from "../../assets/christian_minimart_logo.png";
+import logoIcon from "../../assets/christian_minimart_logo_collapsed.png";
 import logoIconDark from "../../assets/christian_minimart_logo_dark.png";
 
 interface NavItem {
@@ -96,11 +96,11 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
         <Link href="/admin" className="flex items-center justify-center flex-shrink-0">
           {isCollapsed ? (
             <Image
-              src={isDark ? logoIconDark : logoIcon}
+              src={logoIcon}
               alt="Christian Minimart"
               width={32}
               height={32}
-              className="w-8 h-8 object-contain"
+              className="w-auto h-13 object-contain"
               priority
             />
           ) : (
@@ -109,7 +109,7 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
               alt="Christian Minimart"
               width={160}
               height={40}
-              className="h-8 w-auto object-contain"
+              className="h-13 w-auto mr-3 object-contain"
               priority
             />
           )}

@@ -182,3 +182,8 @@ export function CameraScanner({ open, onClose, onDetected }: CameraScannerProps)
 
 
 
+
+
+
+
+

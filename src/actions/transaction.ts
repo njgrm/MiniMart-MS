@@ -21,6 +21,10 @@ interface CreateTransactionInput {
   change: number;
   userId?: number; // optional fallback
   customerId?: number | null;
+  // Discount & Tax fields
+  discountPercent?: number;
+  discountAmount?: number;
+  taxAmount?: number;
 }
 
 export async function createTransaction(input: CreateTransactionInput) {
@@ -55,10 +59,16 @@ export async function createTransaction(input: CreateTransactionInput) {
         });
       }
 
-      const totalAmount = items.reduce(
+      // Calculate subtotal from items
+      const subtotal = items.reduce(
         (sum, item) => sum + item.price * item.quantity,
         0
       );
+      
+      // Apply discount and tax if provided
+      const discountAmt = input.discountAmount ?? 0;
+      const taxAmt = input.taxAmount ?? 0;
+      const totalAmount = subtotal - discountAmt + taxAmt;
 
       const transaction = await tx.transaction.create({
         data: {
@@ -96,6 +106,9 @@ export async function createTransaction(input: CreateTransactionInput) {
     return { success: false, error: error?.message ?? "Failed to process transaction." };
   }
 }
+
+
+
 
 
 

@@ -283,3 +283,64 @@
     @apply focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2;
   }
 }
+
+/* ===========================================
+ * Print Styles for Receipt Printing
+ * Only shows the #receipt-print-area element
+ * =========================================== */
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Show only the receipt area and its contents */
+  #receipt-print-area,
+  #receipt-print-area * {
+    visibility: visible !important;
+  }
+  
+  /* Position receipt at top-left of page */
+  #receipt-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+    background: white !important;
+    color: black !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    display: block !important;
+  }
+  
+  /* Remove any shadows/borders in print */
+  #receipt-print-area * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  
+  /* Ensure monospace font for receipt */
+  #receipt-print-area {
+    font-family: "Courier New", Courier, monospace !important;
+  }
+  
+  /* Page settings for thermal printer */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  
+  /* Hide dialog backdrop and other UI elements */
+  [data-radix-dialog-overlay],
+  [data-radix-dialog-content],
+  .dialog-overlay,
+  header,
+  nav,
+  aside,
+  footer:not(#receipt-print-area footer) {
+    display: none !important;
+  }
+}

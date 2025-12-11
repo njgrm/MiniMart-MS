@@ -11,7 +11,6 @@ import { usePosStore, type PosProduct, getCartTotal } from "@/stores/use-pos-sto
 import { ProductGrid } from "@/components/pos/product-grid";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { CameraScanner } from "@/components/pos/camera-scanner";
-import { useSidebar } from "@/components/ui/sidebar";
 
 type Props = {
   products: PosProduct[];
@@ -42,12 +41,6 @@ export default function PosClient({ products }: Props) {
   const [scanError, setScanError] = useState<string | null>(null);
 
   const { setProducts, addByBarcode, customerType, cart, setCustomerType } = usePosStore();
-  const { setOpen } = useSidebar();
-
-  // Auto-collapse sidebar when POS page mounts
-  useEffect(() => {
-    setOpen(false);
-  }, [setOpen]);
 
   useEffect(() => {
     setProducts(products);
@@ -95,21 +88,21 @@ export default function PosClient({ products }: Props) {
   const cartTotal = getCartTotal(cart, customerType);
 
   return (
-    <div className="w-full h-[calc(100vh-3.5rem)] flex overflow-hidden bg-background text-foreground">
-      {/* Left panel - Product area */}
-      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+    <div className="w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground">
+      {/* Left panel - Product area */} 
+      <div className="flex-1 min-w-100 flex flex-col h-full overflow-hidden">
         {/* Top bar - Search & Categories */}
-        <div className="flex-shrink-0 border-b border-border bg-card">
+        <div className="flex-shrink-0 border-b w-full border-border px-4 bg-card">
           {/* Search row */}
           <div className="flex items-center gap-2 px-3 py-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground" />
               <Input
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search or scan barcode..."
-                className="h-9 pl-8 pr-10 text-sm bg-background"
+                className="h-9 pl-8 pr-10 text-sm"
               />
               <Button
                 type="button"
@@ -174,11 +167,9 @@ export default function PosClient({ products }: Props) {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto p-3 bg-muted/30">
+        <div className="flex-1 overflow-y-auto px-4 ml-3 py-1 bg-muted/30">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-muted-foreground">
-              {filteredProducts.length} items
-            </p>
+            
           </div>
           <ProductGrid products={filteredProducts} />
         </div>

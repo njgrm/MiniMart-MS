@@ -9,30 +9,80 @@ interface Props {
   onClick: () => void;
 }
 
+/**
+ * Stock status indicator colors (matching inventory theming):
+ * - In Stock (> reorder level): Teal (#2EAFC5)
+ * - Low Stock (<= reorder level): Orange/Secondary (#F1782F)
+ * - Out of Stock (0): Destructive Red (#EF4444)
+ */
+type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
+
+function getStockStatus(stock: number, reorderLevel: number): StockStatus {
+  if (stock <= 0) return "out_of_stock";
+  if (stock <= reorderLevel) return "low_stock";
+  return "in_stock";
+}
+
+const stockStyles: Record<StockStatus, { bg: string; text: string; label: string }> = {
+  in_stock: {
+    bg: "bg-[#2EAFC5]", // Teal
+    text: "text-white",
+    label: "", // Will show stock count
+  },
+  low_stock: {
+    bg: "bg-secondary", // Orange (#F1782F)
+    text: "text-secondary-foreground",
+    label: "Low",
+  },
+  out_of_stock: {
+    bg: "bg-destructive", // Red (#EF4444)
+    text: "text-destructive-foreground",
+    label: "Out",
+  },
+};
+
 export function ProductCard({ product, onClick }: Props) {
   const { customerType } = usePosStore();
-  const outOfStock = (product.current_stock ?? 0) <= 0;
+  const stock = product.current_stock ?? 0;
+  const reorderLevel = product.reorder_level ?? 10;
+  const stockStatus = getStockStatus(stock, reorderLevel);
+  const isOutOfStock = stockStatus === "out_of_stock";
   const unitPrice = getUnitDisplayPrice(product, customerType);
+  const style = stockStyles[stockStatus];
 
   return (
     <button
       type="button"
       className={cn(
         "relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all hover:border-primary hover:shadow-md active:scale-[0.98]",
-        outOfStock && "opacity-50 pointer-events-none"
+        isOutOfStock && "opacity-50 pointer-events-none grayscale"
       )}
       onClick={onClick}
-      disabled={outOfStock}
+      disabled={isOutOfStock}
     >
-      {/* Stock indicator */}
+      {/* Stock indicator badge */}
       <span
         className={cn(
           "absolute right-2 top-2 z-10 rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-          outOfStock ? "bg-destructive text-destructive-foreground" : "bg-secondary text-secondary-foreground"
+          style.bg,
+          style.text
         )}
       >
-        {outOfStock ? "Out" : product.current_stock}
+        {stockStatus === "out_of_stock" 
+          ? "Out" 
+          : stockStatus === "low_stock" 
+            ? `${stock} Left` 
+            : stock
+        }
       </span>
+
+      {/* Low stock warning indicator */}
+      {stockStatus === "low_stock" && (
+        <span className="absolute left-2 top-2 z-10 flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary" />
+        </span>
+      )}
 
       {/* Image */}
       <div className="relative aspect-square bg-background p-2">
@@ -53,10 +103,10 @@ export function ProductCard({ product, onClick }: Props) {
 
       {/* Content */}
       <div className="p-2.5 text-left border-t border-border/50">
-        <p className="text-sm font-medium text-foreground line-clamp-2 leading-tight min-h-[2.5rem]">
+        <p className="text-sm font-medium text-muted-foreground line-clamp-2 leading-tight min-h-[2.5rem]">
           {product.product_name}
         </p>
-        <p className="mt-1.5 font-mono text-base text-primary">
+        <p className="mt-1.5 font-mono text-base text-foreground">
           ₱{unitPrice.toFixed(2)}
         </p>
       </div>

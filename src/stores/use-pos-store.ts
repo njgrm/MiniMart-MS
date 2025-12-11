@@ -12,6 +12,7 @@ export interface PosProduct {
   retail_price: number;
   wholesale_price: number;
   current_stock: number;
+  reorder_level: number;
   image_url?: string | null;
 }
 
@@ -97,6 +98,9 @@ export function getCartTotal(cart: PosCartItem[], customerType: CustomerType) {
 export function getUnitDisplayPrice(item: PosProduct, customerType: CustomerType) {
   return getUnitPrice(item, customerType);
 }
+
+
+
 
 
 
