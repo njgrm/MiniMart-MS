@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Moon, Sun, LogOut, User, Settings, ChevronDown } from "lucide-react";
@@ -26,6 +27,7 @@ interface TopNavProps {
 export default function TopNav({ user }: TopNavProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+
   const handleLogout = async () => {
     await signOut({ redirect: false });
     router.push("/login");
@@ -42,14 +44,16 @@ export default function TopNav({ user }: TopNavProps) {
   };
 
   return (
-    <div className="h-full flex items-center justify-between px-6 bg-card">
+    <div className="h-full flex items-center justify-between px-4 bg-card">
       {/* Left side - Breadcrumb */}
-      <div className="flex-1 mt-4 ml-1.5 min-w-0">
-        <DynamicBreadcrumb />
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
+          <DynamicBreadcrumb />
+        </div>
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* Theme Toggle */}
         <Button
           variant="ghost"
@@ -74,7 +78,7 @@ export default function TopNav({ user }: TopNavProps) {
                   {getInitials(user?.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col items-start text-left hidden sm:flex">
+              <div className="flex flex-col items-start text-left hidden md:flex">
                 <span className="text-sm font-medium text-foreground">
                   {user?.name || "User"}
                 </span>
@@ -82,7 +86,7 @@ export default function TopNav({ user }: TopNavProps) {
                   {user?.role?.toLowerCase() || "Staff"}
                 </span>
               </div>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

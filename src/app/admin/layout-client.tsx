@@ -1,10 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { SessionProvider } from "next-auth/react";
 import { Toaster } from "sonner";
-import Sidebar from "@/components/kokonutui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import TopNav from "@/components/kokonutui/top-nav";
 import { PageHeaderProvider } from "@/contexts/page-header-context";
+import { SidebarProvider, SidebarInset, useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 interface AdminLayoutClientProps {
   children: React.ReactNode;
@@ -14,23 +18,59 @@ interface AdminLayoutClientProps {
   };
 }
 
+function LayoutContent({ children, user }: AdminLayoutClientProps) {
+  const pathname = usePathname();
+  const isPosPage = pathname === "/admin/pos";
+  const { setOpen } = useSidebar();
+  const [hasMounted, setHasMounted] = useState(false);
+
+  // Auto-collapse sidebar on POS page after mount
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (hasMounted) {
+      if (isPosPage) {
+        setOpen(false);
+      } else {
+        setOpen(true);
+      }
+    }
+  }, [isPosPage, setOpen, hasMounted]);
+
+  return (
+    <>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="h-14 border-b border-border bg-card sticky top-0 z-10 flex-shrink-0">
+          <TopNav user={user} />
+        </header>
+        <main
+          className={cn(
+            "flex-1 overflow-auto bg-muted/30",
+            isPosPage ? "p-0" : "p-4 md:p-6"
+          )}
+        >
+          <div className={cn(
+            "h-full flex flex-col",
+            isPosPage && "overflow-hidden"
+          )}>
+            {children}
+          </div>
+        </main>
+      </SidebarInset>
+    </>
+  );
+}
+
 export default function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
   return (
     <SessionProvider>
       <PageHeaderProvider>
-        <div className="flex h-screen bg-card dark:bg-background">
-          <Sidebar />
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <header className="h-16 border-b border-border">
-              <TopNav user={user} />
-            </header>
-            <main className="flex-1 overflow-hidden p-6 bg-background">
-              <div className="h-full flex flex-col overflow-hidden">
-                {children}
-              </div>
-            </main>
-          </div>
-        </div>
+        <SidebarProvider defaultOpen={true}>
+          <LayoutContent user={user}>{children}</LayoutContent>
+        </SidebarProvider>
         <Toaster richColors position="top-right" />
       </PageHeaderProvider>
     </SessionProvider>

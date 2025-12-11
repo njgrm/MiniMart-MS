@@ -23,7 +23,8 @@ export type ActionResult = {
 export async function login(data: LoginInput): Promise<ActionResult> {
   const parsed = loginSchema.safeParse(data);
   if (!parsed.success) {
-    const firstError = parsed.error.errors?.[0]?.message ?? parsed.error.message ?? "Validation failed";
+    // Get the first error message from Zod
+    const firstError = parsed.error.errors?.[0]?.message || "Invalid input";
     return { success: false, error: firstError };
   }
 

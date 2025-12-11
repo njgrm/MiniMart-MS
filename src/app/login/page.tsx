@@ -51,7 +51,11 @@ export default function LoginPage() {
         router.push("/admin");
         router.refresh();
       } else {
-        setError(result.error || "Login failed");
+        // Handle array error messages from Zod
+        const errorMsg = typeof result.error === "string" 
+          ? result.error 
+          : "Login failed";
+        setError(errorMsg);
       }
     });
   };
