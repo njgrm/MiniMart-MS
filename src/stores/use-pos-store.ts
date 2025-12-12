@@ -99,6 +99,26 @@ export function getUnitDisplayPrice(item: PosProduct, customerType: CustomerType
   return getUnitPrice(item, customerType);
 }
 
+/**
+ * Get cart quantity for a specific product
+ */
+export function getCartQuantity(cart: PosCartItem[], productId: number): number {
+  const item = cart.find((i) => i.product_id === productId);
+  return item?.quantity ?? 0;
+}
+
+/**
+ * Calculate visual/remaining stock after cart deduction
+ * Used for optimistic stock display on product cards
+ */
+export function getVisualStock(
+  product: PosProduct,
+  cart: PosCartItem[]
+): number {
+  const cartQty = getCartQuantity(cart, product.product_id);
+  return Math.max(0, product.current_stock - cartQty);
+}
+
 
 
 

@@ -18,7 +18,7 @@ export interface ProductData {
   reorder_level: number;
   barcode: string | null;
   image_url: string | null;
-  status: "IN_STOCK" | "LOW_STOCK";
+  status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
 }
 
 interface InventoryClientProps {

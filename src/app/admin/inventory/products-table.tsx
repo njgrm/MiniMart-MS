@@ -94,7 +94,8 @@ export function ProductsTable({
 
   // Calculate KPI stats
   const totalProducts = products.length;
-  const lowStockItems = products.filter((p) => p.status === "LOW_STOCK").length;
+  const outOfStockItems = products.filter((p) => p.current_stock === 0).length;
+  const lowStockItems = products.filter((p) => p.status === "LOW_STOCK" && p.current_stock > 0).length;
   const inventoryValue = products.reduce(
     (sum, p) => sum + p.retail_price * p.current_stock,
     0
@@ -274,17 +275,60 @@ export function ProductsTable({
         header: "Status",
         cell: ({ row }) => {
           const status = row.getValue("status") as string;
+          const stock = row.original.current_stock;
+          
+          // Override status to OUT_OF_STOCK if stock is 0
+          const effectiveStatus = stock === 0 ? "OUT_OF_STOCK" : status;
+          
+          if (effectiveStatus === "OUT_OF_STOCK") {
+            return (
+              <Badge variant="destructive" className="text-xs">
+                Out of Stock
+              </Badge>
+            );
+          }
+          
+          if (effectiveStatus === "LOW_STOCK") {
+            return (
+              <Badge variant="secondary" className="text-xs">
+                Low Stock
+              </Badge>
+            );
+          }
+          
           return (
-            <Badge
-              variant={status === "LOW_STOCK" ? "secondary" : "accent"}
-              className="text-xs"
-            >
-              {status === "LOW_STOCK" ? "Low" : "In Stock"}
+            <Badge variant="accent" className="text-xs">
+              In Stock
             </Badge>
           );
         },
         filterFn: (row, id, value) => {
-          return value === "all" || row.getValue(id) === value;
+          if (value === "all") return true;
+          const stock = row.original.current_stock;
+          // Handle OUT_OF_STOCK filter specially
+          if (value === "OUT_OF_STOCK") {
+            return stock === 0;
+          }
+          if (value === "LOW_STOCK") {
+            return stock > 0 && row.getValue(id) === "LOW_STOCK";
+          }
+          return row.getValue(id) === value && stock > 0;
+        },
+        // Custom sort to prioritize: OUT_OF_STOCK > LOW_STOCK > IN_STOCK
+        sortingFn: (rowA, rowB) => {
+          const stockA = rowA.original.current_stock;
+          const stockB = rowB.original.current_stock;
+          const statusA = rowA.getValue("status") as string;
+          const statusB = rowB.getValue("status") as string;
+          
+          // Priority: OUT_OF_STOCK (0) > LOW_STOCK > IN_STOCK
+          const getPriority = (stock: number, status: string) => {
+            if (stock === 0) return 0; // Highest priority
+            if (status === "LOW_STOCK") return 1;
+            return 2; // IN_STOCK
+          };
+          
+          return getPriority(stockA, statusA) - getPriority(stockB, statusB);
         },
       },
       {
@@ -460,13 +504,14 @@ export function ProductsTable({
             table.getColumn("status")?.setFilterValue(value === "all" ? "" : value)
           }
         >
-          <SelectTrigger className="h-10 w-[120px]">
+          <SelectTrigger className="h-10 w-[140px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="IN_STOCK">In Stock</SelectItem>
+            <SelectItem value="OUT_OF_STOCK">Out of Stock</SelectItem>
             <SelectItem value="LOW_STOCK">Low Stock</SelectItem>
+            <SelectItem value="IN_STOCK">In Stock</SelectItem>
           </SelectContent>
         </Select>
 
@@ -493,6 +538,22 @@ export function ProductsTable({
           <span className="text-xs text-muted-foreground">Products</span>
         </div>
 
+        {/* Out of Stock Button - Highest Priority */}
+        {outOfStockItems > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              table.getColumn("status")?.setFilterValue("OUT_OF_STOCK");
+            }}
+            className="flex items-center gap-2 h-10 px-3 rounded-md bg-destructive dark:bg-destructive/20 border border-destructive dark:border-destructive/40 text-white dark:text-destructive shadow-warm-sm dark:shadow-none hover:bg-destructive/90 dark:hover:bg-destructive/30 transition-colors cursor-pointer"
+          >
+            <Package className="h-4 w-4" />
+            <span className="text-sm font-medium">{outOfStockItems}</span>
+            <span className="text-xs opacity-90 dark:opacity-80">Out</span>
+          </button>
+        )}
+
+        {/* Low Stock Button */}
         <button
           type="button"
           onClick={() => {
@@ -502,7 +563,7 @@ export function ProductsTable({
         >
           <AlertTriangle className="h-4 w-4" />
           <span className="text-sm font-medium">{lowStockItems}</span>
-          <span className="text-xs opacity-90 dark:opacity-80">Low Stock</span>
+          <span className="text-xs opacity-90 dark:opacity-80">Low</span>
         </button>
 
         <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">

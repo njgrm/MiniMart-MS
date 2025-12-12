@@ -135,14 +135,14 @@
   /* Foreground: Light Cream */
   --foreground: hsl(37 30% 92%);
 
-  /* Card: Slightly elevated dark surface */
-  --card: hsl(12 6% 18%);
+  /* Card: Slightly elevated dark surface - closer to background for seamless look */
+  --card: hsl(12 6% 15%);
   --card-foreground: hsl(37 30% 92%);
-  --popover: hsl(12 6% 20%);
+  --popover: hsl(12 6% 18%);
   --popover-foreground: hsl(37 30% 92%);
 
   /* Input Background: Slightly lighter for depth */
-  --input-bg: hsl(12 6% 22%);
+  --input-bg: hsl(12 6% 20%);
 
   /* Primary: Match light mode crimson for consistency */
   --primary: hsl(357 84% 37%);
@@ -152,8 +152,8 @@
   --secondary: hsl(23 80% 55%);
   --secondary-foreground: hsl(0 0% 100%);
 
-  /* Muted: Dark muted surface */
-  --muted: hsl(12 5% 22%);
+  /* Muted: Very close to background for seamless product card image areas */
+  --muted: hsl(12 5% 14%);
   --muted-foreground: hsl(37 15% 60%);
 
   /* Accent: Aqua Blue */

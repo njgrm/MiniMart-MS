@@ -100,10 +100,17 @@ export async function createTransaction(input: CreateTransactionInput) {
     revalidatePath("/admin/inventory");
     revalidatePath("/admin");
 
-    return { success: true, data: result };
-  } catch (error: any) {
+    // Convert Decimal to plain number to avoid serialization issues with Client Components
+    const serializedResult = {
+      ...result,
+      total_amount: Number(result.total_amount),
+    };
+
+    return { success: true, data: serializedResult };
+  } catch (error) {
     console.error("createTransaction error", error);
-    return { success: false, error: error?.message ?? "Failed to process transaction." };
+    const message = error instanceof Error ? error.message : "Failed to process transaction.";
+    return { success: false, error: message };
   }
 }
 
