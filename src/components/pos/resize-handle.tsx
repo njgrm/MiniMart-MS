@@ -104,16 +104,16 @@ export function ResizeHandle({ containerRef }: ResizeHandleProps) {
       {/* Grip handle button */}
       <div
         className={cn(
-          "absolute left-1/2 top-1/10 -translate-x-1/2 -translate-y-1/2",
+          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
           "flex items-center justify-center",
-          "w-4 h-10 rounded-full",
-          "bg-muted border border-border shadow-sm",
-          "opacity-100 group-hover:opacity-100 transition-opacity duration-150",
-          "hover:bg-primary/10 hover:border-primary/50",
-          isResizing && "opacity-100 bg-primary/10 border-primary"
+          "w-4 h-12 rounded-full z-20",
+          "bg-primary bg:dark:bg-dark-foreground border border-border shadow-sm",
+          "opacity-40 group-hover:opacity-100 transition-opacity duration-150",
+          "hover:bg-primary hover:border-primary",
+          isResizing && "opacity-100 bg-primary/10 border-primary dark:bg-dark-primary/10 dark:border-dark-primary"
         )}
       >
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
+        <GripVertical className="h-4 w-4 text-primary-foreground dark:text-dark-primary-foreground" />
       </div>
     </div>
   );

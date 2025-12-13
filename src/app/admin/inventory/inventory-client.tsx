@@ -6,6 +6,8 @@ import { ProductsTable } from "./products-table";
 import { ProductDialog } from "./product-dialog";
 import { DeleteProductDialog } from "./delete-product-dialog";
 import { CSVImportDialog } from "./csv-import-dialog";
+import { BarcodeModal } from "@/components/inventory/barcode-modal";
+import { printBarcodesInPopup } from "@/lib/print-utils";
 import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
 
 export interface ProductData {
@@ -30,6 +32,8 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
   const [products, setProducts] = useState<ProductData[]>(initialProducts);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeProducts, setBarcodeProducts] = useState<ProductData[]>([]);
   const [editingProduct, setEditingProduct] = useState<ProductData | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<ProductData | null>(null);
 
@@ -65,6 +69,11 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
     router.refresh();
   };
 
+  // Print handler using popup window approach
+  const handlePrint = () => {
+    printBarcodesInPopup(barcodeProducts);
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       
@@ -78,6 +87,10 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
           onEdit={setEditingProduct}
           onDelete={setDeletingProduct}
           onBulkDelete={handleBulkDeleted}
+          onPrintBarcodes={(selectedProducts) => {
+            setBarcodeProducts(selectedProducts);
+            setIsBarcodeModalOpen(true);
+          }}
         />
 
         {/* Add Product Dialog */}
@@ -108,6 +121,14 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
           open={isImportDialogOpen}
           onOpenChange={setIsImportDialogOpen}
           onSuccess={handleImportSuccess}
+        />
+
+        {/* Barcode Print Modal - Preview for user */}
+        <BarcodeModal
+          open={isBarcodeModalOpen}
+          onClose={() => setIsBarcodeModalOpen(false)}
+          products={barcodeProducts}
+          onPrint={handlePrint}
         />
       </div>
     </div>

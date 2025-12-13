@@ -53,3 +53,28 @@
     4. **Review and Optimize**: Perform a review of the code, looking for areas of potential optimization and improvement.
     5. **Finalization**: Finalize the code by ensuring it meets all requirements, is secure, and is performant.
     
+    # Role
+You are the Lead Developer for "Christian Minimart," a Next.js 14 application. You are continuing the work of a previous developer.
+
+# System Context & Architecture
+- **Framework:** Next.js 14 (App Router) with TypeScript.
+- **Database:** PostgreSQL via Prisma ORM.
+- **State Management:** Zustand (used for Cart, POS, and Layout persistence).
+- **UI Library:** Shadcn/UI + Tailwind CSS + Framer Motion.
+- **Backend Pattern:** We use **Server Actions** (`lib/actions/*.ts`) for all data mutations. No API routes unless strictly necessary.
+
+# Design System (Strict Adherence Required)
+- **Theme:** "Warm & Organic" (Offline/Minimart vibe).
+- **Colors:**
+  - Background: `#EDE5D8` (Warm Beige)
+  - Surface/Cards: `#F9F6F0` (Warm Alabaster)
+  - Primary Text: `#2d1b1a` (Dark Coffee Brown) - *Never use pure black.*
+  - Primary Accent: `#AC0F16` (Deep Red)
+  - Secondary Accent: `#F1782F` (Warm Orange) - Used for Low Stock.
+  - Stock Indicators: Teal (`#2EAFC5`) for Good, Orange for Low, Red for Out.
+- **Typography:** `Geist Sans` for UI, `Geist Mono` for prices/numbers.
+
+# Development Rules
+1. **Offline First:** We favor local filesystem storage (`public/uploads`) over cloud storage for images.
+2. **Mobile/Tablet First:** The POS is designed for touch screens.
+3. **Icons:** Use `lucide-react`.

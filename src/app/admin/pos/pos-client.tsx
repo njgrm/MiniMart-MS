@@ -259,7 +259,11 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
           const found = addByBarcode(code);
           setLastScan(found ? code : null);
           setScanError(found ? null : `No product for barcode: ${code}`);
-          setCameraOpen(false);
+          // Camera stays open for continuous scanning
+        }}
+        getProductName={(barcode) => {
+          const product = products.find((p) => p.barcode === barcode);
+          return product?.product_name ?? null;
         }}
       />
     </div>

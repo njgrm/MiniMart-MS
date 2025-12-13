@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Boxes,
   Coins,
+  Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,7 @@ interface ProductsTableProps {
   onBulkDelete?: (productIds: number[]) => void;
   onImportClick?: () => void;
   onAddClick?: () => void;
+  onPrintBarcodes?: (products: ProductData[]) => void;
 }
 
 export function ProductsTable({ 
@@ -84,6 +86,7 @@ export function ProductsTable({
   onBulkDelete,
   onImportClick,
   onAddClick,
+  onPrintBarcodes,
 }: ProductsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -432,7 +435,7 @@ export function ProductsTable({
     <div className="h-full flex flex-col gap-3">
       {/* Selection Toolbar - Only visible when items are selected */}
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 px-3 h-10 shrink-0">
+        <div className="flex items-center rounded-lg border border-border bg-muted dark:bg-muted px-3 h-10 shrink-0">
           <span className="text-sm text-muted-foreground">
             {selectedCount} product{selectedCount !== 1 ? "s" : ""} selected
           </span>
@@ -445,6 +448,22 @@ export function ProductsTable({
             >
               Clear
             </Button>
+            {onPrintBarcodes && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => {
+                  const selectedProducts = products.filter((p) =>
+                    selectedProductIds.includes(p.product_id)
+                  );
+                  onPrintBarcodes(selectedProducts);
+                }}
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Print Barcodes
+              </Button>
+            )}
             <Button
               variant="warning"
               size="sm"

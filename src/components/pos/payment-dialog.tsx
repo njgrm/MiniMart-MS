@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { uploadImage } from "@/actions/upload";
+import { uploadImageRaw } from "@/actions/upload";
 import { updateGcashQr } from "@/actions/settings";
 import { toast } from "sonner";
 
@@ -108,8 +108,8 @@ export function PaymentDialog({
     
     setIsUploadingQr(true);
     try {
-      // Upload the image to the server
-      const result = await uploadImage(file);
+      // Upload the image to the server (without background removal for QR codes)
+      const result = await uploadImageRaw(file);
       
       if (!result.success || !result.path) {
         toast.error("Failed to upload QR code image");

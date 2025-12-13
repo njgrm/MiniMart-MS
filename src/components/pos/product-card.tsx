@@ -157,6 +157,13 @@ export function ProductCard({ product, displayPrice, priceType, onClick }: Props
           {product.product_name}
         </p>
         
+        {/* Barcode Display */}
+        {product.barcode && (
+          <p className="text-xs font-mono text-muted-foreground mt-1 select-all cursor-text">
+            {product.barcode}
+          </p>
+        )}
+        
         {/* Price Row */}
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <p className="font-mono text-base font-medium text-primary dark:text-foreground">
