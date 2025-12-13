@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, ChangeEvent } from "react";
-import { CreditCard, Banknote, Smartphone, Check, Upload, QrCode } from "lucide-react";
+import { CreditCard, Banknote, Smartphone, Check, Upload, QrCode, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { uploadImage } from "@/actions/upload";
+import { updateGcashQr } from "@/actions/settings";
+import { toast } from "sonner";
 
 interface PaymentDialogProps {
   open: boolean;
@@ -30,6 +33,8 @@ interface PaymentDialogProps {
   discountAmount: number;
   taxAmount: number;
   totalDue: number;
+  /** Initial GCash QR code URL from database */
+  initialGcashQrUrl?: string | null;
 }
 
 // Payment method options
@@ -48,14 +53,23 @@ export function PaymentDialog({
   discountAmount,
   taxAmount,
   totalDue,
+  initialGcashQrUrl,
 }: PaymentDialogProps) {
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "GCASH">("CASH");
   const [amountTendered, setAmountTendered] = useState<string>("");
   const [gcashRefNo, setGcashRefNo] = useState<string>("");
-  const [gcashQrImage, setGcashQrImage] = useState<string>("/gcash-qr.png");
+  const [gcashQrImage, setGcashQrImage] = useState<string>(initialGcashQrUrl || "");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploadingQr, setIsUploadingQr] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync with initial QR URL when it changes
+  useEffect(() => {
+    if (initialGcashQrUrl) {
+      setGcashQrImage(initialGcashQrUrl);
+    }
+  }, [initialGcashQrUrl]);
 
   // Auto-focus amount input when dialog opens
   useEffect(() => {
@@ -87,15 +101,41 @@ export function PaymentDialog({
     }
   };
 
-  // Handle QR code image upload
-  const handleQrUpload = (e: ChangeEvent<HTMLInputElement>) => {
+  // Handle QR code image upload - saves to server and database
+  const handleQrUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setGcashQrImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    
+    setIsUploadingQr(true);
+    try {
+      // Upload the image to the server
+      const result = await uploadImage(file);
+      
+      if (!result.success || !result.path) {
+        toast.error("Failed to upload QR code image");
+        return;
+      }
+      
+      // Save the path to the database
+      const saveResult = await updateGcashQr(result.path);
+      
+      if (!saveResult.success) {
+        toast.error("Failed to save QR code to settings");
+        return;
+      }
+      
+      // Update local state
+      setGcashQrImage(result.path);
+      toast.success("GCash QR code updated successfully");
+    } catch (error) {
+      console.error("Error uploading QR code:", error);
+      toast.error("An error occurred while uploading the QR code");
+    } finally {
+      setIsUploadingQr(false);
+      // Reset the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -194,7 +234,7 @@ export function PaymentDialog({
                           <motion.div
                             layoutId="payment-method-highlight"
                             className="absolute inset-0 bg-primary rounded-md shadow-sm"
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            transition={{ type: "tween", stiffness: 1000, damping: 10 }}
                           />
                         )}
                         <method.icon className="h-4 w-4 relative z-10" />
@@ -257,7 +297,7 @@ export function PaymentDialog({
                 <div className="rounded-lg border border-border p-4 bg-muted/30">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-muted-foreground">
-                      Change Due
+                      Change:
                     </span>
                     <span
                       className={cn(
@@ -301,7 +341,12 @@ export function PaymentDialog({
 
                   {/* QR Code Display - Larger */}
                   <div className="relative group w-56 h-56 rounded-xl border-2 border-dashed border-border bg-white dark:bg-card flex items-center justify-center overflow-hidden shadow-sm">
-                    {gcashQrImage ? (
+                    {isUploadingQr ? (
+                      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                        <span className="text-sm">Uploading...</span>
+                      </div>
+                    ) : gcashQrImage ? (
                       <img
                         src={gcashQrImage}
                         alt="GCash QR Code"
@@ -315,16 +360,18 @@ export function PaymentDialog({
                       </div>
                     )}
 
-                    {/* Upload Overlay - Admin Feature */}
-                    <div
-                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-xl"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <div className="flex flex-col items-center gap-2 text-white">
-                        <Upload className="h-8 w-8" />
-                        <span className="text-sm font-medium">Upload QR</span>
+                    {/* Upload Overlay - Admin Feature (hidden while uploading) */}
+                    {!isUploadingQr && (
+                      <div
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-xl"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <div className="flex flex-col items-center gap-2 text-white">
+                          <Upload className="h-8 w-8" />
+                          <span className="text-sm font-medium">Upload QR</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <input
                       ref={fileInputRef}
@@ -334,6 +381,7 @@ export function PaymentDialog({
                       className="hidden"
                       aria-label="Upload GCash QR Code"
                       title="Upload GCash QR Code"
+                      disabled={isUploadingQr}
                     />
                   </div>
 

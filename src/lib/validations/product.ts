@@ -5,6 +5,7 @@ import { z } from "zod";
  */
 export const PRODUCT_CATEGORIES = [
   "SODA",
+  "SOFTDRINKS_CASE",
   "SNACK",
   "CANNED_GOODS",
   "BEVERAGES",
@@ -28,6 +29,14 @@ const fileSchema = z.custom<File>((val) => {
   return val instanceof File;
 }, "Invalid file");
 
+/**
+ * Create Product Schema
+ * 
+ * Pricing Logic:
+ * - retail_price = 0 means "Not available for Retail" (Wholesale only)
+ * - wholesale_price = 0 means "Not available for Wholesale" (Retail only)
+ * - At least one price must be > 0
+ */
 export const createProductSchema = z.object({
   product_name: z
     .string()
@@ -38,11 +47,11 @@ export const createProductSchema = z.object({
   }),
   retail_price: z
     .number({ invalid_type_error: "Retail price must be a number" })
-    .positive("Retail price must be positive")
+    .nonnegative("Retail price cannot be negative")
     .multipleOf(0.01, "Retail price can have at most 2 decimal places"),
   wholesale_price: z
     .number({ invalid_type_error: "Wholesale price must be a number" })
-    .positive("Wholesale price must be positive")
+    .nonnegative("Wholesale price cannot be negative")
     .multipleOf(0.01, "Wholesale price can have at most 2 decimal places"),
   initial_stock: z
     .number({ invalid_type_error: "Initial stock must be a number" })
@@ -70,6 +79,11 @@ export const createProductSchema = z.object({
 
 /**
  * Update Product Schema
+ * 
+ * Pricing Logic:
+ * - retail_price = 0 means "Not available for Retail" (Wholesale only)
+ * - wholesale_price = 0 means "Not available for Wholesale" (Retail only)
+ * - At least one price must be > 0
  */
 export const updateProductSchema = z.object({
   product_id: z.number().int().positive(),
@@ -82,11 +96,11 @@ export const updateProductSchema = z.object({
   }),
   retail_price: z
     .number({ invalid_type_error: "Retail price must be a number" })
-    .positive("Retail price must be positive")
+    .nonnegative("Retail price cannot be negative")
     .multipleOf(0.01, "Retail price can have at most 2 decimal places"),
   wholesale_price: z
     .number({ invalid_type_error: "Wholesale price must be a number" })
-    .positive("Wholesale price must be positive")
+    .nonnegative("Wholesale price cannot be negative")
     .multipleOf(0.01, "Wholesale price can have at most 2 decimal places"),
   current_stock: z
     .number({ invalid_type_error: "Current stock must be a number" })

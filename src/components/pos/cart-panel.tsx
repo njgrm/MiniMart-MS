@@ -1,9 +1,8 @@
   "use client";
 
   import { useMemo, useState, useRef } from "react";
-  import { Minus, Plus, Trash2, UserCircle2, Store, Percent, ChevronDown, XCircle } from "lucide-react";
+  import { Minus, Plus, Trash2, Percent, ChevronDown, XCircle } from "lucide-react";
   import { Button } from "@/components/ui/button";
-  import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
   import { Separator } from "@/components/ui/separator";
   import { Input } from "@/components/ui/input";
   import {
@@ -13,7 +12,7 @@
     DropdownMenuTrigger,
   } from "@/components/ui/dropdown-menu";
   import { cn } from "@/lib/utils";
-  import { usePosStore, getUnitDisplayPrice, getCartTotal } from "@/stores/use-pos-store";
+  import { usePosStore, getCartTotal, getCartItemPrice } from "@/stores/use-pos-store";
   import { createTransaction } from "@/actions/transaction";
   import { PaymentDialog } from "./payment-dialog";
   import { ReceiptTemplate } from "./receipt-template";
@@ -42,7 +41,7 @@
     receiptNumber: string;
     date: Date;
     cashierName: string;
-    items: { name: string; quantity: number; price: number; subtotal: number }[];
+    items: { name: string; quantity: number; price: number; subtotal: number; priceType?: "R" | "W" }[];
     subtotal: number;
     discountPercent: number;
     discountAmount: number;
@@ -53,11 +52,15 @@
     paymentMethod: "CASH" | "GCASH";
   }
 
-  export function CartPanel() {
+  interface CartPanelProps {
+    /** GCash QR code URL from store settings */
+    gcashQrUrl?: string | null;
+  }
+
+  export function CartPanel({ gcashQrUrl }: CartPanelProps) {
     const {
       cart,
       customerType,
-      setCustomerType,
       updateQuantity,
       removeFromCart,
       clearCart,
@@ -76,8 +79,8 @@
     const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
     const receiptRef = useRef<HTMLDivElement>(null);
 
-    // Calculate subtotal (before discount & tax)
-    const subtotal = useMemo(() => getCartTotal(cart, customerType), [cart, customerType]);
+    // Calculate subtotal using locked prices (not affected by catalog mode changes)
+    const subtotal = useMemo(() => getCartTotal(cart), [cart]);
 
     // Calculate discount amount
     const discountPercent = useMemo(() => {
@@ -118,12 +121,12 @@
       setIsSubmitting(true);
       
       try {
-        // Create the transaction
+        // Create the transaction using locked prices from cart items
         const result = await createTransaction({
           items: cart.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
-            price: getUnitDisplayPrice(item, customerType),
+            price: getCartItemPrice(item), // Use locked price
           })),
           customerType,
           paymentMethod,
@@ -139,7 +142,7 @@
           return;
         }
 
-        // Prepare receipt data
+        // Prepare receipt data using locked prices
         const receipt: ReceiptData = {
           receiptNumber: generateReceiptNumber(),
           date: new Date(),
@@ -147,8 +150,9 @@
           items: cart.map((item) => ({
             name: item.product_name,
             quantity: item.quantity,
-            price: getUnitDisplayPrice(item, customerType),
-            subtotal: getUnitDisplayPrice(item, customerType) * item.quantity,
+            price: getCartItemPrice(item), // Use locked price
+            subtotal: getCartItemPrice(item) * item.quantity,
+            priceType: item.priceType, // Include price type for receipt
           })),
           subtotal,
           discountPercent,
@@ -190,32 +194,20 @@
           <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">Cart</h2>
-              {/* Clear All Button - only visible when cart has items */}
-              {cart.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 mt-0.5 px-2 py-1 text-xs text-muted-foreground bg-primary/30 hover:text-destructive gap-1"
-                  onClick={clearCart}
-                >
-                  <XCircle className="h-3 w-3" />
-                  Clear
-                </Button>
-              )}
+              <span className="text-xs text-muted-foreground">({itemCount} items)</span>
             </div>
-            <Tabs
-              value={customerType}
-              onValueChange={(val) => setCustomerType(val as "walkin" | "vendor")}
-            >
-              <TabsList className="h-8">
-                <TabsTrigger value="walkin" className="gap-1 text-xs px-2 h-7">
-                  <UserCircle2 className="h-3.5 w-3.5" /> Walk-in
-                </TabsTrigger>
-                <TabsTrigger value="vendor" className="gap-1 text-xs px-2 h-7">
-                  <Store className="h-3.5 w-3.5" /> Vendor
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Clear All Button - only visible when cart has items */}
+            {cart.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 py-1 text-xs text-muted-foreground hover:text-destructive gap-1"
+                onClick={clearCart}
+              >
+                <XCircle className="h-3 w-3" />
+                Clear
+              </Button>
+            )}
           </div>
 
           {/* Items list - flex-1 to fill space */}
@@ -225,11 +217,11 @@
                 <p className="text-xs">No items in cart</p>
               </div>
             ) : (
-              cart.map((item) => {
-                const unitPrice = getUnitDisplayPrice(item, customerType);
+              cart.map((item, index) => {
+                const unitPrice = getCartItemPrice(item); // Use locked price
                 return (
                   <div
-                    key={item.product_id}
+                    key={`${item.product_id}-${item.priceType}-${index}`}
                     className="flex items-center gap-2 rounded-md border border-border bg-card p-2"
                   >
                     {/* Thumbnail */}
@@ -249,7 +241,20 @@
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{item.product_name}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs font-medium text-foreground truncate">{item.product_name}</p>
+                        {/* Price type badge */}
+                        <span
+                          className={cn(
+                            "text-[8px] font-bold px-1 py-0.5 rounded flex-shrink-0",
+                            item.priceType === "W"
+                              ? "bg-secondary/20 text-secondary"
+                              : "bg-primary/10 text-primary dark:text-primary"
+                          )}
+                        >
+                          {item.priceType}
+                        </span>
+                      </div>
                       <p className="text-[10px] text-muted-foreground">
                         ₱{unitPrice.toFixed(2)} × {item.quantity}
                       </p>
@@ -276,7 +281,7 @@
                       </Button>
                     </div>
 
-                    {/* Subtotal & Delete - Dark mode contrast fix */}
+                    {/* Subtotal & Delete */}
                     <div className="flex items-center gap-1">
                       <span className="font-mono text-xs w-14 text-right text-foreground">
                         ₱{(unitPrice * item.quantity).toFixed(2)}
@@ -298,11 +303,6 @@
 
           {/* Footer - payment section with proper hierarchy */}
           <div className="border-t border-border bg-card p-3 space-y-3">
-            {/* Item count */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Items: {itemCount}</span>
-            </div>
-
             {/* Subtotal */}
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
@@ -403,6 +403,7 @@
           discountAmount={discountAmount}
           taxAmount={taxAmount}
           totalDue={totalDue}
+          initialGcashQrUrl={gcashQrUrl}
         />
 
         {/* Hidden Receipt Template for Printing */}

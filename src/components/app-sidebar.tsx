@@ -100,7 +100,7 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
               alt="Christian Minimart"
               width={32}
               height={32}
-              className="w-auto h-13=2 object-contain"
+              className="w-auto h-13 object-contain"
               priority
             />
           ) : (

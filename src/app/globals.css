@@ -203,6 +203,51 @@
   }
 }
 
+/* ===========================================
+ * Custom Scrollbar - Warm Organic Theme
+ * Thin, subtle, and theme-aware
+ * =========================================== */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.35);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: hsl(var(--muted-foreground) / 0.45);
+}
+
+/* Corner piece (where horizontal and vertical scrollbars meet) */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(21 15% 37% / 0.2) transparent;
+}
+
+.dark * {
+  scrollbar-color: hsl(37 15% 60% / 0.2) transparent;
+}
+
 /* Custom warm shadows using Dark Charcoal #2B2726 at low opacity (5-8%) */
 @layer utilities {
   .shadow-warm-sm {

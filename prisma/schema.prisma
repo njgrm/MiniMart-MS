@@ -181,3 +181,22 @@ model SalesForecast {
 
   @@map("sales_forecasts")
 }
+
+// =======================
+// 6. STORE SETTINGS
+// =======================
+
+/// Singleton table for store-wide settings
+/// Should only ever have one row (id = 1)
+model StoreSettings {
+  id                  Int      @id @default(autoincrement())
+  gcash_qr_image_url  String?  // Path to the GCash QR code image
+  store_name          String   @default("Christian Minimart")
+  store_address       String?
+  store_contact       String?
+  
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@map("store_settings")
+}

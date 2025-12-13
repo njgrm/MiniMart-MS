@@ -1,19 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ScanBarcode, Search, Camera } from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { ScanBarcode, Search, Camera, ShoppingBag, Truck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { usePosStore, type PosProduct, getCartTotal } from "@/stores/use-pos-store";
+import { 
+  usePosStore, 
+  type PosProduct, 
+  type CatalogMode,
+  getCartTotal,
+  filterProductsForCatalog 
+} from "@/stores/use-pos-store";
+import { usePosLayoutStore } from "@/stores/use-pos-layout-store";
 import { ProductGrid } from "@/components/pos/product-grid";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { CameraScanner } from "@/components/pos/camera-scanner";
+import { ResizeHandle } from "@/components/pos/resize-handle";
+import { motion } from "framer-motion";
 
 type Props = {
   products: PosProduct[];
+  /** GCash QR code URL from store settings */
+  gcashQrUrl?: string | null;
 };
 
 const categoriesFromProducts = (products: PosProduct[]) => {
@@ -33,14 +44,24 @@ const formatCategoryLabel = (value: string) => {
     .trim();
 };
 
-export default function PosClient({ products }: Props) {
+/** Catalog mode options for the segmented control */
+const catalogModes: { id: CatalogMode; label: string; icon: React.ElementType }[] = [
+  { id: "retail", label: "Retail", icon: ShoppingBag },
+  { id: "wholesale", label: "Wholesale", icon: Truck },
+];
+
+export default function PosClient({ products, gcashQrUrl }: Props) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  
+  // Container ref for resize calculations
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const { setProducts, addByBarcode, customerType, cart, setCustomerType } = usePosStore();
+  const { setProducts, addByBarcode, catalogMode, setCatalogMode, cart } = usePosStore();
+  const { cartWidth, isResizing } = usePosLayoutStore();
 
   useEffect(() => {
     setProducts(products);
@@ -73,36 +94,77 @@ export default function PosClient({ products }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [addByBarcode]);
 
-  const categories = useMemo(() => categoriesFromProducts(products), [products]);
+  // Filter products based on catalog mode first
+  const catalogProducts = useMemo(
+    () => filterProductsForCatalog(products, catalogMode),
+    [products, catalogMode]
+  );
 
+  // Get categories from catalog-filtered products
+  const categories = useMemo(() => categoriesFromProducts(catalogProducts), [catalogProducts]);
+
+  // Further filter by search and category
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
+    return catalogProducts.filter((product) => {
       const matchesCategory = category === "all" || product.category === category;
       const matchesSearch =
         product.product_name.toLowerCase().includes(search.toLowerCase()) ||
         (product.barcode ?? "").toLowerCase().includes(search.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [products, category, search]);
+  }, [catalogProducts, category, search]);
 
-  const cartTotal = getCartTotal(cart, customerType);
+  const cartTotal = getCartTotal(cart);
 
   return (
-    <div className="w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground">
-      {/* Left panel - Product area */} 
-      <div className="flex-1 min-w-100 flex flex-col h-full overflow-hidden">
+    <div 
+      ref={containerRef}
+      className={cn(
+        "w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground",
+        isResizing && "select-none"
+      )}
+    >
+      {/* Left panel - Product area (uses flex-1 and min-w-0 for proper shrinking) */} 
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
         {/* Top bar - Search & Categories */}
         <div className="flex-shrink-0 border-b w-full border-border px-4 bg-card">
           {/* Search row */}
           <div className="flex items-center gap-2 px-3 py-2">
-            <div className="relative flex-1 mt-0">
+            {/* Catalog Mode Toggle - Segmented Control */}
+            <div className="relative flex bg-light-foreground dark:bg-dark-foreground border border-border rounded-lg px-1 py-1 flex-shrink-0">
+              {catalogModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setCatalogMode(mode.id)}
+                  className={cn(
+                    "relative flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-md z-10 transition-colors duration-200",
+                    catalogMode === mode.id
+                      ? "text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {catalogMode === mode.id && (
+                    <motion.div
+                      layoutId="catalog-mode-highlight"
+                      className="absolute inset-0 bg-primary rounded-md shadow-sm"
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <mode.icon className="h-3.5 w-3.5 relative z-10" />
+                  <span className="relative z-10 hidden sm:inline">{mode.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="relative flex-1 bg-background border-border rounded-lg mt-0 mb-0">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground" />
               <Input
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search or scan barcode..."
-                className="h-9 pl-8 pr-10 text-sm"
+                className="h-9.25 rounded-lg pl-8 pr-10 text-sm"
               />
               <Button
                 type="button"
@@ -119,7 +181,7 @@ export default function PosClient({ products }: Props) {
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 gap-1.5 px-3 flex-shrink-0"
+              className="h-9.25 gap-1.5 px-3 flex-shrink-0"
               onClick={() => setCameraOpen(true)}
             >
               <Camera className="h-4 w-4" />
@@ -127,9 +189,6 @@ export default function PosClient({ products }: Props) {
             </Button>
 
             {/* Status badges */}
-            <Badge variant="secondary" className="h-7 rounded-full px-2.5 text-xs flex-shrink-0">
-              {customerType === "vendor" ? "Vendor" : "Walk-in"}
-            </Badge>
             {lastScan && (
               <Badge variant="outline" className="h-7 rounded-full border-primary text-primary px-2.5 text-xs hidden md:flex">
                 {lastScan}
@@ -175,10 +234,23 @@ export default function PosClient({ products }: Props) {
         </div>
       </div>
 
-      {/* Right panel - Cart */}
-      <div className="w-[300px] lg:w-[340px] h-full flex flex-col border-l border-border bg-card flex-shrink-0">
-        <CartPanel />
-      </div>
+      {/* Resize Handle */}
+      <ResizeHandle containerRef={containerRef} />
+
+      {/* Right panel - Cart (resizable) */}
+      <motion.div 
+        className="h-full flex flex-col bg-card flex-shrink-0 overflow-hidden"
+        style={{ width: cartWidth }}
+        animate={{ width: cartWidth }}
+        transition={{ 
+          type: isResizing ? "tween" : "spring",
+          duration: isResizing ? 0 : 0.2,
+          stiffness: 300,
+          damping: 30
+        }}
+      >
+        <CartPanel gcashQrUrl={gcashQrUrl} />
+      </motion.div>
 
       <CameraScanner
         open={cameraOpen}

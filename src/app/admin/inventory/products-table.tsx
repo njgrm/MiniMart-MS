@@ -462,7 +462,7 @@ export function ProductsTable({
       <div className="flex flex-wrap items-center gap-2 shrink-0">
         {/* Search */}
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 bg-light-foreground dark:bg-dark-foreground -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by name or barcode..."
             value={globalFilter}
