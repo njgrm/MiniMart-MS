@@ -27,6 +27,11 @@ interface TopNavProps {
 export default function TopNav({ user }: TopNavProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
@@ -44,7 +49,7 @@ export default function TopNav({ user }: TopNavProps) {
   };
 
   return (
-    <div className="h-full flex items-center dark:bg-[#312c2b] justify-between px-4 bg-card">
+    <div className="h-full flex items-center dark:bg-sidebar justify-between px-4 bg-card">
       {/* Left side - Breadcrumb */}
       <div className="flex items-center gap-4 mt-4 ml-4 flex-1 min-w-0">
         <div className="flex-1 min-w-0">
@@ -66,57 +71,81 @@ export default function TopNav({ user }: TopNavProps) {
           <span className="sr-only">Toggle theme</span>
         </Button>
 
-        {/* User Profile Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted"
-            >
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-                  {getInitials(user?.name)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col items-start text-left hidden md:flex">
-                <span className="text-sm font-medium text-foreground">
-                  {user?.name || "User"}
-                </span>
-                <span className="text-xs text-muted-foreground capitalize">
-                  {user?.role?.toLowerCase() || "Staff"}
-                </span>
-              </div>
-              <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span>{user?.name || "User"}</span>
-                <span className="text-xs font-normal text-muted-foreground capitalize">
-                  {user?.role?.toLowerCase() || "Staff"}
-                </span>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={handleLogout}
-              className="text-destructive focus:text-destructive focus:bg-destructive/10"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* User Profile Dropdown - Only render on client to avoid hydration mismatch */}
+        {mounted ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
+                    {getInitials(user?.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col items-start text-left hidden md:flex">
+                  <span className="text-sm font-medium text-foreground">
+                    {user?.name || "User"}
+                  </span>
+                  <span className="text-xs text-muted-foreground capitalize">
+                    {user?.role?.toLowerCase() || "Staff"}
+                  </span>
+                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col">
+                  <span>{user?.name || "User"}</span>
+                  <span className="text-xs font-normal text-muted-foreground capitalize">
+                    {user?.role?.toLowerCase() || "Staff"}
+                  </span>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          // Placeholder during SSR to prevent layout shift
+          <Button
+            variant="ghost"
+            className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+            disabled
+          >
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
+                {getInitials(user?.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col items-start text-left hidden md:flex">
+              <span className="text-sm font-medium text-foreground">
+                {user?.name || "User"}
+              </span>
+              <span className="text-xs text-muted-foreground capitalize">
+                {user?.role?.toLowerCase() || "Staff"}
+              </span>
+            </div>
+            <ChevronDown className="h-4 w-4 text-muted-foreground hidden md:block" />
+          </Button>
+        )}
       </div>
     </div>
   );

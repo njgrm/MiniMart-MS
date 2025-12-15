@@ -16,6 +16,7 @@ export interface ProductData {
   category: string;
   retail_price: number;
   wholesale_price: number;
+  cost_price: number;
   current_stock: number;
   reorder_level: number;
   barcode: string | null;

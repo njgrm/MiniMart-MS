@@ -50,6 +50,7 @@ export function ProductDialog({
   const [category, setCategory] = useState<string>("");
   const [retailPrice, setRetailPrice] = useState("");
   const [wholesalePrice, setWholesalePrice] = useState("");
+  const [costPrice, setCostPrice] = useState("");
   const [stock, setStock] = useState("");
   const [reorderLevel, setReorderLevel] = useState("10");
   const [barcode, setBarcode] = useState("");
@@ -64,6 +65,7 @@ export function ProductDialog({
         setCategory(product.category);
         setRetailPrice(product.retail_price.toString());
         setWholesalePrice(product.wholesale_price.toString());
+        setCostPrice((product as any).cost_price?.toString() || "0.00");
         setStock(product.current_stock.toString());
         setReorderLevel(product.reorder_level.toString());
         setBarcode(product.barcode || "");
@@ -74,6 +76,7 @@ export function ProductDialog({
         setCategory("");
         setRetailPrice("");
         setWholesalePrice("");
+        setCostPrice("");
         setStock("");
         setReorderLevel("10");
         setBarcode("");
@@ -114,6 +117,7 @@ export function ProductDialog({
           category: category as typeof PRODUCT_CATEGORIES[number],
           retail_price: parseFloat(retailPrice),
           wholesale_price: parseFloat(wholesalePrice),
+          cost_price: parseFloat(costPrice || "0"),
           current_stock: parseInt(stock),
           reorder_level: parseInt(reorderLevel),
           barcode: barcode || null,
@@ -145,6 +149,7 @@ export function ProductDialog({
           category: category as typeof PRODUCT_CATEGORIES[number],
           retail_price: parseFloat(retailPrice),
           wholesale_price: parseFloat(wholesalePrice),
+          cost_price: parseFloat(costPrice || "0"),
           initial_stock: parseInt(stock),
           reorder_level: parseInt(reorderLevel),
           barcode: barcode || null,
@@ -327,6 +332,27 @@ export function ProductDialog({
                     disabled={isPending}
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="cost_price">Cost Price (₱) *</Label>
+                  <Input
+                    id="cost_price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={costPrice}
+                    onChange={(e) => setCostPrice(e.target.value)}
+                    placeholder="0.00"
+                    required
+                    disabled={isPending}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Supply cost from suppliers
+                  </p>
+                </div>
+                <div></div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

@@ -19,7 +19,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-roboto-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -129,68 +129,73 @@
 }
 
 .dark {
-  /* Background: Dark Charcoal */
-  --background: hsl(12 6% 12%);
+  /* ============================================
+   * DARK MODE: Neutral Charcoal Palette
+   * Clean, modern look without muddy brown tones
+   * ============================================ */
   
-  /* Foreground: Light Cream */
-  --foreground: hsl(37 30% 92%);
+  /* Background: Near Black #121212 */
+  --background: hsl(0 0% 7%);
+  
+  /* Foreground: Off-white #E5E5E5 */
+  --foreground: hsl(0 0% 90%);
 
-  /* Card: Slightly elevated dark surface - closer to background for seamless look */
-  --card: hsl(12 6% 15%);
-  --card-foreground: hsl(37 30% 92%);
-  --popover: hsl(12 6% 18%);
-  --popover-foreground: hsl(37 30% 92%);
+  /* Card: Lighter Charcoal #242424 */
+  --card: hsl(0 0% 14%);
+  --card-foreground: hsl(0 0% 90%);
+  --popover: hsl(0 0% 16%);
+  --popover-foreground: hsl(0 0% 90%);
 
-  /* Input Background: Slightly lighter for depth */
-  --input-bg: hsl(12 6% 20%);
+  /* Input Background: Elevated surface */
+  --input-bg: hsl(0 0% 18%);
 
-  /* Primary: Match light mode crimson for consistency */
+  /* Primary: Keep brand crimson #AC0F16 */
   --primary: hsl(357 84% 37%);
   --primary-foreground: hsl(0 0% 100%);
 
-  /* Secondary: Warm Orange - keep white text for contrast */
-  --secondary: hsl(23 80% 55%);
+  /* Secondary: Warm Orange (vibrant on dark) */
+  --secondary: hsl(23 85% 55%);
   --secondary-foreground: hsl(0 0% 100%);
 
-  /* Muted: Very close to background for seamless product card image areas */
-  --muted: hsl(12 5% 14%);
-  --muted-foreground: hsl(37 15% 60%);
+  /* Muted: Subtle dark gray */
+  --muted: hsl(0 0% 12%);
+  --muted-foreground: hsl(0 0% 63%);
 
-  /* Accent: Aqua Blue */
-  --accent: hsl(189 60% 50%);
+  /* Accent: Aqua Blue (bright on dark) */
+  --accent: hsl(189 65% 50%);
   --accent-foreground: hsl(0 0% 100%);
 
-  /* Destructive: Bright Red (kept visible) */
+  /* Destructive: Bright Red */
   --destructive: hsl(0 72% 55%);
   --destructive-foreground: hsl(0 0% 100%);
 
   /* Warning: Amber Yellow */
   --warning: hsl(43 96% 58%);
-  --warning-foreground: hsl(12 6% 12%);
+  --warning-foreground: hsl(0 0% 10%);
 
-  /* Border/Input: Subtle warm borders */
-  --border: hsl(12 6% 25%);
-  --input: hsl(12 6% 25%);
+  /* Border/Input: Neutral gray borders */
+  --border: hsl(0 0% 20%);
+  --input: hsl(0 0% 20%);
   
-  /* Ring: Primary color */
-  --ring: hsl(357 75% 50%);
+  /* Ring: Primary crimson for focus */
+  --ring: hsl(357 80% 50%);
 
-  /* Chart colors - adjusted for dark mode */
-  --chart-1: hsl(357 75% 55%);
-  --chart-2: hsl(23 80% 60%);
-  --chart-3: hsl(189 60% 55%);
-  --chart-4: hsl(37 55% 55%);
-  --chart-5: hsl(160 45% 50%);
+  /* Chart colors - vibrant for dark backgrounds */
+  --chart-1: hsl(357 80% 55%);
+  --chart-2: hsl(23 85% 60%);
+  --chart-3: hsl(189 65% 55%);
+  --chart-4: hsl(45 70% 55%);
+  --chart-5: hsl(160 50% 50%);
 
-  /* Sidebar */
-  --sidebar: hsl(12 6% 18%);
-  --sidebar-foreground: hsl(37 30% 92%);
-  --sidebar-primary: hsl(357 75% 50%);
+  /* Sidebar: Elevated charcoal */
+  --sidebar: hsl(0 0% 11%);
+  --sidebar-foreground: hsl(0 0% 90%);
+  --sidebar-primary: hsl(357 80% 50%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(12 5% 20%);
-  --sidebar-accent-foreground: hsl(37 30% 92%);
-  --sidebar-border: hsl(12 6% 22%);
-  --sidebar-ring: hsl(357 75% 50%);
+  --sidebar-accent: hsl(0 0% 16%);
+  --sidebar-accent-foreground: hsl(0 0% 90%);
+  --sidebar-border: hsl(0 0% 18%);
+  --sidebar-ring: hsl(357 80% 50%);
 }
 
 @layer base {
@@ -331,7 +336,8 @@
 
 /* ===========================================
  * Print Styles for Receipt Printing
- * Only shows the #receipt-print-area element
+ * Supports both #receipt-print-area and .receipt-template
+ * Standard thermal receipt width: 80mm (~300px)
  * =========================================== */
 @media print {
   /* Hide everything by default */
@@ -341,12 +347,15 @@
   
   /* Show only the receipt area and its contents */
   #receipt-print-area,
-  #receipt-print-area * {
+  #receipt-print-area *,
+  .receipt-template,
+  .receipt-template * {
     visibility: visible !important;
   }
   
   /* Position receipt at top-left of page */
-  #receipt-print-area {
+  #receipt-print-area,
+  .receipt-template {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
@@ -362,13 +371,15 @@
   }
   
   /* Remove any shadows/borders in print */
-  #receipt-print-area * {
+  #receipt-print-area *,
+  .receipt-template * {
     box-shadow: none !important;
     text-shadow: none !important;
   }
   
   /* Ensure monospace font for receipt */
-  #receipt-print-area {
+  #receipt-print-area,
+  .receipt-template {
     font-family: "Courier New", Courier, monospace !important;
   }
   
@@ -385,7 +396,8 @@
   header,
   nav,
   aside,
-  footer:not(#receipt-print-area footer) {
+  footer:not(#receipt-print-area footer):not(.receipt-template footer),
+  .print\:hidden {
     display: none !important;
   }
 }

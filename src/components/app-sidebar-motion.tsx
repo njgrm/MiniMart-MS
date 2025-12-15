@@ -7,13 +7,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  ClipboardList,
-  History,
-  BarChart3,
-} from "lucide-react";
+  IconLayoutDashboard,
+  IconShoppingCart,
+  IconPackage,
+  IconClipboardList,
+  IconHistory,
+  IconChartBar,
+  IconSun,
+  IconMoon,
+} from "@tabler/icons-react";
 import {
   MotionSidebar,
   MotionSidebarBody,
@@ -23,10 +25,10 @@ import {
   MotionSidebarLink,
   useMotionSidebar,
 } from "@/components/ui/motion-sidebar";
+import { Button } from "@/components/ui/button";
 import logoFull from "../../assets/christian_minimart_logo_words.png";
 import logoFullDark from "../../assets/christian_minimart_logo_dark_words.png";
 import logoIcon from "../../assets/christian_minimart_logo_collapsed.png";
-import logoIconDark from "../../assets/christian_minimart_logo_dark.png";
 
 interface NavItem {
   href: string;
@@ -40,33 +42,33 @@ const navItems: NavItem[] = [
   {
     href: "/admin",
     label: "Dashboard",
-    icon: LayoutDashboard,
+    icon: IconLayoutDashboard,
   },
   {
     href: "/admin/pos",
     label: "POS",
-    icon: ShoppingCart,
+    icon: IconShoppingCart,
     highlight: true,
   },
   {
     href: "/admin/orders",
     label: "Incoming Orders",
-    icon: ClipboardList,
+    icon: IconClipboardList,
   },
   {
     href: "/admin/inventory",
     label: "Inventory",
-    icon: Package,
+    icon: IconPackage,
   },
   {
     href: "/admin/sales",
     label: "Sales History",
-    icon: History,
+    icon: IconHistory,
   },
   {
     href: "/admin/reports",
     label: "Reports",
-    icon: BarChart3,
+    icon: IconChartBar,
   },
 ];
 
@@ -76,9 +78,9 @@ interface AppSidebarMotionProps {
 
 function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
   const pathname = usePathname();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const { open } = useMotionSidebar();
+  const { open, setOpen } = useMotionSidebar();
 
   useEffect(() => {
     setMounted(true);
@@ -86,11 +88,23 @@ function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
 
   const isDark = mounted && resolvedTheme === "dark";
 
+  // Close mobile sidebar when navigating
+  const handleLinkClick = () => {
+    // Only close on mobile (full screen mode)
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setOpen(false);
+    }
+  };
+
   return (
     <MotionSidebarBody className="text-sidebar-foreground">
       {/* Header with Logo */}
       <MotionSidebarHeader className="justify-center">
-        <Link href="/admin" className="flex items-center justify-center flex-shrink-0 overflow-hidden">
+        <Link 
+          href="/admin" 
+          className="flex items-center justify-center flex-shrink-0 overflow-hidden"
+          onClick={handleLinkClick}
+        >
           <motion.div
             animate={{
               width: open ? "auto" : "40px",
@@ -125,43 +139,67 @@ function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
       <MotionSidebarContent>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || 
+              (item.href !== "/admin" && pathname.startsWith(item.href));
             const showBadge = item.label === "Incoming Orders" && pendingOrdersCount > 0;
             const Icon = item.icon;
 
             return (
-              <MotionSidebarLink
-                key={item.href}
-                link={{
-                  label: item.label,
-                  href: item.href,
-                  icon: (
-                    <Icon 
-                      className={cn(
-                        "w-6 h-6",
-                        isActive 
-                          ? "text-primary-foreground" 
-                          : item.highlight 
-                            ? "text-secondary" 
-                            : "text-sidebar-foreground"
-                      )} 
-                    />
-                  ),
-                }}
-                isActive={isActive}
-                className={
-                  item.highlight && !isActive
-                    ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
-                    : ""
-                }
-              />
+              <div key={item.href} onClick={handleLinkClick}>
+                <MotionSidebarLink
+                  link={{
+                    label: item.label,
+                    href: item.href,
+                    icon: (
+                      <Icon 
+                        className={cn(
+                          "size-5",
+                          isActive 
+                            ? "text-primary-foreground" 
+                            : item.highlight 
+                              ? "text-secondary" 
+                              : "text-sidebar-foreground"
+                        )} 
+                      />
+                    ),
+                  }}
+                  isActive={isActive}
+                  className={
+                    item.highlight && !isActive
+                      ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
+                      : ""
+                  }
+                />
+              </div>
             );
           })}
         </nav>
       </MotionSidebarContent>
 
-      {/* Footer */}
+      {/* Footer with Theme Toggle */}
       <MotionSidebarFooter>
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            className="rounded-full text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
+          >
+            <IconSun className="size-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <IconMoon className="absolute size-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+          <motion.span
+            animate={{
+              opacity: open ? 1 : 0,
+              width: open ? "auto" : 0,
+            }}
+            transition={{ duration: 0.15 }}
+            className="text-xs text-sidebar-foreground/60 overflow-hidden whitespace-nowrap"
+          >
+            {isDark ? "Dark" : "Light"} mode
+          </motion.span>
+        </div>
         <motion.div
           animate={{
             opacity: open ? 1 : 0,
@@ -193,4 +231,3 @@ export function AppSidebarMotion({ pendingOrdersCount = 0 }: AppSidebarMotionPro
     </MotionSidebar>
   );
 }
-

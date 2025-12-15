@@ -42,25 +42,28 @@ export const createProductSchema = z.object({
     .string()
     .min(1, "Product name is required")
     .max(100, "Product name must be less than 100 characters"),
-  category: z.enum(PRODUCT_CATEGORIES, {
-    required_error: "Category is required",
-  }),
+  category: z.enum(PRODUCT_CATEGORIES),
   retail_price: z
-    .number({ invalid_type_error: "Retail price must be a number" })
-    .nonnegative("Retail price cannot be negative")
-    .multipleOf(0.01, "Retail price can have at most 2 decimal places"),
+    .number()
+    .min(0, "Retail price cannot be negative")
+    .max(999999.99, "Retail price is too high"),
   wholesale_price: z
-    .number({ invalid_type_error: "Wholesale price must be a number" })
-    .nonnegative("Wholesale price cannot be negative")
-    .multipleOf(0.01, "Wholesale price can have at most 2 decimal places"),
+    .number()
+    .min(0, "Wholesale price cannot be negative")
+    .max(999999.99, "Wholesale price is too high"),
+  cost_price: z
+    .number()
+    .min(0, "Cost price cannot be negative")
+    .max(999999.99, "Cost price is too high")
+    .default(0),
   initial_stock: z
-    .number({ invalid_type_error: "Initial stock must be a number" })
+    .number()
     .int("Initial stock must be a whole number")
-    .nonnegative("Initial stock cannot be negative"),
+    .min(0, "Initial stock cannot be negative"),
   reorder_level: z
-    .number({ invalid_type_error: "Reorder level must be a number" })
+    .number()
     .int("Reorder level must be a whole number")
-    .nonnegative("Reorder level cannot be negative")
+    .min(0, "Reorder level cannot be negative")
     .default(10),
   barcode: z
     .string()
@@ -91,25 +94,29 @@ export const updateProductSchema = z.object({
     .string()
     .min(1, "Product name is required")
     .max(100, "Product name must be less than 100 characters"),
-  category: z.enum(PRODUCT_CATEGORIES, {
-    required_error: "Category is required",
-  }),
+  category: z.enum(PRODUCT_CATEGORIES),
   retail_price: z
-    .number({ invalid_type_error: "Retail price must be a number" })
-    .nonnegative("Retail price cannot be negative")
-    .multipleOf(0.01, "Retail price can have at most 2 decimal places"),
+    .number()
+    .min(0, "Retail price cannot be negative")
+    .max(999999.99, "Retail price is too high"),
   wholesale_price: z
-    .number({ invalid_type_error: "Wholesale price must be a number" })
-    .nonnegative("Wholesale price cannot be negative")
-    .multipleOf(0.01, "Wholesale price can have at most 2 decimal places"),
+    .number()
+    .min(0, "Wholesale price cannot be negative")
+    .max(999999.99, "Wholesale price is too high"),
+  cost_price: z
+    .number()
+    .min(0, "Cost price cannot be negative")
+    .max(999999.99, "Cost price is too high")
+    .optional()
+    .default(0),
   current_stock: z
-    .number({ invalid_type_error: "Current stock must be a number" })
+    .number()
     .int("Current stock must be a whole number")
-    .nonnegative("Current stock cannot be negative"),
+    .min(0, "Current stock cannot be negative"),
   reorder_level: z
-    .number({ invalid_type_error: "Reorder level must be a number" })
+    .number()
     .int("Reorder level must be a whole number")
-    .nonnegative("Reorder level cannot be negative"),
+    .min(0, "Reorder level cannot be negative"),
   barcode: z
     .string()
     .max(50, "Barcode must be less than 50 characters")

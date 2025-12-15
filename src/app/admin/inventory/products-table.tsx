@@ -223,6 +223,9 @@ export function ProductsTable({
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("retail_price"));
+          if (!amount || amount === 0) {
+            return <span className="text-muted-foreground text-sm">N/A</span>;
+          }
           return (
             <div className="text-sm font-normal tracking-wider tabular-nums">
               ₱{amount.toFixed(2)}
@@ -244,6 +247,33 @@ export function ProductsTable({
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("wholesale_price"));
+          if (!amount || amount === 0) {
+            return <span className="text-muted-foreground text-sm">N/A</span>;
+          }
+          return (
+            <div className="text-sm font-normal tracking-wider tabular-nums">
+              ₱{amount.toFixed(2)}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "cost_price",
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
+          >
+            Supply Cost
+            <ArrowUpDown className="ml-2 h-3 w-3" />
+          </Button>
+        ),
+        cell: ({ row }) => {
+          const amount = parseFloat(row.getValue("cost_price"));
+          if (!amount || amount === 0) {
+            return <span className="text-muted-foreground text-sm">N/A</span>;
+          }
           return (
             <div className="text-sm font-normal tracking-wider tabular-nums">
               ₱{amount.toFixed(2)}
@@ -267,7 +297,7 @@ export function ProductsTable({
           const stock = row.getValue("current_stock") as number;
           const reorderLevel = row.original.reorder_level;
           return (
-            <div className={`text-sm font-medium tabular-nums ${stock <= reorderLevel ? "text-secondary" : ""}`}>
+            <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= reorderLevel ? "text-secondary" : ""}`}>
               {stock}
             </div>
           );
@@ -672,14 +702,14 @@ export function ProductsTable({
             <AlertDialogTitle>
               Are you absolutely sure?
             </AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. It will permanently delete{" "}
-              <span className="font-semibold text-foreground">
-                {selectedCount} product{selectedCount !== 1 ? "s" : ""}
-              </span>{" "}
-              from the database.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+          <AlertDialogDescription>
+            This action cannot be undone. It will permanently delete{" "}
+            <span className="font-semibold text-foreground">
+              {selectedCount} product{selectedCount !== 1 ? "s" : ""}
+            </span>{" "}
+            from the database.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction

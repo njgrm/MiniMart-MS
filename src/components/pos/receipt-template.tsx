@@ -42,7 +42,7 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
     {
       data,
       storeName = "CHRISTIAN MINIMART",
-      storeAddress = "123 Main Street, Barangay Centro",
+      storeAddress = "Purok Mabinuligon, Barangay Mansilingan, Bacolod City",
       storePhone = "Tel: (02) 8123-4567",
     },
     ref
@@ -187,6 +187,12 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
 );
 
 ReceiptTemplate.displayName = "ReceiptTemplate";
+
+
+
+
+
+
 
 
 

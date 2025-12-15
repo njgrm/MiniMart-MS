@@ -14,24 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { bulkCreateProducts, type BulkProductInput } from "@/actions/bulk-import";
+import { importSalesCsv, type CsvSaleRow } from "@/actions/sales";
 
-interface CSVImportDialogProps {
+interface ImportSalesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-}
-
-interface ParsedRow {
-  name: string;
-  category: string;
-  retail_price: string;
-  wholesale_price: string;
-  cost_price?: string;
-  stock: string;
-  barcode?: string;
-  image_url?: string;
-  reorder_level?: string;
 }
 
 interface ValidationError {
@@ -40,11 +28,15 @@ interface ValidationError {
   message: string;
 }
 
-export function CSVImportDialog({
+/**
+ * ImportSalesDialog - Bulk import historical sales from CSV
+ * Matches the exact style of the Inventory Import Dialog
+ */
+export function ImportSalesDialog({
   open,
   onOpenChange,
   onSuccess,
-}: CSVImportDialogProps) {
+}: ImportSalesDialogProps) {
   const [isPending, startTransition] = useTransition();
   const [csvContent, setCsvContent] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -62,129 +54,16 @@ export function CSVImportDialog({
     onOpenChange(false);
   };
 
-  const generateBarcode = () => {
-    return "200" + Math.floor(Math.random() * 1000000000).toString().padStart(9, "0");
-  };
-
-  const validateAndParse = (
-    data: ParsedRow[]
-  ): { valid: BulkProductInput[]; errors: ValidationError[] } => {
-    const errors: ValidationError[] = [];
-    const valid: BulkProductInput[] = [];
-    const seenBarcodes = new Set<string>();
-
-    data.forEach((row, index) => {
-      const rowNum = index + 2; // +2 for header and 0-index
-
-      // Check required fields
-      if (!row.name?.trim()) {
-        errors.push({ row: rowNum, field: "name", message: "Name is required" });
-        return;
-      }
-
-      if (!row.category?.trim()) {
-        errors.push({ row: rowNum, field: "category", message: "Category is required" });
-        return;
-      }
-
-      const retailPrice = parseFloat(row.retail_price);
-      if (isNaN(retailPrice) || retailPrice <= 0) {
-        errors.push({
-          row: rowNum,
-          field: "retail_price",
-          message: "Retail price must be a positive number",
-        });
-        return;
-      }
-
-      const wholesalePrice = parseFloat(row.wholesale_price);
-      if (isNaN(wholesalePrice) || wholesalePrice <= 0) {
-        errors.push({
-          row: rowNum,
-          field: "wholesale_price",
-          message: "Wholesale price must be a positive number",
-        });
-        return;
-      }
-
-      const costPrice = row.cost_price ? parseFloat(row.cost_price) : 0;
-      if (isNaN(costPrice) || costPrice < 0) {
-        errors.push({
-          row: rowNum,
-          field: "cost_price",
-          message: "Cost price must be a non-negative number",
-        });
-        return;
-      }
-
-      const stock = parseInt(row.stock);
-      if (isNaN(stock) || stock < 0) {
-        errors.push({
-          row: rowNum,
-          field: "stock",
-          message: "Stock must be a non-negative number",
-        });
-        return;
-      }
-
-      // Generate barcode if not provided
-      let barcode = row.barcode?.trim() || null;
-      if (!barcode) {
-        // Generate unique barcode
-        do {
-          barcode = generateBarcode();
-        } while (seenBarcodes.has(barcode));
-      }
-
-      // Check for duplicate barcodes within the CSV
-      if (barcode && seenBarcodes.has(barcode)) {
-        errors.push({
-          row: rowNum,
-          field: "barcode",
-          message: `Duplicate barcode "${barcode}" in CSV`,
-        });
-        return;
-      }
-
-      if (barcode) {
-        seenBarcodes.add(barcode);
-      }
-
-      const reorderLevel = row.reorder_level ? parseInt(row.reorder_level) : 10;
-
-      valid.push({
-        name: row.name.trim(),
-        category: row.category.trim(),
-        retail_price: retailPrice,
-        wholesale_price: wholesalePrice,
-        cost_price: costPrice,
-        stock,
-        barcode,
-        image_url: row.image_url?.trim() || null,
-        reorder_level: isNaN(reorderLevel) ? 10 : reorderLevel,
-      });
-    });
-
-    return { valid, errors };
-  };
-
-  // Helper to clean CSV content (remove BOM, normalize line endings, fix wrapped lines)
+  // Helper to clean CSV content
   const cleanCsvContent = (content: string): string => {
-    // Remove BOM (Byte Order Mark) if present
     let cleaned = content.replace(/^\uFEFF/, "");
-    // Normalize line endings to \n
     cleaned = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    // Trim whitespace
     cleaned = cleaned.trim();
     
-    // Fix rows that are entirely wrapped in quotes (e.g., "name,category,..." -> name,category,...)
-    // This happens when entire CSV lines are quoted
     const lines = cleaned.split("\n");
     const fixedLines = lines.map((line) => {
       const trimmed = line.trim();
-      // If line starts and ends with quotes, and contains commas, unwrap it
       if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.includes(",")) {
-        // Remove outer quotes
         return trimmed.slice(1, -1);
       }
       return trimmed;
@@ -243,18 +122,16 @@ export function CSVImportDialog({
     }
 
     startTransition(async () => {
-      // Parse CSV with proper quote handling
-      const result = Papa.parse<ParsedRow>(csvContent, {
+      // Parse CSV
+      const result = Papa.parse<CsvSaleRow>(csvContent, {
         header: true,
         skipEmptyLines: true,
-        delimiter: ",", // Explicitly set comma as delimiter
+        delimiter: ",",
         quoteChar: '"',
-        escapeChar: '"',
-        transformHeader: (header) => header.toLowerCase().trim().replace(/\s+/g, "_").replace(/^["']|["']$/g, ""),
-        transform: (value) => value.trim().replace(/^["']|["']$/g, ""), // Strip surrounding quotes
+        transformHeader: (header) => header.toLowerCase().trim().replace(/\s+/g, "_"),
+        transform: (value) => value.trim(),
       });
 
-      // Filter out minor parsing errors (like empty rows)
       const criticalErrors = result.errors.filter(
         (e) => e.type !== "FieldMismatch" && e.code !== "TooFewFields"
       );
@@ -269,8 +146,42 @@ export function CSVImportDialog({
         return;
       }
 
-      // Validate data
-      const { valid, errors } = validateAndParse(result.data);
+      // Validate data client-side
+      const errors: ValidationError[] = [];
+      const validRows: CsvSaleRow[] = [];
+
+      result.data.forEach((row, index) => {
+        const rowNum = index + 2;
+
+        if (!row.date?.trim()) {
+          errors.push({ row: rowNum, field: "date", message: "Date is required" });
+          return;
+        }
+
+        if (!row.barcode?.trim()) {
+          errors.push({ row: rowNum, field: "barcode", message: "Barcode is required" });
+          return;
+        }
+
+        const quantity = parseInt(String(row.quantity));
+        if (isNaN(quantity) || quantity <= 0) {
+          errors.push({ row: rowNum, field: "quantity", message: "Quantity must be a positive number" });
+          return;
+        }
+
+        const paymentMethod = String(row.paymentMethod || row.payment_method || "").toUpperCase();
+        if (!paymentMethod || !["CASH", "GCASH"].includes(paymentMethod)) {
+          errors.push({ row: rowNum, field: "paymentMethod", message: "Payment method must be CASH or GCASH" });
+          return;
+        }
+
+        validRows.push({
+          date: row.date.trim(),
+          barcode: row.barcode.trim(),
+          quantity,
+          paymentMethod: paymentMethod as "CASH" | "GCASH",
+        });
+      });
 
       if (errors.length > 0) {
         setValidationErrors(errors);
@@ -279,22 +190,20 @@ export function CSVImportDialog({
       }
 
       // Import to database
-      const importResult = await bulkCreateProducts(valid);
+      const importResult = await importSalesCsv(validRows);
 
       if (importResult.successCount > 0) {
         toast.success(
-          `Successfully imported ${importResult.successCount} product${importResult.successCount !== 1 ? "s" : ""}${
+          `Successfully imported ${importResult.successCount} sale${importResult.successCount !== 1 ? "s" : ""}${
             importResult.failedCount > 0
               ? `. ${importResult.failedCount} failed (see details).`
               : "."
           }`
         );
 
-        // Always trigger refresh when there are successful imports
         onSuccess();
 
         if (importResult.failedRows.length > 0) {
-          // Show failed rows but keep dialog open
           setValidationErrors(
             importResult.failedRows.map((f) => ({
               row: f.row,
@@ -303,7 +212,6 @@ export function CSVImportDialog({
             }))
           );
         } else {
-          // All succeeded, close dialog
           handleClose();
         }
       } else {
@@ -325,10 +233,10 @@ export function CSVImportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Import Products from CSV
+            Import Sales History from CSV
           </DialogTitle>
           <DialogDescription>
-            Upload a CSV file to bulk import products into your inventory.
+            Upload a CSV file to backfill historical sales data for analytics.
           </DialogDescription>
         </DialogHeader>
 
@@ -339,17 +247,16 @@ export function CSVImportDialog({
               Required Columns:
             </p>
             <p className="text-muted-foreground">
-              <code className="text-xs bg-background px-1 rounded border border-border">name</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">category</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">retail_price</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">wholesale_price</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">stock</code>
+              <code className="text-xs bg-background px-1 rounded border border-border">date</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">barcode</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">quantity</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">paymentMethod</code>
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              Optional: <code className="bg-background px-1 rounded border border-border">cost_price</code> (supply cost, defaults to 0),{" "}
-              <code className="bg-background px-1 rounded border border-border">barcode</code> (auto-generated if empty),{" "}
-              <code className="bg-background px-1 rounded border border-border">image_url</code>,{" "}
-              <code className="bg-background px-1 rounded border border-border">reorder_level</code>
+              Date formats: YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY. Payment methods: CASH or GCASH.
+            </p>
+            <p className="text-muted-foreground text-xs mt-1">
+              <strong>Note:</strong> Cost price will be automatically fetched from each product&apos;s current supply cost.
             </p>
           </div>
 
@@ -366,11 +273,11 @@ export function CSVImportDialog({
               }
             `}
           >
-            <label htmlFor="csv-upload-input" className="sr-only">
+            <label htmlFor="sales-csv-upload-input" className="sr-only">
               Upload CSV file
             </label>
             <input
-              id="csv-upload-input"
+              id="sales-csv-upload-input"
               type="file"
               accept=".csv"
               onChange={handleFileChange}
@@ -432,7 +339,7 @@ export function CSVImportDialog({
               setFileName(null);
               setValidationErrors([]);
             }}
-            placeholder="name,category,retail_price,wholesale_price,stock,barcode&#10;Coca-Cola 350ml,SODA,25.00,20.00,100,4800016123456&#10;Lucky Me Pancit Canton,INSTANT_NOODLES,15.00,12.00,50,"
+            placeholder="date,barcode,quantity,paymentMethod&#10;2024-12-15,4800016123456,2,CASH&#10;2024-12-15,4800016234567,1,GCASH"
             className="w-full h-32 p-3 text-sm font-mono rounded-lg border border-border bg-muted text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             disabled={isPending}
           />
@@ -476,7 +383,7 @@ export function CSVImportDialog({
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4" />
-                Parse & Upload
+                Parse & Import
               </>
             )}
           </Button>
@@ -485,3 +392,5 @@ export function CSVImportDialog({
     </Dialog>
   );
 }
+
+

@@ -10,6 +10,7 @@ export interface BulkProductInput {
   category: string;
   retail_price: number;
   wholesale_price: number;
+  cost_price?: number;
   stock: number;
   barcode?: string | null;
   image_url?: string | null;
@@ -90,6 +91,7 @@ export async function bulkCreateProducts(
             category: categoryUpper,
             retail_price: new Decimal(product.retail_price),
             wholesale_price: new Decimal(product.wholesale_price),
+            cost_price: new Decimal(product.cost_price ?? 0),
             barcode: product.barcode || null,
             image_url: product.image_url || null,
           },

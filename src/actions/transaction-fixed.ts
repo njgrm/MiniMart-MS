@@ -42,14 +42,12 @@ export async function createTransaction(input: CreateTransactionInput) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // Fetch products with cost_price for accurate COGS tracking
+      // Fetch product IDs for validation (without cost_price for now)
       const productIds = items.map((item) => item.product_id);
       const products = await tx.product.findMany({
         where: { product_id: { in: productIds } },
         select: {
           product_id: true,
-          cost_price: true,
-          retail_price: true,
         },
       });
 
@@ -57,11 +55,6 @@ export async function createTransaction(input: CreateTransactionInput) {
       if (products.length !== productIds.length) {
         throw new Error("One or more products not found.");
       }
-
-      // Create a map for quick cost_price lookup
-      const productMap = new Map(
-        products.map((p) => [p.product_id, { cost_price: Number(p.cost_price), retail_price: Number(p.retail_price) }])
-      );
 
       // Update inventory and validate stock
       for (const item of items) {
@@ -98,19 +91,13 @@ export async function createTransaction(input: CreateTransactionInput) {
           total_amount: new Decimal(totalAmount),
           status: "COMPLETED",
           items: {
-            create: items.map((item) => {
-              // Fetch the actual cost_price from DB for accurate profit tracking
-              const productInfo = productMap.get(item.product_id);
-              const costAtSale = productInfo?.cost_price ?? 0;
-              
-              return {
-                product_id: item.product_id,
-                quantity: item.quantity,
-                price_at_sale: new Decimal(item.price),
-                cost_at_sale: new Decimal(costAtSale),
-                subtotal: new Decimal(item.price * item.quantity),
-              };
-            }),
+            create: items.map((item) => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              price_at_sale: new Decimal(item.price),
+              cost_at_sale: new Decimal(0), // Temporary fallback - will be updated when cost_price is available
+              subtotal: new Decimal(item.price * item.quantity),
+            })),
           },
           payment: {
             create: {
