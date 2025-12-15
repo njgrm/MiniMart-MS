@@ -41,7 +41,14 @@
     receiptNumber: string;
     date: Date;
     cashierName: string;
-    items: { name: string; quantity: number; price: number; subtotal: number; priceType?: "R" | "W" }[];
+    items: { 
+      name: string; 
+      barcode?: string; 
+      quantity: number; 
+      price: number; 
+      subtotal: number; 
+      priceType?: "R" | "W" 
+    }[];
     subtotal: number;
     discountPercent: number;
     discountAmount: number;
@@ -144,11 +151,12 @@
 
         // Prepare receipt data using locked prices
         const receipt: ReceiptData = {
-          receiptNumber: generateReceiptNumber(),
+          receiptNumber: result.receiptNo || generateReceiptNumber(), // Use generated receipt number from transaction
           date: new Date(),
           cashierName: "Admin", // TODO: Get from session
           items: cart.map((item) => ({
             name: item.product_name,
+            barcode: item.barcode || undefined, // Include barcode for receipt
             quantity: item.quantity,
             price: getCartItemPrice(item), // Use locked price
             subtotal: getCartItemPrice(item) * item.quantity,

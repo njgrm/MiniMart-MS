@@ -209,97 +209,105 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
 
   return (
     <div className="h-[calc(100vh-theme(spacing.40))] flex flex-col gap-3 overflow-hidden">
-      {/* Toolbar - Fixed at Top (Matches Inventory Style) */}
-      <div className="flex flex-wrap items-center gap-2 shrink-0">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search receipt # or date..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10 w-full"
-          />
+      {/* Toolbar - Fixed at Top (Mobile Responsive) */}
+      <div className="flex flex-col gap-2 shrink-0">
+        {/* Row 1: Search & Date Filter */}
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search receipt # or date..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-10 w-full"
+            />
+          </div>
+
+          {/* Date Range Filter */}
+          <Select value={selectedRange} onValueChange={(value) => handleRangeChange(value as DateRange)}>
+            <SelectTrigger className="h-10 w-[120px] sm:w-[140px]">
+              <Calendar className="h-4 w-4 mr-2 hidden sm:block" />
+              <SelectValue placeholder="Date Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">Last 7 days</SelectItem>
+              <SelectItem value="month">Last 30 days</SelectItem>
+              <SelectItem value="year">Last 12 months</SelectItem>
+              <SelectItem value="all">All time</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Reset Filters */}
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 shrink-0"
+              onClick={resetFilters}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Reset filters</span>
+            </Button>
+          )}
         </div>
 
-        {/* Date Range Filter */}
-        <Select value={selectedRange} onValueChange={(value) => handleRangeChange(value as DateRange)}>
-          <SelectTrigger className="h-10 w-[140px]">
-            <Calendar className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Date Range" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="week">Last 7 days</SelectItem>
-            <SelectItem value="month">Last 30 days</SelectItem>
-            <SelectItem value="year">Last 12 months</SelectItem>
-            <SelectItem value="all">All time</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Row 2: KPI Stats & Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* KPI Stats - Horizontal scroll on mobile */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-card dark:bg-muted/30 border border-border shadow-warm-sm shrink-0">
+              <Receipt className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{data.totalCount}</span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">Sales</span>
+            </div>
 
-        {/* Reset Filters */}
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10"
-            onClick={resetFilters}
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Reset filters</span>
-          </Button>
-        )}
+            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-emerald-500 dark:bg-emerald-500/40 border border-emerald-500 text-white dark:text-emerald-500 shadow-warm-sm shrink-0">
+              <DollarSign className="h-4 w-4" />
+              <span className="text-sm font-medium">₱{(data.totalRevenue / 1000).toFixed(1)}k</span>
+              <span className="text-xs opacity-90 hidden sm:inline">Revenue</span>
+            </div>
 
-        {/* Separator */}
-        <div className="h-8 w-px bg-border mx-1" />
+            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent text-white dark:text-accent shadow-warm-sm shrink-0">
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-sm font-medium">₱{(data.totalProfit / 1000).toFixed(1)}k</span>
+              <span className="text-xs opacity-90 hidden sm:inline">Profit</span>
+            </div>
 
-        {/* KPI Stats (Matches Inventory Style) */}
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-card dark:bg-muted/30 border border-border shadow-warm-sm">
-          <Receipt className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{data.totalCount}</span>
-          <span className="text-xs text-muted-foreground">Sales</span>
+            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary text-white dark:text-secondary shadow-warm-sm shrink-0">
+              <TrendingDown className="h-4 w-4" />
+              <span className="text-sm font-medium">₱{(data.totalCost / 1000).toFixed(1)}k</span>
+              <span className="text-xs opacity-90 hidden sm:inline">COGS</span>
+            </div>
+          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Import/Export Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsImportDialogOpen(true)}
+              className="h-9 gap-1.5"
+              size="sm"
+            >
+              <Upload className="h-4 w-4" />
+              <span className="hidden sm:inline">Import</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleExportCSV}
+              className="h-9 gap-1.5"
+              size="sm"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          </div>
         </div>
-
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-primary dark:bg-primary/20 border border-primary text-white dark:text-primary shadow-warm-sm">
-          <DollarSign className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{data.totalRevenue.toLocaleString()}</span>
-          <span className="text-xs opacity-90">Revenue</span>
-        </div>
-
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent text-white dark:text-accent shadow-warm-sm">
-          <TrendingUp className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{data.totalProfit.toLocaleString()}</span>
-          <span className="text-xs opacity-90">Profit</span>
-        </div>
-
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary text-white dark:text-secondary shadow-warm-sm">
-          <TrendingDown className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{data.totalCost.toLocaleString()}</span>
-          <span className="text-xs opacity-90">COGS</span>
-        </div>
-
-        {/* Separator */}
-        <div className="h-8 w-px bg-border mx-1" />
-
-        {/* Import CSV */}
-        <Button
-          variant="outline"
-          onClick={() => setIsImportDialogOpen(true)}
-          className="h-10 gap-1.5"
-        >
-          <Upload className="h-4 w-4" />
-          Import CSV
-        </Button>
-
-        {/* Export CSV */}
-        <Button
-          variant="outline"
-          onClick={handleExportCSV}
-          className="h-10 gap-1.5"
-        >
-          <Download className="h-4 w-4" />
-          Export
-        </Button>
       </div>
 
       {/* Table Container - Fixed Height with Internal Scroll */}
@@ -308,14 +316,14 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
           <Table>
             <TableHeader className="sticky top-0 bg-card z-10">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="h-10 bg-muted/30">Date & Time</TableHead>
-                <TableHead className="h-10 bg-muted/30">Receipt #</TableHead>
-                <TableHead className="h-10 bg-muted/30">Items</TableHead>
+                <TableHead className="h-10 bg-muted/30">Date</TableHead>
+                <TableHead className="h-10 bg-muted/30 hidden sm:table-cell">Receipt #</TableHead>
+                <TableHead className="h-10 bg-muted/30 hidden md:table-cell">Items</TableHead>
                 <TableHead className="h-10 bg-muted/30">Total</TableHead>
-                <TableHead className="h-10 bg-muted/30">COGS</TableHead>
-                <TableHead className="h-10 bg-muted/30">Profit</TableHead>
+                <TableHead className="h-10 bg-muted/30 hidden lg:table-cell">COGS</TableHead>
+                <TableHead className="h-10 bg-muted/30 hidden md:table-cell">Profit</TableHead>
                 <TableHead className="h-10 bg-muted/30">Payment</TableHead>
-                <TableHead className="h-10 bg-muted/30">Status</TableHead>
+                <TableHead className="h-10 bg-muted/30 hidden sm:table-cell">Status</TableHead>
                 <TableHead className="h-10 bg-muted/30">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -339,15 +347,15 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
 
                   return (
                     <TableRow key={transaction.transaction_id}>
-                      <TableCell className="py-2 font-medium">
+                      <TableCell className="py-2 font-medium text-xs sm:text-sm">
                         {formatDate(transaction.created_at)}
                       </TableCell>
-                      <TableCell className="py-2">
+                      <TableCell className="py-2 hidden sm:table-cell">
                         <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
                           {transaction.receipt_no.substring(0, 8)}...
                         </code>
                       </TableCell>
-                      <TableCell className="py-2">
+                      <TableCell className="py-2 hidden md:table-cell">
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-sm">
                             {transaction.itemsCount} item{transaction.itemsCount !== 1 ? "s" : ""}
@@ -364,13 +372,13 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="py-2 font-medium font-mono">
+                      <TableCell className="py-2 font-medium font-mono text-xs sm:text-sm">
                         {formatCurrency(transaction.total_amount)}
                       </TableCell>
-                      <TableCell className="py-2 font-mono text-sm text-muted-foreground">
+                      <TableCell className="py-2 font-mono text-sm text-muted-foreground hidden lg:table-cell">
                         {formatCurrency(cogs)}
                       </TableCell>
-                      <TableCell className="py-2">
+                      <TableCell className="py-2 hidden md:table-cell">
                         <span className={`font-medium font-mono text-sm ${profit >= 0 ? "text-emerald-700/90 dark:text-emerald-400/90" : "text-red-600/90 dark:text-red-400/90"}`}>
                           {formatCurrency(profit)}
                         </span>
@@ -378,7 +386,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
                       <TableCell className="py-2">
                         {getPaymentMethodBadge(transaction.payment_method)}
                       </TableCell>
-                      <TableCell className="py-2">
+                      <TableCell className="py-2 hidden sm:table-cell">
                         <Badge variant={transaction.status === "COMPLETED" ? "default" : "destructive"}>
                           {transaction.status}
                         </Badge>

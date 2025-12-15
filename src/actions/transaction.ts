@@ -134,7 +134,7 @@ export async function createTransaction(input: CreateTransactionInput) {
       total_amount: Number(result.total_amount),
     };
 
-    return { success: true, data: serializedResult };
+    return { success: true, data: serializedResult, receiptNo: result.receipt_no };
   } catch (error) {
     console.error("createTransaction error", error);
     const message = error instanceof Error ? error.message : "Failed to process transaction.";

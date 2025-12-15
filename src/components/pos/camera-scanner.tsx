@@ -679,3 +679,4 @@ export function CameraScanner({ open, onClose, onDetected, getProductName }: Cam
 
 
 
+

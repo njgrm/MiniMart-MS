@@ -53,7 +53,7 @@ const navItems: NavItem[] = [
   },
   {
     href: "/admin/orders",
-    label: "Incoming Orders",
+    label: "Orders",
     icon: ClipboardList,
   },
   {
@@ -122,7 +122,7 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
             <SidebarMenu>
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
-                const showBadge = item.label === "Incoming Orders" && pendingOrdersCount > 0;
+                const showBadge = item.label === "Orders" && pendingOrdersCount > 0;
                 const Icon = item.icon;
 
                 return (

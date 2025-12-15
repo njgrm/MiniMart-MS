@@ -1,20 +1,22 @@
 import { getProducts } from "@/actions/product";
-import { getSalesStats, getSalesHistory } from "@/actions/sales";
+import { getSalesStats, getSalesHistory, getTopProducts } from "@/actions/sales";
 import { DashboardClient } from "./dashboard-client";
 
 /**
  * Admin Dashboard - Real-Time Business Intelligence Hub
  * Layout:
+ * - Stock Alerts: Clickable cards for out-of-stock/low-stock
  * - Top Row: 4 Key Metric Cards (clickable)
- * - Middle Row: Recharts Graphs
- * - Bottom Row: Recent Activity & Inventory Status
+ * - Middle Row: Recharts Graphs with Date Range Filter
+ * - Bottom Row: Recent Activity, Top Products & Quick Actions
  */
 export default async function AdminDashboard() {
   // Fetch all data server-side
-  const [products, stats, recentSales] = await Promise.all([
+  const [products, stats, recentSales, topProducts] = await Promise.all([
     getProducts(),
     getSalesStats(),
-    getSalesHistory("all", 1, 10),
+    getSalesHistory("month", 1, 50), // Get more transactions for chart data
+    getTopProducts(5),
   ]);
 
   // Calculate inventory metrics
@@ -36,6 +38,7 @@ export default async function AdminDashboard() {
         lowStockItems,
         inventoryValue,
       }}
+      topProducts={topProducts}
     />
   );
 }

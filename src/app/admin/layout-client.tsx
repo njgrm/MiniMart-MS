@@ -14,20 +14,20 @@ interface AdminLayoutClientProps {
     name?: string | null;
     role?: string;
   };
+  pendingOrdersCount?: number;
 }
 
 /**
- * AdminLayoutClient - Reference Dashboard Layout Pattern
+ * AdminLayoutClient - Simplified Layout for Working Motion Sidebar
  * 
  * Desktop:
  * - Sidebar auto-expands on hover (collapsed by default)
  * - Main content adapts to sidebar width
  * 
  * Mobile:
- * - Hamburger menu in motion sidebar header
- * - Full-screen slide-in sidebar overlay
+ * - Motion sidebar handles its own mobile responsiveness
  */
-export default function AdminLayoutClient({ children, user }: AdminLayoutClientProps) {
+export default function AdminLayoutClient({ children, user, pendingOrdersCount = 0 }: AdminLayoutClientProps) {
   const pathname = usePathname();
   const isPosPage = pathname === "/admin/pos";
 
@@ -35,18 +35,18 @@ export default function AdminLayoutClient({ children, user }: AdminLayoutClientP
     <SessionProvider>
       <PageHeaderProvider>
         {/* Main flex container - full viewport */}
-        <div className="flex h-screen w-full overflow-hidden bg-background">
+        <div className="flex h-screen w-full bg-background">
           {/* Motion Sidebar - auto-expands on hover (desktop) / hamburger (mobile) */}
-          <AppSidebarMotion />
+          <AppSidebarMotion pendingOrdersCount={pendingOrdersCount} />
           
           {/* Main content area - grows to fill remaining space */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            {/* Top Navigation - hidden on mobile (motion sidebar has hamburger) */}
-            <header className="h-14 shrink-0 border-b border-border bg-card z-10 hidden md:block">
+          <div className="flex-1 flex flex-col">
+            {/* Top Navigation */}
+            <header className="h-14 shrink-0 border-b border-border bg-card z-10">
               <TopNav user={user} />
             </header>
             
-            {/* Page Content - Reference Dashboard Style */}
+            {/* Page Content */}
             <main
               className={cn(
                 "flex-1 overflow-auto",

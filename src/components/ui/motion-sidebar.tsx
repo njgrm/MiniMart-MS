@@ -296,19 +296,3 @@ export const MotionSidebarSeparator = ({
 
 // Export width constants for layout calculations
 export { SIDEBAR_WIDTH_EXPANDED, SIDEBAR_WIDTH_COLLAPSED };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

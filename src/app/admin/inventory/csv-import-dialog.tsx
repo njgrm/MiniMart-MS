@@ -87,22 +87,23 @@ export function CSVImportDialog({
         return;
       }
 
+      // Allow 0 values for retail/wholesale prices (N/A products)
       const retailPrice = parseFloat(row.retail_price);
-      if (isNaN(retailPrice) || retailPrice <= 0) {
+      if (isNaN(retailPrice) || retailPrice < 0) {
         errors.push({
           row: rowNum,
           field: "retail_price",
-          message: "Retail price must be a positive number",
+          message: "Retail price must be a non-negative number (use 0 for N/A)",
         });
         return;
       }
 
       const wholesalePrice = parseFloat(row.wholesale_price);
-      if (isNaN(wholesalePrice) || wholesalePrice <= 0) {
+      if (isNaN(wholesalePrice) || wholesalePrice < 0) {
         errors.push({
           row: rowNum,
           field: "wholesale_price",
-          message: "Wholesale price must be a positive number",
+          message: "Wholesale price must be a non-negative number (use 0 for N/A)",
         });
         return;
       }
@@ -350,6 +351,9 @@ export function CSVImportDialog({
               <code className="bg-background px-1 rounded border border-border">barcode</code> (auto-generated if empty),{" "}
               <code className="bg-background px-1 rounded border border-border">image_url</code>,{" "}
               <code className="bg-background px-1 rounded border border-border">reorder_level</code>
+            </p>
+            <p className="text-muted-foreground text-xs mt-1 text-secondary">
+              💡 Tip: Use <code className="bg-background px-1 rounded border border-border">0</code> for prices if product is N/A or not priced.
             </p>
           </div>
 

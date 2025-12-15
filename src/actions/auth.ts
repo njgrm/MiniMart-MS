@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import {
   loginSchema,
   vendorRegisterSchema,
+  isEmail,
   type LoginInput,
   type VendorRegisterInput,
 } from "@/lib/validations/auth";
@@ -14,11 +15,13 @@ import { AuthError } from "next-auth";
 export type ActionResult = {
   success: boolean;
   error?: string;
+  userType?: "staff" | "vendor";
 };
 
 /**
  * Unified login action
  * Accepts either username (staff) or email (vendor)
+ * Returns userType for proper redirect handling
  */
 export async function login(data: LoginInput): Promise<ActionResult> {
   const parsed = loginSchema.safeParse(data);
@@ -29,12 +32,28 @@ export async function login(data: LoginInput): Promise<ActionResult> {
   }
 
   try {
+    // Determine user type before signing in
+    const { identifier } = parsed.data;
+    let userType: "staff" | "vendor" = "staff";
+
+    if (isEmail(identifier)) {
+      // Check if this email belongs to a vendor
+      const customer = await prisma.customer.findUnique({
+        where: { email: identifier },
+        select: { is_vendor: true },
+      });
+      if (customer?.is_vendor) {
+        userType = "vendor";
+      }
+    }
+
     await signIn("credentials", {
       identifier: parsed.data.identifier,
       password: parsed.data.password,
       redirect: false,
     });
-    return { success: true };
+
+    return { success: true, userType };
   } catch (error) {
     if (error instanceof AuthError) {
       return { success: false, error: "Invalid username/email or password" };

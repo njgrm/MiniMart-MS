@@ -23,7 +23,6 @@ import {
   MotionSidebarContent,
   MotionSidebarFooter,
   MotionSidebarLink,
-  useMotionSidebar,
 } from "@/components/ui/motion-sidebar";
 import { Button } from "@/components/ui/button";
 import logoFull from "../../assets/christian_minimart_logo_words.png";
@@ -52,7 +51,7 @@ const navItems: NavItem[] = [
   },
   {
     href: "/admin/orders",
-    label: "Incoming Orders",
+    label: "Orders",
     icon: IconClipboardList,
   },
   {
@@ -76,11 +75,15 @@ interface AppSidebarMotionProps {
   pendingOrdersCount?: number;
 }
 
-function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
+interface SidebarContentProps extends AppSidebarMotionProps {
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarContentProps) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const { open, setOpen } = useMotionSidebar();
 
   useEffect(() => {
     setMounted(true);
@@ -145,22 +148,30 @@ function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
             const Icon = item.icon;
 
             return (
-              <div key={item.href} onClick={handleLinkClick}>
+              <div key={item.href} onClick={handleLinkClick} className="relative">
                 <MotionSidebarLink
                   link={{
                     label: item.label,
                     href: item.href,
                     icon: (
-                      <Icon 
-                        className={cn(
-                          "size-5",
-                          isActive 
-                            ? "text-primary-foreground" 
-                            : item.highlight 
-                              ? "text-secondary" 
-                              : "text-sidebar-foreground"
-                        )} 
-                      />
+                      <div className="relative">
+                        <Icon 
+                          className={cn(
+                            "size-5",
+                            isActive 
+                              ? "text-primary-foreground" 
+                              : item.highlight 
+                                ? "text-secondary" 
+                                : "text-sidebar-foreground"
+                          )} 
+                        />
+                        {/* Badge for pending orders (visible when collapsed) */}
+                        {showBadge && !open && (
+                          <span className="absolute -top-1 -right-1 size-4 flex items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">
+                            {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
+                          </span>
+                        )}
+                      </div>
                     ),
                   }}
                   isActive={isActive}
@@ -169,6 +180,11 @@ function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
                       ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
                       : ""
                   }
+                  badge={showBadge && open ? (
+                    <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-500 text-white">
+                      {pendingOrdersCount}
+                    </span>
+                  ) : undefined}
                 />
               </div>
             );
@@ -179,16 +195,7 @@ function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
       {/* Footer with Theme Toggle */}
       <MotionSidebarFooter>
         <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-            className="rounded-full text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
-          >
-            <IconSun className="size-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <IconMoon className="absolute size-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-          </Button>
+          
           <motion.span
             animate={{
               opacity: open ? 1 : 0,
@@ -197,7 +204,7 @@ function SidebarContent({ pendingOrdersCount = 0 }: AppSidebarMotionProps) {
             transition={{ duration: 0.15 }}
             className="text-xs text-sidebar-foreground/60 overflow-hidden whitespace-nowrap"
           >
-            {isDark ? "Dark" : "Light"} mode
+            
           </motion.span>
         </div>
         <motion.div
@@ -227,7 +234,7 @@ export function AppSidebarMotion({ pendingOrdersCount = 0 }: AppSidebarMotionPro
 
   return (
     <MotionSidebar open={open} setOpen={setOpen}>
-      <SidebarContent pendingOrdersCount={pendingOrdersCount} />
+      <SidebarContent pendingOrdersCount={pendingOrdersCount} open={open} setOpen={setOpen} />
     </MotionSidebar>
   );
 }

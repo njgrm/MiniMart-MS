@@ -18,8 +18,11 @@ export interface SaleTransaction {
   status: string;
   itemsCount: number;
   payment_method: string | null;
+  amount_tendered: number | null;
+  change: number | null;
   items: {
     product_name: string;
+    barcode: string | null;
     quantity: number;
     price_at_sale: number;
     cost_at_sale: number;
@@ -147,6 +150,7 @@ export async function getSalesHistory(
           product: {
             select: {
               product_name: true,
+              barcode: true,
             },
           },
         },
@@ -154,6 +158,8 @@ export async function getSalesHistory(
       payment: {
         select: {
           payment_method: true,
+          amount_tendered: true,
+          change: true,
         },
       },
       user: {
@@ -198,8 +204,11 @@ export async function getSalesHistory(
     status: tx.status,
     itemsCount: tx.items.length,
     payment_method: tx.payment?.payment_method ?? null,
+    amount_tendered: tx.payment?.amount_tendered ? Number(tx.payment.amount_tendered) : null,
+    change: tx.payment?.change ? Number(tx.payment.change) : null,
     items: tx.items.map((item) => ({
       product_name: item.product.product_name,
+      barcode: item.product.barcode ?? null,
       quantity: item.quantity,
       price_at_sale: Number(item.price_at_sale),
       cost_at_sale: Number(item.cost_at_sale),
@@ -432,4 +441,69 @@ export async function voidTransaction(transactionId: number) {
     console.error("Void transaction error:", error);
     return { success: false, error: "Failed to void transaction" };
   }
+}
+
+export interface TopProduct {
+  product_id: number;
+  product_name: string;
+  quantity_sold: number;
+  revenue: number;
+}
+
+/**
+ * Get top selling products for the dashboard
+ */
+export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Get all transaction items from this month with product info
+  const transactionItems = await prisma.transactionItem.findMany({
+    where: {
+      transaction: {
+        created_at: { gte: monthStart },
+        status: "COMPLETED",
+      },
+    },
+    include: {
+      product: {
+        select: {
+          product_id: true,
+          product_name: true,
+        },
+      },
+    },
+  });
+
+  // Aggregate by product
+  const productMap = new Map<number, {
+    product_id: number;
+    product_name: string;
+    quantity_sold: number;
+    revenue: number;
+  }>();
+
+  for (const item of transactionItems) {
+    const existing = productMap.get(item.product_id);
+    const revenue = Number(item.subtotal);
+    
+    if (existing) {
+      existing.quantity_sold += item.quantity;
+      existing.revenue += revenue;
+    } else {
+      productMap.set(item.product_id, {
+        product_id: item.product_id,
+        product_name: item.product.product_name,
+        quantity_sold: item.quantity,
+        revenue,
+      });
+    }
+  }
+
+  // Sort by quantity sold and take top N
+  const sorted = Array.from(productMap.values())
+    .sort((a, b) => b.quantity_sold - a.quantity_sold)
+    .slice(0, limit);
+
+  return sorted;
 }

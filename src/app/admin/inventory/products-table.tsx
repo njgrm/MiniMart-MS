@@ -532,7 +532,7 @@ export function ProductsTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="SODA">Soda</SelectItem>
+            <SelectItem value="SODA">Soft Drinks</SelectItem>
             <SelectItem value="SNACK">Snack</SelectItem>
             <SelectItem value="CANNED_GOODS">Canned Goods</SelectItem>
             <SelectItem value="BEVERAGES">Beverages</SelectItem>

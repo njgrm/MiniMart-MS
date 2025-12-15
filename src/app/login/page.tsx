@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Store, Eye, EyeOff, User } from "lucide-react";
+import { Eye, EyeOff, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +48,12 @@ export default function LoginPage() {
       });
 
       if (result.success) {
-        router.push("/admin");
+        // Redirect based on user type (determined by auth server action)
+        if (result.userType === "vendor") {
+          router.push("/vendor");
+        } else {
+          router.push("/admin");
+        }
         router.refresh();
       } else {
         // Handle array error messages from Zod
@@ -61,46 +66,44 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-background p-6 md:p-10">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background p-4 sm:p-6 md:p-10">
       {/* Theme Toggle - Top Right */}
-      <div className="fixed top-4 right-4">
+      <div className="fixed top-4 right-4 z-10">
         <ThemeToggle />
       </div>
 
-      <div className="flex w-full max-w-md flex-col gap-6">
+      <div className="flex w-full max-w-md flex-col gap-4 sm:gap-6">
         {/* Logo/Brand */}
         <div className="flex items-center gap-3 self-center">
-          <span className="text-xl font-semibold tracking-tight text-foreground">
-            <Image
-              src={mounted && resolvedTheme === "dark" ? logoDark : logo}
-              alt="Christian Minimart logo"
-              className="w-80"
-              priority
-            />
-          </span>
+          <Image
+            src={mounted && resolvedTheme === "dark" ? logoDark : logo}
+            alt="Christian Minimart logo"
+            className="w-56 sm:w-72 md:w-80"
+            priority
+          />
         </div>
 
         {/* Login Card */}
         <Card className="shadow-card-hover">
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-2xl font-bold text-foreground">
+          <CardHeader className="text-center pb-2 px-4 sm:px-6">
+            <CardTitle className="text-xl sm:text-2xl font-bold text-foreground">
               Welcome Back!
             </CardTitle>
-            <CardDescription className="text-muted-foreground">
+            <CardDescription className="text-muted-foreground text-sm">
               Sign in with your username or email
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-4">
+          <CardContent className="pt-4 px-4 sm:px-6">
             {/* Error Message */}
             {error && (
-              <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+              <div className="mb-4 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-xs sm:text-sm text-destructive">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="identifier" className="text-foreground">
+                <Label htmlFor="identifier" className="text-foreground text-sm">
                   Username or Email
                 </Label>
                 <div className="relative">
@@ -112,14 +115,18 @@ export default function LoginPage() {
                     onChange={(e) => setIdentifier(e.target.value)}
                     required
                     disabled={isPending}
-                    className="h-11 pl-10"
+                    className="h-12 pl-10 text-base"
+                    autoComplete="username"
                   />
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Staff: use your username • Vendors: use your email
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-foreground">
+                <Label htmlFor="password" className="text-foreground text-sm">
                   Password
                 </Label>
                 <div className="relative">
@@ -131,17 +138,19 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={isPending}
-                    className="h-11 pr-10"
+                    className="h-12 pr-10 text-base"
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
-                      <EyeOff className="size-4" />
+                      <EyeOff className="size-5" />
                     ) : (
-                      <Eye className="size-4" />
+                      <Eye className="size-5" />
                     )}
                   </button>
                 </div>
@@ -149,7 +158,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                className="w-full h-11 font-medium"
+                className="w-full h-12 font-medium text-base"
                 disabled={isPending}
               >
                 {isPending ? (
@@ -166,23 +175,23 @@ export default function LoginPage() {
             {/* Sign up link for vendors */}
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">
-                Vendor without an account?{" "}
+                New vendor?{" "}
               </span>
               <Link
                 href="/register"
                 className="font-medium text-primary underline-offset-4 hover:underline"
               >
-                Sign up here
+                Register here
               </Link>
             </div>
           </CardContent>
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground">
+        <p className="text-center text-xs text-muted-foreground px-4">
           By signing in, you agree to our{" "}
           <Link href="#" className="underline underline-offset-4 hover:text-foreground transition-colors">
-            Terms of Service
+            Terms
           </Link>{" "}
           and{" "}
           <Link href="#" className="underline underline-offset-4 hover:text-foreground transition-colors">
