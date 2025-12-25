@@ -24,12 +24,12 @@ const statusConfig: Record<
   PENDING: {
     label: "Pending",
     variant: "secondary",
-    className: "bg-orange-100 text-orange-800 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+    className: "bg-secondary text-secondary hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800",
   },
   PREPARING: {
     label: "Preparing",
     variant: "default",
-    className: "bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+    className: "bg-accent text-accent hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800",
   },
   READY: {
     label: "Ready",
@@ -123,4 +123,14 @@ export function OrderCard({ order, onClick }: OrderCardProps) {
     </Card>
   );
 }
+
+
+
+
+
+
+
+
+
+
 

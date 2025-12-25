@@ -144,14 +144,25 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     toast.success("Sales history imported successfully");
   };
 
-  // Export to CSV
+  // Format date for export (no commas, Excel-friendly)
+  const formatDateForExport = (date: Date) => {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
+  // Export to CSV (Excel-compatible)
   const handleExportCSV = () => {
     const headers = ["Date", "Receipt #", "Items", "Total Amount", "Cost", "Profit", "Payment", "Status"];
     const rows = data.transactions.map((tx) => {
       const cost = tx.items.reduce((sum, item) => sum + (item.cost_at_sale * item.quantity), 0);
       const profit = tx.total_amount - cost;
       return [
-        formatDate(tx.created_at),
+        formatDateForExport(tx.created_at),
         tx.receipt_no.substring(0, 8),
         tx.itemsCount,
         tx.total_amount.toFixed(2),
@@ -162,12 +173,14 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
       ];
     });
 
-    const csvContent = [
+    // Add BOM for Excel UTF-8 compatibility
+    const BOM = "\uFEFF";
+    const csvContent = BOM + [
       headers.join(","),
       ...rows.map((row) => row.join(",")),
-    ].join("\n");
+    ].join("\r\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -387,9 +400,17 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
                         {getPaymentMethodBadge(transaction.payment_method)}
                       </TableCell>
                       <TableCell className="py-2 hidden sm:table-cell">
-                        <Badge variant={transaction.status === "COMPLETED" ? "default" : "destructive"}>
-                          {transaction.status}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant={transaction.status === "COMPLETED" ? "default" : "destructive"}>
+                            {transaction.status}
+                          </Badge>
+                          {/* PRE-ORDER badge if transaction originated from an order */}
+                          {transaction.order_id && (
+                            <Badge variant="outline" className="text-[10px] bg-secondary/10 text-secondary border-secondary/30">
+                              PRE-ORDER
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="py-2">
                         <TransactionSheet transaction={transaction} />

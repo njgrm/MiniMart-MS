@@ -9,11 +9,16 @@ import { VendorProfileClient } from "./profile-client";
 export default async function VendorProfilePage() {
   const session = await auth();
   
-  if (!session?.user?.id) {
+  if (!session?.user?.id || session.user.userType !== "vendor") {
     redirect("/login");
   }
 
   const customerId = parseInt(session.user.id);
+  
+  // Validate customerId is a valid number
+  if (isNaN(customerId) || customerId <= 0) {
+    redirect("/login");
+  }
   
   // Get customer details
   const customer = await prisma.customer.findUnique({
@@ -41,4 +46,6 @@ export default async function VendorProfilePage() {
     />
   );
 }
+
+
 

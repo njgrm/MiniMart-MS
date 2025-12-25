@@ -152,33 +152,40 @@ export function ImportSalesDialog({
 
       result.data.forEach((row, index) => {
         const rowNum = index + 2;
+        const rowAny = row as any; // Papa.parse returns dynamic keys after transformHeader
 
-        if (!row.date?.trim()) {
+        // Access fields with case-insensitive fallback (transformHeader converts to lowercase)
+        const date = rowAny.date || rowAny.Date || row.date;
+        const barcode = rowAny.barcode || rowAny.Barcode || row.barcode;
+        const quantity = rowAny.quantity || rowAny.Quantity || row.quantity;
+        const paymentMethodRaw = rowAny.paymentmethod || rowAny.paymentMethod || rowAny.payment_method || row.paymentMethod || row.payment_method || "";
+
+        if (!date?.trim()) {
           errors.push({ row: rowNum, field: "date", message: "Date is required" });
           return;
         }
 
-        if (!row.barcode?.trim()) {
+        if (!barcode?.trim()) {
           errors.push({ row: rowNum, field: "barcode", message: "Barcode is required" });
           return;
         }
 
-        const quantity = parseInt(String(row.quantity));
-        if (isNaN(quantity) || quantity <= 0) {
+        const quantityNum = parseInt(String(quantity));
+        if (isNaN(quantityNum) || quantityNum <= 0) {
           errors.push({ row: rowNum, field: "quantity", message: "Quantity must be a positive number" });
           return;
         }
 
-        const paymentMethod = String(row.paymentMethod || row.payment_method || "").toUpperCase();
+        const paymentMethod = String(paymentMethodRaw).toUpperCase();
         if (!paymentMethod || !["CASH", "GCASH"].includes(paymentMethod)) {
           errors.push({ row: rowNum, field: "paymentMethod", message: "Payment method must be CASH or GCASH" });
           return;
         }
 
         validRows.push({
-          date: row.date.trim(),
-          barcode: row.barcode.trim(),
-          quantity,
+          date: String(date).trim(),
+          barcode: String(barcode).trim(),
+          quantity: quantityNum,
           paymentMethod: paymentMethod as "CASH" | "GCASH",
         });
       });
@@ -339,7 +346,7 @@ export function ImportSalesDialog({
               setFileName(null);
               setValidationErrors([]);
             }}
-            placeholder="date,barcode,quantity,paymentMethod&#10;2024-12-15,4800016123456,2,CASH&#10;2024-12-15,4800016234567,1,GCASH"
+            placeholder="date,barcode,quantity,paymentMethod&#10;2023-11-15,480864702009,1,GCASH&#10;2023-11-15,965412919731,5,CASH&#10;2023-11-15,480392515112,3,GCASH"
             className="w-full h-32 p-3 text-sm font-mono rounded-lg border border-border bg-muted text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             disabled={isPending}
           />
@@ -392,6 +399,10 @@ export function ImportSalesDialog({
     </Dialog>
   );
 }
+
+
+
+
 
 
 

@@ -1,0 +1,170 @@
+<driver version='6.6'>
+
+<stock>
+Name=国标 100×180
+Data=WkxJQhwAAAAaAAAAeJxb0MbIoLCfieECOwMYwwALAycjAFJ+A8U=
+</stock>
+
+<stock>
+Name=龙达标准 100×203
+Data=WkxJQhwAAAAaAAAAeJxb0MbI8EOCmeECOwMYwwALgyQjAFfzBAc=
+</stock>
+
+<stock>
+Name=顺丰 100×150
+Data=WkxJQhwAAAAaAAAAeJxb0MbI8MGTieECOwMYwwALgyAjAFt0BCc=
+</stock>
+
+<stock>
+Name=顺丰EMS扩展 100×250
+Data=WkxJQhwAAAAaAAAAeJxb0MbIMOECM8MFdgYwhgEWBiFGAF6tBFA=
+</stock>
+
+<stock>
+Name=邮政小包 100×150
+Data=WkxJQhwAAAAaAAAAeJxb0MbI8MGTieECOwMYwwALgwAjAFtyBCY=
+</stock>
+
+<stock>
+Name=标准标签 100×25
+Data=WkxJQhwAAAAZAAAAeJxb0MbIsCKRgeECOwTDAAuDKCMAVrgD+Q==
+</stock>
+
+<stock>
+Name=标准标签 100×50
+Data=WkxJQhwAAAAZAAAAeJxb0MbIEHCYgeECOwTDAAuDGCMAV0gEBA==
+</stock>
+
+<stock>
+Name=标准标签 100×75
+Data=WkxJQhwAAAAaAAAAeJxb0MbI8EOFkeECOwMYwwALgzgjAFjXBA8=
+</stock>
+
+<stock>
+Name=圆通标准 100×149
+Data=WkxJQhwAAAAaAAAAeJxb0MbIwOHGxHCBnQGMYYCFQYQRAEV1Az8=
+</stock>
+
+<stock>
+Name=圆通申通扩展 100×280
+Data=WkxJQhwAAAAaAAAAeJxb0MbIcMCVheECOwMYwwALgzAjAFbIA/c=
+</stock>
+
+<stock>
+Name=E邮宝 100 × 100
+Data=WkxJQhwAAAAZAAAAeJxb0MbIsACIL7AzgDEMsDAwMwIAWT0EBQ==
+</stock>
+
+<stock>
+Name=EMS标准/经济 100 × 150
+Data=WkxJQhwAAAAaAAAAeJxb0MbI8MGTieECOwMYwwALAyMjAFtUBBc=
+</stock>
+
+<stock>
+Name=小标签 40×50
+Data=WkxJQhwAAAAZAAAAeJxzmMPAEHCYgeECOwTDAAsDCyMATtwDpw==
+</stock>
+
+<stock>
+Name=小标签 50×20
+Data=WkxJQhwAAAAZAAAAeJwLOMzAoODHwHCBHYJhgIWBiREARbIDNw==
+</stock>
+
+<stock>
+Name=小标签 50×30
+Data=WkxJQhwAAAAZAAAAeJwLOMzAYFDKwHCBHYJhgIWBlREASrkDcQ==
+</stock>
+
+<stock>
+Name=小标签 60×40
+Data=WkxJQhwAAAAZAAAAeJxLeMXA4DCHgeECOwTDAAsDGyMAVZkD4A==
+</stock>
+
+<stock>
+Name=中通标准 100×190
+Data=WkxJQhwAAAAaAAAAeJxb0MbIYPCMieECOwMYwwALAzsjAFd7A/o=
+</stock>
+
+<stock>
+Name=中通扩展 100×290
+Data=WkxJQhwAAAAaAAAAeJxb0MbIcCGHheECOwMYwwALAwcjAFuzBCM=
+</stock>
+
+<stock>
+Name=申通标准 100×201
+Data=WkxJQhwAAAAaAAAAeJxb0MbIoCHIzHCBnQGMYYCFgYsRAEO0AyE=
+</stock>
+
+<stock>
+Name=百世汇通 100×170
+Data=WkxJQhwAAAAaAAAAeJxb0MbIIDCDieECOwMYwwALAzcjAE2BA5A=
+</stock>
+
+<stock>
+Name=京东单面 100×113
+Data=WkxJQhwAAAAaAAAAeJxb0MbIkLGTkeECOwMYwwALAw8jAFikBAk=
+</stock>
+
+<stock>
+Name=菜鸟圆通 100×180
+Data=WkxJQhwAAAAaAAAAeJxb0MbIoLCfieECOwMYwwALAz8jAFKKA8s=
+</stock>
+
+<stock>
+Name=菜鸟中通
+Data=WkxJQhwAAAAaAAAAeJxb0MbIYPCMieECOwMYwwALAy8jAFeHBAA=
+</stock>
+
+<stock>
+Name=菜鸟申通 100×180
+Data=WkxJQhwAAAAaAAAAeJxb0MbIoLCfieECOwMYwwALAx8jAFKIA8o=
+</stock>
+
+<stock>
+Name=优速/宅急送 100×150
+Data=WkxJQhwAAAAaAAAAeJxb0MbI8MGTieECOwMYwwALgwQjAFuCBC4=
+</stock>
+
+<preset default='true'>
+Data=WkxJQvQFAADiAAAAeJxz8TU2esPKwBDCEMzgzKDA4MLgyGDEYACEpAFGFib2OwwCrPyqjAyMQO4XVkGWFDDrNANIBEQyMIQCbXFlCCLRbEKACYiZQW5ggBGoYAlQ0NclxA+kDuhVoFuAQJKB4QkPRH4HNwNDgTiEfQeoIIIJVf+//7jtNgeacQuIBdRR8QIuBoZDbECzgViHhYHBAeiuS0D1EmBdAuogCFE5CkbBKBjpIIWFkQVEn5OAlGcwwATmCYHLYxCLHYj/AwFIDlTUBUDVgcowZJqBAWGOxAdGcPlYXFxcUpycwwIAxccjyw==
+</preset>
+
+<font type='Bar Code'>
+Name=Sample Bar Code Font
+Data=WkxJQqgAAABAAAAAeJybwMgABgoaZgbBibkFOakKTolFCs75KakKbvl5JQxIAKT0NFgxQwoDGkhAF0AC7GCSBUOcEY8edAAAgSgJ5Q==
+</font>
+
+<options model='TSC DA200'>
+[DATA:\Settings]
+"Disable User Defined PaperSize"=hex:00
+"TCP Port Delayed Close Period"=dword:000003e8
+"User Form: Data"=hex:a4,96,01,00,50,53,02,00,00,00,00,00,00,00,00,00,00,00,00,\
+  00,00,00,00,00,01,00,00,01
+"User Form: Name"="USER"
+[DATA:\Settings\Status]
+"Advanced Status Comment"=hex:01
+"Show Icon"=hex:01
+"Show On Error"=hex:01
+"Status Monitoring Mode"=dword:00000000
+"Verify Job Complete"=hex:00
+"Verify Page Complete"=hex:00
+</options>
+
+<network>
+[NETWORK:]
+"Connection Retries"=dword:00000002
+"Connection Timeout"=dword:000003e8
+"Network Bidirectional"=hex:01
+"Network Communication"=hex:01
+"Server Address Override"=hex:00
+"TCP Enabled"=hex:01
+"TCP Port"=dword:00001810
+</network>
+
+<security>
+[SECURITY:]
+"Configuration Sharing"=hex:01
+"Local Access Level"=dword:00000001
+"Network Access Level"=dword:00000001
+</security>
+

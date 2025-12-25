@@ -160,25 +160,49 @@ export async function updateOrderStatus(
 }
 
 /**
- * Cancel an order
+ * Cancel an order (called from Admin side)
+ * Revalidates both admin and vendor paths so both see the update
  */
 export async function cancelOrder(
   orderId: number
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; customerId?: number }> {
   try {
-    await prisma.order.update({
+    const order = await prisma.order.update({
       where: { order_id: orderId },
       data: { status: "CANCELLED" },
+      select: { customer_id: true },
     });
 
+    // Revalidate all relevant paths for both admin and vendor
     revalidatePath("/admin/orders");
     revalidatePath("/admin");
+    revalidatePath("/vendor/history");
+    revalidatePath("/vendor");
     
-    return { success: true };
+    return { success: true, customerId: order.customer_id };
   } catch (error) {
     console.error("Failed to cancel order:", error);
     return { success: false, error: "Failed to cancel order" };
   }
+}
+
+// Receipt data interface for auto-printing
+export interface OrderReceiptData {
+  receiptNo: string;
+  transactionId: number;
+  date: Date;
+  customerName: string;
+  cashierName: string;
+  items: {
+    name: string;
+    barcode: string | null;
+    quantity: number;
+    price: number;
+    subtotal: number;
+  }[];
+  subtotal: number;
+  totalDue: number;
+  paymentMethod: "CASH" | "GCASH";
 }
 
 /**
@@ -190,13 +214,17 @@ export async function cancelOrder(
  * 4. Creates Payment record
  * 5. Updates Order status to COMPLETED
  * 
+ * Returns full receipt data for auto-printing
  * All operations are atomic via Prisma transaction
  */
 export async function completeOrderTransaction(
   orderId: number,
   paymentMethod: "CASH" | "GCASH",
-  userId: number = 1 // Default to admin user if not provided
-): Promise<{ success: boolean; error?: string; transactionId?: number; receiptNo?: string }> {
+  userId: number = 1, // Default to admin user if not provided
+  amountTendered?: number,
+  change?: number,
+  gcashRefNo?: string
+): Promise<{ success: boolean; error?: string; transactionId?: number; receiptNo?: string; receiptData?: OrderReceiptData }> {
   try {
     const result = await prisma.$transaction(async (tx) => {
       // 1. Get the order with items
@@ -262,8 +290,13 @@ export async function completeOrderTransaction(
         data: {
           transaction_id: transaction.transaction_id,
           payment_method: paymentMethod,
-          amount_tendered: order.total_amount,
-          change: new Decimal(0), // No change for order payments
+          amount_tendered: amountTendered !== undefined 
+            ? new Decimal(amountTendered) 
+            : order.total_amount,
+          change: change !== undefined 
+            ? new Decimal(change) 
+            : new Decimal(0),
+          gcash_reference_no: gcashRefNo || null,
         },
       });
 
@@ -290,6 +323,43 @@ export async function completeOrderTransaction(
       return transaction;
     });
 
+    // Fetch the order again to get customer and item details for receipt
+    const completedOrder = await prisma.order.findUnique({
+      where: { order_id: orderId },
+      include: {
+        customer: true,
+        items: {
+          include: {
+            product: {
+              select: {
+                product_name: true,
+                barcode: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Build receipt data
+    const receiptData: OrderReceiptData = {
+      receiptNo: result.receipt_no,
+      transactionId: result.transaction_id,
+      date: result.created_at,
+      customerName: completedOrder?.customer.name || "Customer",
+      cashierName: "Admin", // TODO: Get from session
+      items: completedOrder?.items.map((item) => ({
+        name: item.product.product_name,
+        barcode: item.product.barcode,
+        quantity: item.quantity,
+        price: Number(item.price),
+        subtotal: Number(item.price) * item.quantity,
+      })) || [],
+      subtotal: Number(completedOrder?.total_amount || 0),
+      totalDue: Number(completedOrder?.total_amount || 0),
+      paymentMethod,
+    };
+
     revalidatePath("/admin/orders");
     revalidatePath("/admin/sales");
     revalidatePath("/admin/inventory");
@@ -299,6 +369,7 @@ export async function completeOrderTransaction(
       success: true,
       transactionId: result.transaction_id,
       receiptNo: result.receipt_no,
+      receiptData,
     };
   } catch (error) {
     console.error("Failed to complete order transaction:", error);
@@ -312,6 +383,51 @@ export async function completeOrderTransaction(
 /**
  * Get a single order by ID with full details
  */
+/**
+ * Check if there are new order updates since a given timestamp
+ * Used for "pulse checking" - lightweight polling without full data fetch
+ * Returns true if there are updates, false otherwise
+ */
+export async function checkOrdersForUpdates(
+  lastCheckTimestamp: Date
+): Promise<{ hasUpdates: boolean; latestTimestamp: Date }> {
+  // Find the most recent order update (order_date or modified status)
+  const latestOrder = await prisma.order.findFirst({
+    where: {
+      OR: [
+        { order_date: { gt: lastCheckTimestamp } },
+        // Check if any order was modified after lastCheckTimestamp
+        // We use order_date as a proxy since we don't have updated_at
+      ],
+    },
+    orderBy: {
+      order_date: "desc",
+    },
+    select: {
+      order_date: true,
+    },
+  });
+
+  // Also check for any status changes by looking at recent active orders count
+  const currentCounts = await prisma.order.groupBy({
+    by: ["status"],
+    where: {
+      status: {
+        in: ["PENDING", "PREPARING", "READY"],
+      },
+    },
+    _count: true,
+  });
+
+  const latestTimestamp = latestOrder?.order_date || lastCheckTimestamp;
+  
+  // Return hasUpdates: true if there's a newer order
+  return {
+    hasUpdates: latestOrder !== null && latestOrder.order_date > lastCheckTimestamp,
+    latestTimestamp,
+  };
+}
+
 export async function getOrderById(orderId: number): Promise<IncomingOrder | null> {
   const order = await prisma.order.findUnique({
     where: { order_id: orderId },

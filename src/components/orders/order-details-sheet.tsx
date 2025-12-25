@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import {
   IconX,
@@ -17,6 +17,7 @@ import {
   IconArrowRight,
   IconSquareCheck,
   IconSquare,
+  IconPrinter,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 
@@ -41,12 +42,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { IncomingOrder, OrderStatus } from "@/actions/orders";
+import { OrderPaymentDialog } from "./order-payment-dialog";
+import type { IncomingOrder, OrderStatus, OrderReceiptData } from "@/actions/orders";
 import {
   updateOrderStatus,
   cancelOrder,
   completeOrderTransaction,
 } from "@/actions/orders";
+import { getStoreSettings } from "@/actions/settings";
 import { cn } from "@/lib/utils";
 
 interface OrderDetailsSheetProps {
@@ -54,6 +57,7 @@ interface OrderDetailsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOrderUpdated: () => void;
+  gcashQrUrl?: string | null;
 }
 
 const statusConfig: Record<
@@ -92,11 +96,22 @@ export function OrderDetailsSheet({
   open,
   onOpenChange,
   onOrderUpdated,
+  gcashQrUrl: initialGcashQrUrl,
 }: OrderDetailsSheetProps) {
   const [isPending, startTransition] = useTransition();
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [gcashQrUrl, setGcashQrUrl] = useState<string | null>(initialGcashQrUrl || null);
+
+  // Fetch GCash QR URL on mount if not provided
+  useEffect(() => {
+    if (!initialGcashQrUrl && open) {
+      getStoreSettings().then((settings) => {
+        setGcashQrUrl(settings.gcash_qr_image_url);
+      }).catch(console.error);
+    }
+  }, [initialGcashQrUrl, open]);
 
   if (!order) return null;
 
@@ -153,25 +168,179 @@ export function OrderDetailsSheet({
     setShowCancelDialog(false);
   };
 
-  const handleProcessPayment = (paymentMethod: "CASH" | "GCASH") => {
-    startTransition(async () => {
-      const result = await completeOrderTransaction(order.order_id, paymentMethod);
-      if (result.success) {
-        toast.success(`Order completed! Receipt: ${result.receiptNo?.substring(0, 8)}...`);
-        onOrderUpdated();
-        onOpenChange(false);
-      } else {
-        toast.error(result.error || "Failed to process payment");
-      }
-    });
-    setShowPaymentDialog(false);
+  const handleProcessPayment = async (
+    paymentMethod: "CASH" | "GCASH",
+    amountTendered: number,
+    gcashRefNo?: string
+  ) => {
+    const result = await completeOrderTransaction(
+      order.order_id,
+      paymentMethod,
+      1, // userId - TODO: get from session
+      amountTendered,
+      amountTendered - order.total_amount, // change
+      gcashRefNo
+    );
+    
+    if (result.success && result.receiptData) {
+      toast.success(`Order completed! Receipt: ${result.receiptNo?.substring(0, 8)}...`, {
+        description: "Printing receipt...",
+        duration: 3000,
+      });
+      
+      // Auto-print receipt with tendered and change info
+      printOrderReceipt({
+        ...result.receiptData,
+        amountTendered,
+        change: amountTendered - order.total_amount,
+        gcashRefNo,
+      });
+      
+      onOrderUpdated();
+      onOpenChange(false);
+      setShowPaymentDialog(false);
+    } else {
+      toast.error(result.error || "Failed to process payment");
+      throw new Error(result.error || "Failed to process payment");
+    }
+  };
+
+  // Auto-print function for order receipts
+  const printOrderReceipt = (data: OrderReceiptData & { amountTendered?: number; change?: number; gcashRefNo?: string }) => {
+    const vatSales = data.totalDue / 1.12;
+    const vatAmount = data.totalDue - vatSales;
+    const amountTendered = data.amountTendered || data.totalDue;
+    const change = data.change || 0;
+    
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Receipt - ${data.receiptNo}</title>
+          <style>
+            @page { margin: 0; size: 58mm auto; }
+            body { 
+              font-family: 'Lucida Console', 'Consolas', monospace; 
+              font-size: 10pt; 
+              line-height: 1.2;
+              padding: 0;
+              width: 58mm;
+              margin: 0;
+              background: white;
+              color: black;
+              -webkit-font-smoothing: none;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .separator { border-bottom: 2px solid #000; margin: 2px 0; }
+            .flex { display: flex; justify-content: space-between; }
+            .mt-1 { margin-top: 4px; }
+            .item-line { margin: 4px 0; }
+            .logo-container { display: flex; justify-content: center; margin-bottom: 4px; }
+            .logo { width: 50mm; height: auto; filter: grayscale(100%); }
+            .total-section { font-weight: bold; font-size: 1.25rem; align-items: flex-end; margin-top: 4px; }
+            .total-amount { transform: scaleX(1.1); transform-origin: right; display: inline-block; }
+          </style>
+        </head>
+        <body>
+          <div class="center" style="margin-bottom: 2mm;">
+            <div class="logo-container">
+              <img src="${window.location.origin}/christian_minimart_logo.png" alt="Logo" class="logo" />
+            </div>
+            <div class="bold" style="font-size: 14pt;">CHRISTIAN MINIMART</div>
+            <div>Cor. Fleurdeliz & Concordia Sts.</div>
+            <div>Prk. Paghidaet Mansilingan Bacolod City</div>
+            
+            <div class="flex mt-1"><span>Tel No.</span><span>09474467550</span></div>
+            <div class="flex"><span>TIN:</span><span>926-018-860-000 NV</span></div>
+            <div class="flex"><span>S/N:</span><span>DBPDCGU2HVF</span></div>
+            <div class="flex"><span>Prop.:</span><span>Magabilin, Gracyl Gonzales</span></div>
+            <div class="flex"><span>Permit No.:</span><span>014-077-185000-000</span></div>
+            <div class="flex"><span>MIN:</span><span>140351772</span></div>
+          </div>
+
+          <div class="separator"></div>
+
+          <div style="margin: 4px 0; font-size: 11pt;">
+            <div class="flex">
+              <span><span class="bold">Date:</span> ${format(new Date(data.date), "MM/dd/yy")}</span>
+              <span>${format(new Date(data.date), "HH:mm")}</span>
+            </div>
+            <div><span class="bold">Cashier:</span> ${data.cashierName}</div>
+            <div><span class="bold">Rcpt #:</span> ${data.receiptNo.substring(0, 15)}</div>
+            <div><span class="bold">Sold to:</span> ${data.customerName}</div>
+          </div>
+
+          <div class="separator"></div>
+
+          <div style="margin: 4px 0;">
+            ${data.items.map(item => `
+              <div class="item-line">
+                <div class="bold">${item.quantity} x ${item.name}</div>
+                <div class="flex">
+                  <span>@${item.price.toFixed(2)}</span>
+                  <span>${item.subtotal.toFixed(2)}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="separator"></div>
+
+          <div style="margin: 4px 0;">
+            <div class="flex"><span>Sub Total:</span><span>${data.subtotal.toFixed(2)}</span></div>
+          </div>
+
+          <div style="margin-top: 2px;">
+            <div>Items: ${data.items.reduce((sum, i) => sum + i.quantity, 0)}</div>
+            <div class="flex total-section">
+              <span>TOTAL:</span>
+              <span class="total-amount">P${data.totalDue.toFixed(2)}</span>
+            </div>
+            <div class="flex"><span>CASH:</span><span>${amountTendered.toFixed(2)}</span></div>
+            <div class="flex bold"><span>CHANGE:</span><span>${change.toFixed(2)}</span></div>
+            ${data.gcashRefNo ? `<div class="flex"><span>Ref #:</span><span>${data.gcashRefNo}</span></div>` : ''}
+          </div>
+
+          <div class="separator"></div>
+
+          <div style="margin: 4px 0; font-size: 10pt;">
+            <div class="flex"><span>VAT Sales:</span><span>${vatSales.toFixed(2)}</span></div>
+            <div class="flex"><span>VAT (12%):</span><span>${vatAmount.toFixed(2)}</span></div>
+            <div class="flex"><span>Exempt:</span><span>0.00</span></div>
+          </div>
+
+          <div class="separator"></div>
+
+          <div class="center" style="margin-top: 8px;">
+            <div class="bold">THANK YOU!</div>
+            <div style="font-size: 10pt;">OFFICIAL RECEIPT</div>
+            <div style="font-size: 9pt; margin-top: 4px;">Enyaw POS Ver. 1.0</div>
+            <div style="font-size: 9pt;">Accred: 077-906501861-000338</div>
+          </div>
+          <div style="height: 16px;"></div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=320,height=600');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 250);
+    }
   };
 
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-lg flex flex-col p-0">
-          <SheetHeader className="p-6 pb-0">
+        <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 h-full">
+          {/* Fixed Header */}
+          <SheetHeader className="p-6 pb-4 border-b border-border shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 <SheetTitle className="text-xl">Order #{order.order_id}</SheetTitle>
@@ -186,8 +355,9 @@ export function OrderDetailsSheet({
             </div>
           </SheetHeader>
 
-          <ScrollArea className="flex-1 px-6">
-            <div className="space-y-6 pb-6">
+          {/* Scrollable Content - uses calc to account for header (~100px) and footer (~200px) */}
+          <ScrollArea className="flex-1 h-[calc(100vh-300px)]">
+            <div className="space-y-6 pb-6 px-6">
               {/* Customer Info */}
               <div className="space-y-3 pt-4">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
@@ -295,7 +465,7 @@ export function OrderDetailsSheet({
           </ScrollArea>
 
           {/* Action Buttons */}
-          <div className="p-6 border-t border-border space-y-4 bg-card">
+          <div className="py-2 px-6 border-t border-border space-y-2 bg-card">
             {/* Progress indicator */}
             {order.status !== "COMPLETED" && order.status !== "CANCELLED" && (
               <div className="flex items-center justify-center gap-2 text-sm pb-2">
@@ -432,46 +602,14 @@ export function OrderDetailsSheet({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Payment Method Dialog */}
-      <AlertDialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Select Payment Method</AlertDialogTitle>
-            <AlertDialogDescription>
-              Choose how the customer is paying for this order.
-              <br />
-              <span className="font-semibold text-foreground">
-                Total: {formatCurrency(order.total_amount)}
-              </span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-24 flex-col gap-2"
-              onClick={() => handleProcessPayment("CASH")}
-              disabled={isPending}
-            >
-              <IconCash className="size-8 text-green-600" />
-              <span className="font-semibold">Cash</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-24 flex-col gap-2"
-              onClick={() => handleProcessPayment("GCASH")}
-              disabled={isPending}
-            >
-              <IconDeviceMobile className="size-8 text-blue-600" />
-              <span className="font-semibold">GCash</span>
-            </Button>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Payment Dialog - Full-featured with change calculation */}
+      <OrderPaymentDialog
+        open={showPaymentDialog}
+        onClose={() => setShowPaymentDialog(false)}
+        onConfirm={handleProcessPayment}
+        order={order}
+        initialGcashQrUrl={gcashQrUrl}
+      />
     </>
   );
 }

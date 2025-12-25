@@ -247,33 +247,6 @@ export function ProductsTable({
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("wholesale_price"));
-          if (!amount || amount === 0) {
-            return <span className="text-muted-foreground text-sm">N/A</span>;
-          }
-          return (
-            <div className="text-sm font-normal tracking-wider tabular-nums">
-              ₱{amount.toFixed(2)}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "cost_price",
-        header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
-          >
-            Supply Cost
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-          </Button>
-        ),
-        cell: ({ row }) => {
-          const amount = parseFloat(row.getValue("cost_price"));
-          if (!amount || amount === 0) {
-            return <span className="text-muted-foreground text-sm">N/A</span>;
-          }
           return (
             <div className="text-sm font-normal tracking-wider tabular-nums">
               ₱{amount.toFixed(2)}
@@ -532,6 +505,7 @@ export function ProductsTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="SOFTDRINKS_CASE">Soft Drinks Case</SelectItem>
             <SelectItem value="SODA">Soft Drinks</SelectItem>
             <SelectItem value="SNACK">Snack</SelectItem>
             <SelectItem value="CANNED_GOODS">Canned Goods</SelectItem>

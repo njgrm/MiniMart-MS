@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   IconRefresh,
   IconClipboardList,
@@ -18,6 +19,8 @@ import { OrderDetailsSheet } from "./order-details-sheet";
 import type { IncomingOrder, GroupedOrders } from "@/actions/orders";
 import { getIncomingOrders } from "@/actions/orders";
 import { cn } from "@/lib/utils";
+
+const AUTO_REFRESH_INTERVAL = 2000; // 2 seconds
 
 interface OrderBoardProps {
   initialOrders: GroupedOrders;
@@ -69,16 +72,76 @@ function OrderColumn({ title, icon, orders, badgeColor, onOrderClick }: ColumnPr
 }
 
 export function OrderBoard({ initialOrders }: OrderBoardProps) {
+  const router = useRouter();
   const [orders, setOrders] = useState<GroupedOrders>(initialOrders);
   const [selectedOrder, setSelectedOrder] = useState<IncomingOrder | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
+  const selectedOrderRef = useRef<IncomingOrder | null>(null);
 
-  const handleRefresh = () => {
-    startTransition(async () => {
+  // Keep selectedOrderRef in sync
+  useEffect(() => {
+    selectedOrderRef.current = selectedOrder;
+  }, [selectedOrder]);
+
+  // Auto-refresh function (silent - no toast)
+  const silentRefresh = useCallback(async () => {
+    try {
       const freshOrders = await getIncomingOrders();
       setOrders(freshOrders);
-      toast.success("Orders refreshed");
+      // Update selected order if still exists
+      if (selectedOrderRef.current) {
+        const updated = [
+          ...freshOrders.pending,
+          ...freshOrders.preparing,
+          ...freshOrders.ready,
+        ].find((o) => o.order_id === selectedOrderRef.current!.order_id);
+        if (updated) {
+          setSelectedOrder(updated);
+        }
+      }
+    } catch (error) {
+      console.error("[OrderBoard] Auto-refresh failed:", error);
+    }
+  }, []);
+
+  // Auto-refresh every 2 seconds
+  useEffect(() => {
+    autoRefreshRef.current = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL);
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+      }
+    };
+  }, [silentRefresh]);
+
+  // Manual refresh - fetches fresh data and updates local state (with toast)
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    startTransition(async () => {
+      try {
+        const freshOrders = await getIncomingOrders();
+        setOrders(freshOrders);
+        // Update selected order if still exists
+        if (selectedOrder) {
+          const updated = [
+            ...freshOrders.pending,
+            ...freshOrders.preparing,
+            ...freshOrders.ready,
+          ].find((o) => o.order_id === selectedOrder.order_id);
+          if (updated) {
+            setSelectedOrder(updated);
+          }
+        }
+        toast.success("Orders refreshed");
+      } catch (error) {
+        console.error("[OrderBoard] Failed to refresh orders:", error);
+        toast.error("Failed to refresh orders");
+      } finally {
+        setIsRefreshing(false);
+      }
     });
   };
 
@@ -122,10 +185,10 @@ export function OrderBoard({ initialOrders }: OrderBoardProps) {
           variant="outline"
           size="sm"
           onClick={handleRefresh}
-          disabled={isPending}
+          disabled={isPending || isRefreshing}
           className="gap-2"
         >
-          <IconRefresh className={cn("size-4", isPending && "animate-spin")} />
+          <IconRefresh className={cn("size-4", (isPending || isRefreshing) && "animate-spin")} />
           <span className="hidden sm:inline">Refresh</span>
         </Button>
       </div>

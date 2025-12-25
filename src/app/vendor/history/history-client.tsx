@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+
+const AUTO_REFRESH_INTERVAL = 2000; // 2 seconds
 import {
   IconHistory,
   IconPackage,
@@ -9,6 +12,7 @@ import {
   IconX,
   IconChevronDown,
   IconChevronUp,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 import {
@@ -39,6 +43,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { VendorOrder } from "@/actions/vendor";
 import { cancelVendorOrder } from "@/actions/vendor";
+import { cn } from "@/lib/utils";
 
 interface VendorHistoryClientProps {
   orders: VendorOrder[];
@@ -54,6 +59,33 @@ export function VendorHistoryClient({
 }: VendorHistoryClientProps) {
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const [isPending, startTransition] = useTransition();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const router = useRouter();
+  const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-refresh every 2 seconds (silent)
+  const silentRefresh = useCallback(() => {
+    router.refresh();
+  }, [router]);
+
+  useEffect(() => {
+    autoRefreshRef.current = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL);
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+      }
+    };
+  }, [silentRefresh]);
+
+  // Manual refresh with toast feedback
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    router.refresh();
+    // Small delay to show the spinner
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    setIsRefreshing(false);
+    toast.success("Orders refreshed");
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
@@ -133,14 +165,26 @@ export function VendorHistoryClient({
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <IconHistory className="size-6" />
-          Order History
-        </h1>
-        <p className="text-muted-foreground">
-          View and manage your past orders
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <IconHistory className="size-6" />
+            Order History
+          </h1>
+          <p className="text-muted-foreground">
+            View and manage your past orders
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="gap-2"
+        >
+          <IconRefresh className={cn("size-4", isRefreshing && "animate-spin")} />
+          <span className="hidden sm:inline">Refresh</span>
+        </Button>
       </div>
 
       {/* Orders List */}
@@ -279,4 +323,6 @@ export function VendorHistoryClient({
     </div>
   );
 }
+
+
 

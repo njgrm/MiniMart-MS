@@ -32,10 +32,19 @@ export async function createTransaction(input: CreateTransactionInput) {
     return { success: false, error: "Cart is empty." };
   }
 
-  // Basic validation
-  const items = input.items.filter((i) => i.quantity > 0 && i.price >= 0);
+  // Validate no zero or negative prices (prevents zero profit bug)
+  const invalidItems = input.items.filter((i) => i.price <= 0 || i.quantity <= 0);
+  if (invalidItems.length > 0) {
+    return { 
+      success: false, 
+      error: "Invalid transaction: All items must have a price greater than ₱0.00. Please check product pricing." 
+    };
+  }
+
+  // Basic validation - only items with valid qty and price
+  const items = input.items.filter((i) => i.quantity > 0 && i.price > 0);
   if (items.length === 0) {
-    return { success: false, error: "No valid items." };
+    return { success: false, error: "No valid items in cart." };
   }
 
   const userId = input.userId ?? 1; // TODO: wire to session

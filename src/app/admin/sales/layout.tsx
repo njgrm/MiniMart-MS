@@ -34,7 +34,7 @@ export default function SalesLayout({
   return (
     <div className="h-full flex flex-col">
       {/* Sub-Navigation Tabs */}
-      <div className="shrink-0 border-b border-border bg-transparent px-1">
+      <div className="shrink-0 border-b border-background bg-transparent px-1">
         <nav className="flex gap-1" aria-label="Sales navigation">
           {tabs.map((tab) => (
             <Link
@@ -64,6 +64,10 @@ export default function SalesLayout({
     </div>
   );
 }
+
+
+
+
 
 
 

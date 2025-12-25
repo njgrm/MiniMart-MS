@@ -20,6 +20,7 @@ export interface SaleTransaction {
   payment_method: string | null;
   amount_tendered: number | null;
   change: number | null;
+  order_id: number | null; // For PRE-ORDER badge
   items: {
     product_name: string;
     barcode: string | null;
@@ -124,6 +125,7 @@ function parseDate(dateStr: string): Date | null {
 
 /**
  * Get sales history with optional date range filter
+ * Financial stats exclude VOID and CANCELLED transactions
  */
 export async function getSalesHistory(
   range: DateRange = "all",
@@ -132,11 +134,18 @@ export async function getSalesHistory(
 ): Promise<SalesHistoryResult> {
   const startDate = getDateRangeFilter(range);
   
+  // Base where clause for date filtering (shows all statuses in history list)
   const whereClause = startDate
     ? { created_at: { gte: startDate } }
     : {};
 
-  // Get total count
+  // Where clause for financial calculations (excludes VOID and CANCELLED)
+  const validStatusWhereClause = {
+    ...whereClause,
+    status: { notIn: ["VOID", "CANCELLED"] },
+  };
+
+  // Get total count (all transactions for display)
   const totalCount = await prisma.transaction.count({
     where: whereClause,
   });
@@ -175,9 +184,9 @@ export async function getSalesHistory(
     take: pageSize,
   });
 
-  // Calculate aggregates for all transactions in range (not paginated)
-  const allTransactionsInRange = await prisma.transaction.findMany({
-    where: whereClause,
+  // Calculate aggregates for VALID transactions only (exclude VOID/CANCELLED)
+  const validTransactions = await prisma.transaction.findMany({
+    where: validStatusWhereClause,
     include: {
       items: true,
     },
@@ -186,10 +195,17 @@ export async function getSalesHistory(
   let totalRevenue = 0;
   let totalCost = 0;
 
-  for (const tx of allTransactionsInRange) {
-    totalRevenue += Number(tx.total_amount);
+  for (const tx of validTransactions) {
+    // Revenue is the sum of item prices * quantities (not total_amount which may include tax/discount)
     for (const item of tx.items) {
-      totalCost += Number(item.cost_at_sale) * item.quantity;
+      const itemRevenue = Number(item.price_at_sale) * item.quantity;
+      const itemCost = Number(item.cost_at_sale) * item.quantity;
+      
+      // Skip items with 0 price (data quality issue)
+      if (itemRevenue > 0) {
+        totalRevenue += itemRevenue;
+        totalCost += itemCost;
+      }
     }
   }
 
@@ -206,6 +222,7 @@ export async function getSalesHistory(
     payment_method: tx.payment?.payment_method ?? null,
     amount_tendered: tx.payment?.amount_tendered ? Number(tx.payment.amount_tendered) : null,
     change: tx.payment?.change ? Number(tx.payment.change) : null,
+    order_id: tx.order_id, // Include order_id for PRE-ORDER badge
     items: tx.items.map((item) => ({
       product_name: item.product.product_name,
       barcode: item.product.barcode ?? null,
@@ -376,13 +393,15 @@ export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> 
 
 /**
  * Get quick sales stats for dashboard
+ * Only includes COMPLETED transactions, excludes VOID/CANCELLED
+ * Calculates revenue from item prices (not total_amount) to handle discounts correctly
  */
 export async function getSalesStats() {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  // Today's stats
+  // Today's stats - only COMPLETED transactions
   const todayTransactions = await prisma.transaction.findMany({
     where: {
       created_at: { gte: todayStart },
@@ -391,7 +410,7 @@ export async function getSalesStats() {
     include: { items: true },
   });
 
-  // Month's stats
+  // Month's stats - only COMPLETED transactions
   const monthTransactions = await prisma.transaction.findMany({
     where: {
       created_at: { gte: monthStart },
@@ -405,9 +424,16 @@ export async function getSalesStats() {
     let cost = 0;
 
     for (const tx of transactions) {
-      revenue += Number(tx.total_amount);
+      // Calculate revenue from items (price * qty) to properly track gross revenue
       for (const item of tx.items) {
-        cost += Number(item.cost_at_sale) * item.quantity;
+        const itemPrice = Number(item.price_at_sale);
+        const itemCost = Number(item.cost_at_sale);
+        
+        // Skip items with 0 price (data quality issue)
+        if (itemPrice > 0) {
+          revenue += itemPrice * item.quantity;
+          cost += itemCost * item.quantity;
+        }
       }
     }
 

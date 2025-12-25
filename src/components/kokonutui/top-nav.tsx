@@ -16,9 +16,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
+import { NotificationBell } from "@/components/ui/notification-bell";
 
 interface TopNavProps {
   user?: {
+    id?: string;
     name?: string | null;
     role?: string;
   };
@@ -70,6 +72,11 @@ export default function TopNav({ user }: TopNavProps) {
           <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           <span className="sr-only">Toggle theme</span>
         </Button>
+
+        {/* Notification Bell - Only render on client */}
+        {mounted && user?.id && (
+          <NotificationBell userId={parseInt(user.id)} userType="staff" />
+        )}
 
         {/* User Profile Dropdown - Only render on client to avoid hydration mismatch */}
         {mounted ? (

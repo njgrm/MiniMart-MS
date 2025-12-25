@@ -18,9 +18,11 @@ export type ActionResult = {
 
 /**
  * Get all products with inventory info
+ * By default, excludes archived products unless includeArchived is true
  */
-export async function getProducts() {
+export async function getProducts(includeArchived: boolean = false) {
   const products = await prisma.product.findMany({
+    where: includeArchived ? {} : { is_archived: false },
     include: {
       inventory: true,
     },
@@ -40,6 +42,7 @@ export async function getProducts() {
     reorder_level: product.inventory?.reorder_level ?? 10,
     barcode: product.barcode,
     image_url: product.image_url,
+    is_archived: product.is_archived,
     status: (
       (product.inventory?.current_stock ?? 0) <= (product.inventory?.reorder_level ?? 10)
         ? "LOW_STOCK"
@@ -265,7 +268,7 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
 }
 
 /**
- * Bulk delete multiple products
+ * Bulk delete multiple products (soft delete for products with history)
  */
 export async function bulkDeleteProducts(productIds: number[]): Promise<ActionResult> {
   if (!productIds || productIds.length === 0) {
@@ -273,8 +276,8 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
   }
 
   try {
-    // Check for products with transactions or orders
-    const productsWithRelations = await prisma.product.findMany({
+    // Separate products with history (to archive) from those without (to delete)
+    const productsWithHistory = await prisma.product.findMany({
       where: {
         product_id: { in: productIds },
         OR: [
@@ -282,37 +285,49 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
           { orderItems: { some: {} } },
         ],
       },
-      select: { product_id: true, product_name: true },
+      select: { product_id: true },
     });
 
-    if (productsWithRelations.length > 0) {
-      const names = productsWithRelations.map((p) => p.product_name).join(", ");
-      return {
-        success: false,
-        error: `Cannot delete products with existing transactions or orders: ${names}`,
-      };
-    }
+    const idsWithHistory = new Set(productsWithHistory.map((p) => p.product_id));
+    const idsToArchive = productIds.filter((id) => idsWithHistory.has(id));
+    const idsToDelete = productIds.filter((id) => !idsWithHistory.has(id));
 
-    // Delete all selected products in a transaction
     await prisma.$transaction(async (tx) => {
-      // Delete inventory records
-      await tx.inventory.deleteMany({
-        where: { product_id: { in: productIds } },
-      });
+      // Archive products with sales history
+      if (idsToArchive.length > 0) {
+        await tx.product.updateMany({
+          where: { product_id: { in: idsToArchive } },
+          data: { is_archived: true },
+        });
+      }
 
-      // Delete sales forecasts
-      await tx.salesForecast.deleteMany({
-        where: { product_id: { in: productIds } },
-      });
+      // Hard delete products without history
+      if (idsToDelete.length > 0) {
+        // Delete inventory records
+        await tx.inventory.deleteMany({
+          where: { product_id: { in: idsToDelete } },
+        });
 
-      // Delete products
-      await tx.product.deleteMany({
-        where: { product_id: { in: productIds } },
-      });
+        // Delete sales forecasts
+        await tx.salesForecast.deleteMany({
+          where: { product_id: { in: idsToDelete } },
+        });
+
+        // Delete products
+        await tx.product.deleteMany({
+          where: { product_id: { in: idsToDelete } },
+        });
+      }
     });
 
     revalidatePath("/admin/inventory");
-    return { success: true, data: { deletedCount: productIds.length } };
+    return { 
+      success: true, 
+      data: { 
+        deletedCount: idsToDelete.length,
+        archivedCount: idsToArchive.length,
+      } 
+    };
   } catch (error) {
     console.error("Bulk delete products error:", error);
     return { success: false, error: "Failed to delete products" };
@@ -320,7 +335,8 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
 }
 
 /**
- * Delete a product
+ * Delete a product (soft delete if has sales history, hard delete otherwise)
+ * Preserves referential integrity for historical sales data
  */
 export async function deleteProduct(productId: number): Promise<ActionResult> {
   try {
@@ -328,8 +344,8 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
     const existingProduct = await prisma.product.findUnique({
       where: { product_id: productId },
       include: {
-        transactionItems: true,
-        orderItems: true,
+        transactionItems: { take: 1 }, // Just check if any exist
+        orderItems: { take: 1 },
       },
     });
 
@@ -337,15 +353,24 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
       return { success: false, error: "Product not found" };
     }
 
-    // Prevent deletion if product has transactions or orders
-    if (existingProduct.transactionItems.length > 0 || existingProduct.orderItems.length > 0) {
-      return {
-        success: false,
-        error: "Cannot delete product with existing transactions or orders",
+    const hasHistory = existingProduct.transactionItems.length > 0 || existingProduct.orderItems.length > 0;
+
+    if (hasHistory) {
+      // SOFT DELETE: Archive the product to preserve sales history
+      await prisma.product.update({
+        where: { product_id: productId },
+        data: { is_archived: true },
+      });
+
+      revalidatePath("/admin/inventory");
+      return { 
+        success: true, 
+        data: { archived: true },
+        error: undefined,
       };
     }
 
-    // Delete product (inventory will be cascade deleted due to relation)
+    // HARD DELETE: Product has no history, safe to delete completely
     await prisma.$transaction(async (tx) => {
       // Delete inventory first
       await tx.inventory.deleteMany({
@@ -364,9 +389,39 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
     });
 
     revalidatePath("/admin/inventory");
-    return { success: true };
+    return { success: true, data: { archived: false } };
   } catch (error) {
     console.error("Delete product error:", error);
     return { success: false, error: "Failed to delete product" };
+  }
+}
+
+/**
+ * Restore an archived product
+ */
+export async function restoreProduct(productId: number): Promise<ActionResult> {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { product_id: productId },
+    });
+
+    if (!product) {
+      return { success: false, error: "Product not found" };
+    }
+
+    if (!product.is_archived) {
+      return { success: false, error: "Product is not archived" };
+    }
+
+    await prisma.product.update({
+      where: { product_id: productId },
+      data: { is_archived: false },
+    });
+
+    revalidatePath("/admin/inventory");
+    return { success: true };
+  } catch (error) {
+    console.error("Restore product error:", error);
+    return { success: false, error: "Failed to restore product" };
   }
 }

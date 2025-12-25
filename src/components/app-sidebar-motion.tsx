@@ -140,7 +140,7 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
 
       {/* Navigation Links */}
       <MotionSidebarContent>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col gap-1 font-semibold">
           {navItems.map((item) => {
             const isActive = pathname === item.href || 
               (item.href !== "/admin" && pathname.startsWith(item.href));

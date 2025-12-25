@@ -160,7 +160,9 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
                 <IconMoon className="absolute size-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 <span className="sr-only">Toggle theme</span>
               </Button>
-              <NotificationBell />
+              {user?.id && (
+                <NotificationBell userId={parseInt(user.id)} userType="vendor" />
+              )}
             </div>
 
             <DropdownMenu>
@@ -231,7 +233,9 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
         </Link>
 
         <div className="flex items-center gap-1">
-          <NotificationBell />
+          {user?.id && (
+            <NotificationBell userId={parseInt(user.id)} userType="vendor" />
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">

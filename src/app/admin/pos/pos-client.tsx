@@ -23,8 +23,6 @@ import { motion } from "framer-motion";
 
 type Props = {
   products: PosProduct[];
-  /** GCash QR code URL from store settings */
-  gcashQrUrl?: string | null;
 };
 
 const categoriesFromProducts = (products: PosProduct[]) => {
@@ -50,7 +48,7 @@ const catalogModes: { id: CatalogMode; label: string; icon: React.ElementType }[
   { id: "wholesale", label: "Wholesale", icon: Truck },
 ];
 
-export default function PosClient({ products, gcashQrUrl }: Props) {
+export default function PosClient({ products }: Props) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -226,7 +224,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto px-4 ml-3 py-1 bg-muted/30">
+        <div className="flex-1 overflow-y-auto px-4 ml-3 py-1 bg-background">
           <div className="flex items-center justify-between mb-3">
             
           </div>
@@ -249,7 +247,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
           damping: 30
         }}
       >
-        <CartPanel gcashQrUrl={gcashQrUrl} />
+        <CartPanel />
       </motion.div>
 
       <CameraScanner
@@ -259,11 +257,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
           const found = addByBarcode(code);
           setLastScan(found ? code : null);
           setScanError(found ? null : `No product for barcode: ${code}`);
-          // Camera stays open for continuous scanning
-        }}
-        getProductName={(barcode) => {
-          const product = products.find((p) => p.barcode === barcode);
-          return product?.product_name ?? null;
+          setCameraOpen(false);
         }}
       />
     </div>

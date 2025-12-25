@@ -278,7 +278,7 @@ export function TransactionSheet({ transaction }: TransactionSheetProps) {
               <div class="footer">
                 <p style="font-weight: bold;">THANK YOU, COME AGAIN!</p>
                 <p>THIS SERVES AS YOUR OFFICIAL RECEIPT</p>
-                <p style="margin-top: 5px;">POS Retailer Phis Software ver. 1.3</p>
+                <p style="margin-top: 5px;">Enyaw POS Software ver. 1.0</p>
                 <p>Accred. No. 077-906501861-000338</p>
               </div>
             </div>
@@ -430,7 +430,7 @@ export function TransactionSheet({ transaction }: TransactionSheetProps) {
               <div className="text-center text-[9px] sm:text-[10px]">
                 <p className="font-bold">THANK YOU, COME AGAIN!</p>
                 <p>THIS SERVES AS YOUR OFFICIAL RECEIPT</p>
-                <p className="mt-1 text-gray-500">POS Retailer Phis Software ver. 1.3</p>
+                <p className="mt-1 text-gray-500">Enyaw POS Software ver. 1.0</p>
                 <p className="text-gray-500">Accred. No. 077-906501861-000338</p>
               </div>
             </div>

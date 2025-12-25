@@ -101,6 +101,14 @@ export function PaymentDialog({
     }
   };
 
+  // Handle Enter key to confirm
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && canConfirm) {
+      e.preventDefault();
+      handleConfirm();
+    }
+  };
+
   // Handle QR code image upload - saves to server and database
   const handleQrUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -258,6 +266,7 @@ export function PaymentDialog({
                       type="number"
                       value={amountTendered}
                       onChange={(e) => setAmountTendered(e.target.value)}
+                      onKeyDown={handleKeyDown}
                       placeholder="0.00"
                       className="h-14 pl-8 text-2xl font-mono text-right pr-4"
                       min="0"
@@ -394,6 +403,7 @@ export function PaymentDialog({
                       type="text"
                       value={gcashRefNo}
                       onChange={(e) => setGcashRefNo(e.target.value)}
+                      onKeyDown={handleKeyDown}
                       placeholder="Enter GCash reference number"
                       className="h-11 font-mono text-sm"
                     />

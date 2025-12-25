@@ -19,8 +19,13 @@ export default async function OrdersPage() {
   const orders = await getIncomingOrders();
 
   return (
-    <div className="h-[calc(100vh-theme(spacing.28))] overflow-hidden">
-      <OrderBoard initialOrders={orders} />
+    <div className="h-full w-full flex flex-col">
+      {/* Responsive container with proper padding */}
+      <div className="flex-1 overflow-hidden p-2 md:p-4 lg:p-6">
+        <div className="h-full rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+          <OrderBoard initialOrders={orders} />
+        </div>
+      </div>
     </div>
   );
 }

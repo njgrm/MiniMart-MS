@@ -104,13 +104,13 @@ export default function LoginPage() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="identifier" className="text-foreground text-sm">
-                  Username or Email
+                  Email
                 </Label>
                 <div className="relative">
                   <Input
                     id="identifier"
                     type="text"
-                    placeholder="Enter username or email"
+                    placeholder="Enter email"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     required
@@ -120,9 +120,7 @@ export default function LoginPage() {
                   />
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Staff: use your username • Vendors: use your email
-                </p>
+                
               </div>
 
               <div className="space-y-2">

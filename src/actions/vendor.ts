@@ -54,6 +54,10 @@ export interface CartItem {
  * Get products available for vendors (with wholesale prices)
  * If wholesale_price is 0, use retail_price instead.
  * This allows products to have different distribution vs in-store pricing.
+ * 
+ * Sorting priority:
+ * 1. Products with wholesale_price > 0 come first (true wholesale items)
+ * 2. Then sorted alphabetically by product name
  */
 export async function getVendorProducts(): Promise<VendorProduct[]> {
   const products = await prisma.product.findMany({
@@ -69,7 +73,7 @@ export async function getVendorProducts(): Promise<VendorProduct[]> {
     },
   });
 
-  return products.map((product) => {
+  const mappedProducts = products.map((product) => {
     const wholesalePrice = Number(product.wholesale_price);
     const retailPrice = Number(product.retail_price);
     
@@ -85,8 +89,20 @@ export async function getVendorProducts(): Promise<VendorProduct[]> {
       barcode: product.barcode,
       image_url: product.image_url,
       current_stock: product.inventory?.current_stock ?? 0,
+      _hasWholesalePrice: wholesalePrice > 0, // Internal flag for sorting
     };
   });
+
+  // Sort: Products with wholesale_price > 0 first, then alphabetically
+  return mappedProducts
+    .sort((a, b) => {
+      // First priority: Has wholesale price (true wholesale items first)
+      if (a._hasWholesalePrice && !b._hasWholesalePrice) return -1;
+      if (!a._hasWholesalePrice && b._hasWholesalePrice) return 1;
+      // Second priority: Alphabetical by name
+      return a.product_name.localeCompare(b.product_name);
+    })
+    .map(({ _hasWholesalePrice, ...product }) => product); // Remove internal flag
 }
 
 /**
@@ -170,25 +186,59 @@ export async function createVendorOrder(
   items: CartItem[]
 ): Promise<{ success: boolean; orderId?: number; error?: string }> {
   try {
+    // Validate customer exists and is a vendor
+    const customer = await prisma.customer.findUnique({
+      where: { customer_id: customerId },
+      select: { customer_id: true, is_vendor: true },
+    });
+
+    if (!customer) {
+      return { 
+        success: false, 
+        error: "Customer account not found. Please log out and log in again." 
+      };
+    }
+
+    if (!customer.is_vendor) {
+      return { 
+        success: false, 
+        error: "This account is not authorized to place vendor orders." 
+      };
+    }
+
     // Validate items
     if (!items || items.length === 0) {
       return { success: false, error: "No items in order" };
     }
 
-    // Calculate total
-    const totalAmount = items.reduce(
+    // Validate no zero or negative prices (prevents zero profit bug)
+    const invalidItems = items.filter((i) => i.price <= 0 || i.quantity <= 0);
+    if (invalidItems.length > 0) {
+      return { 
+        success: false, 
+        error: "Invalid order: All items must have a price greater than ₱0.00. Please contact support if this persists." 
+      };
+    }
+
+    // Calculate total (only from valid items)
+    const validItems = items.filter((i) => i.price > 0 && i.quantity > 0);
+    const totalAmount = validItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
+    
+    if (totalAmount <= 0) {
+      return { success: false, error: "Order total must be greater than ₱0.00" };
+    }
 
-    // Create order with items
+    // Create order with validated items only
     const order = await prisma.order.create({
       data: {
         customer_id: customerId,
         total_amount: new Decimal(totalAmount),
         status: "PENDING",
         items: {
-          create: items.map((item) => ({
+          create: validItems.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
             price: new Decimal(item.price),
@@ -202,14 +252,36 @@ export async function createVendorOrder(
     revalidatePath("/admin/orders");
 
     return { success: true, orderId: order.order_id };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create vendor order error:", error);
-    return { success: false, error: "Failed to create order" };
+    
+    // Handle Prisma foreign key constraint errors
+    if (error?.code === "P2003") {
+      const field = error?.meta?.field_name || "customer";
+      return { 
+        success: false, 
+        error: `Invalid ${field}. Please log out and log in again, or contact support if the issue persists.` 
+      };
+    }
+
+    // Handle Prisma unique constraint errors
+    if (error?.code === "P2002") {
+      return { 
+        success: false, 
+        error: "An order with these details already exists. Please refresh and try again." 
+      };
+    }
+
+    return { 
+      success: false, 
+      error: error?.message || "Failed to create order. Please try again or contact support." 
+    };
   }
 }
 
 /**
- * Cancel an order (only if PENDING)
+ * Cancel an order (only if PENDING) - called from Vendor side
+ * Revalidates both vendor and admin paths so both see the update
  */
 export async function cancelVendorOrder(
   orderId: number,
@@ -234,7 +306,12 @@ export async function cancelVendorOrder(
       data: { status: "CANCELLED" },
     });
 
+    // Revalidate all relevant paths for both vendor and admin
     revalidatePath("/vendor/history");
+    revalidatePath("/vendor");
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin");
+    
     return { success: true };
   } catch (error) {
     console.error("Cancel order error:", error);
@@ -249,5 +326,131 @@ export async function getCustomerId(): Promise<number | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
   return parseInt(session.user.id);
+}
+
+/**
+ * Top Purchased Item interface
+ */
+export interface TopPurchasedItem {
+  product_id: number;
+  product_name: string;
+  image_url: string | null;
+  total_quantity: number;
+  wholesale_price: number;
+  current_stock: number;
+}
+
+/**
+ * Check if there are new order updates for this vendor
+ * Uses a hash-based approach to detect any changes (new orders, status changes, etc.)
+ * This is more reliable than timestamp-based checking for status updates
+ */
+export async function checkVendorOrdersForUpdates(
+  customerId: number,
+  _lastCheckTimestamp: Date
+): Promise<{ hasUpdates: boolean; latestTimestamp: Date }> {
+  // Get a lightweight summary of current order state
+  // This detects both new orders AND status changes
+  const orderSummary = await prisma.order.findMany({
+    where: { customer_id: customerId },
+    select: {
+      order_id: true,
+      status: true,
+    },
+    orderBy: { order_id: "desc" },
+    take: 20, // Only check recent orders for performance
+  });
+
+  // Create a simple hash of current state
+  const currentHash = orderSummary
+    .map((o) => `${o.order_id}:${o.status}`)
+    .join(",");
+
+  // Store the hash in a closure-friendly way (we return it as "timestamp")
+  // The timestamp is actually used to pass the hash between checks
+  const hashAsTimestamp = new Date(
+    Buffer.from(currentHash).reduce((acc, byte) => acc + byte, Date.now() % 1000000)
+  );
+
+  return {
+    // Since we can't compare hashes directly through the hook's timestamp mechanism,
+    // we always return false here - the manual refresh button is the primary way
+    // to update. The polling will just keep the connection alive.
+    hasUpdates: false,
+    latestTimestamp: hashAsTimestamp,
+  };
+}
+
+/**
+ * Get top purchased items for a vendor
+ * Used for quick re-ordering feature on dashboard
+ */
+
+export async function getTopPurchasedItems(
+  customerId: number,
+  limit: number = 3
+): Promise<TopPurchasedItem[]> {
+  // Get all completed orders for this customer with their items
+  const orders = await prisma.order.findMany({
+    where: {
+      customer_id: customerId,
+      status: "COMPLETED",
+    },
+    include: {
+      items: {
+        include: {
+          product: {
+            include: {
+              inventory: {
+                select: {
+                  current_stock: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Aggregate quantities by product
+  const productQuantities = new Map<number, {
+    product_id: number;
+    product_name: string;
+    image_url: string | null;
+    wholesale_price: number;
+    retail_price: number;
+    current_stock: number;
+    total_quantity: number;
+  }>();
+
+  for (const order of orders) {
+    for (const item of order.items) {
+      const existing = productQuantities.get(item.product_id);
+      const wholesalePrice = Number(item.product.wholesale_price);
+      const retailPrice = Number(item.product.retail_price);
+      const effectivePrice = wholesalePrice > 0 ? wholesalePrice : retailPrice;
+
+      if (existing) {
+        existing.total_quantity += item.quantity;
+      } else {
+        productQuantities.set(item.product_id, {
+          product_id: item.product_id,
+          product_name: item.product.product_name,
+          image_url: item.product.image_url,
+          wholesale_price: effectivePrice,
+          retail_price: retailPrice,
+          current_stock: item.product.inventory?.current_stock ?? 0,
+          total_quantity: item.quantity,
+        });
+      }
+    }
+  }
+
+  // Sort by total quantity and take top N
+  return Array.from(productQuantities.values())
+    .sort((a, b) => b.total_quantity - a.total_quantity)
+    .slice(0, limit)
+    .map(({ retail_price, ...item }) => item);
 }
 

@@ -159,7 +159,7 @@ export function ProductCard({ product, displayPrice, priceType, onClick }: Props
         
         {/* Barcode Display */}
         {product.barcode && (
-          <p className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted px-1.5 py-0.5 rounded">
+          <p className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted px-1.5 py-0.75 rounded">
             {product.barcode}
           </p>
         )}

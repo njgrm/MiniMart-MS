@@ -337,7 +337,7 @@
 /* ===========================================
  * Print Styles for Receipt Printing
  * Supports both #receipt-print-area and .receipt-template
- * Standard thermal receipt width: 80mm (~300px)
+ * Optimized for 58mm thermal printers (POS58D)
  * =========================================== */
 @media print {
   /* Hide everything by default */
@@ -359,15 +359,17 @@
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 80mm !important;
-    max-width: 80mm !important;
-    padding: 2mm !important;
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 0 !important;
     margin: 0 !important;
     background: white !important;
     color: black !important;
-    font-size: 12px !important;
-    line-height: 1.4 !important;
+    font-size: 10pt !important;
+    line-height: 1.1 !important;
     display: block !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   
   /* Remove any shadows/borders in print */
@@ -377,15 +379,24 @@
     text-shadow: none !important;
   }
   
-  /* Ensure monospace font for receipt */
+  /* Ensure monospace font for receipt - use thicker monospace fonts */
   #receipt-print-area,
   .receipt-template {
-    font-family: "Courier New", Courier, monospace !important;
+    font-family: "Lucida Console", Consolas, monospace !important;
+    -webkit-font-smoothing: none !important;
+    -moz-osx-font-smoothing: grayscale !important;
+    text-rendering: optimizeSpeed !important;
   }
   
-  /* Page settings for thermal printer */
+  /* Bold text should be heavier for thermal clarity */
+  #receipt-print-area .font-bold,
+  .receipt-template .font-bold {
+    font-weight: bold !important;
+  }
+  
+  /* Page settings for 58mm thermal printer */
   @page {
-    size: 80mm auto;
+    size: 58mm auto;
     margin: 0;
   }
   

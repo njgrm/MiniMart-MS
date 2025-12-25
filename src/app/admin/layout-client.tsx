@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 interface AdminLayoutClientProps {
   children: React.ReactNode;
   user?: {
+    id?: string;
     name?: string | null;
     role?: string;
   };

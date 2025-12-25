@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   IconShoppingCart,
   IconHistory,
@@ -8,7 +9,10 @@ import {
   IconClock,
   IconPackage,
   IconArrowRight,
+  IconPlus,
+  IconTrendingUp,
 } from "@tabler/icons-react";
+import { toast } from "sonner";
 import {
   Card,
   CardAction,
@@ -21,12 +25,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { VendorStats, VendorOrder } from "@/actions/vendor";
+import type { VendorStats, VendorOrder, TopPurchasedItem } from "@/actions/vendor";
 
 interface VendorDashboardProps {
   userName: string;
   stats: VendorStats;
   recentOrders: VendorOrder[];
+  topPurchasedItems: TopPurchasedItem[];
 }
 
 /**
@@ -36,6 +41,7 @@ export function VendorDashboard({
   userName,
   stats,
   recentOrders,
+  topPurchasedItems,
 }: VendorDashboardProps) {
   const router = useRouter();
 
@@ -82,6 +88,24 @@ export function VendorDashboard({
     if (hour < 12) return "Good morning";
     if (hour < 18) return "Good afternoon";
     return "Good evening";
+  };
+
+  // Quick add - navigates to order page with pre-selected item
+  const handleQuickAdd = (item: TopPurchasedItem) => {
+    if (item.current_stock === 0) {
+      toast.error(`${item.product_name} is out of stock`);
+      return;
+    }
+
+    // Show toast and navigate to order page with the item as a URL parameter
+    toast.success(`${item.product_name} will be added to cart`, {
+      description: "Navigating to order page...",
+      duration: 2000,
+    });
+
+    // Navigate to order page with pre-select parameter
+    // The order page will read this and add the item to cart
+    router.push(`/vendor/order?addProduct=${item.product_id}`);
   };
 
   return (
@@ -209,7 +233,7 @@ export function VendorDashboard({
         </Card>
       </div>
 
-      {/* Quick Actions & Recent Orders */}
+      {/* Quick Actions & Top Purchased Items */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Quick Actions */}
         <Card>
@@ -239,7 +263,95 @@ export function VendorDashboard({
           </CardContent>
         </Card>
 
-        {/* Recent Orders */}
+        {/* Top Purchased Items - Quick Re-order */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between w-full">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <IconTrendingUp className="size-5 text-primary" />
+                  Top Purchased Items
+                </CardTitle>
+                <CardDescription>Quick re-order your favorites</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {topPurchasedItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[180px] py-8 text-muted-foreground">
+                <IconPackage className="size-8 mb-2 opacity-50" />
+                <p className="text-sm">No purchase history yet</p>
+                <Button
+                  variant="link"
+                  className="mt-2"
+                  onClick={() => router.push("/vendor/order")}
+                >
+                  Place your first order
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {topPurchasedItems.map((item) => {
+                  const isOutOfStock = item.current_stock === 0;
+                  return (
+                    <div
+                      key={item.product_id}
+                      className="flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors"
+                    >
+                      {/* Product Image */}
+                      <div className="size-12 rounded-lg bg-muted overflow-hidden shrink-0">
+                        {item.image_url ? (
+                          <Image
+                            src={item.image_url}
+                            alt={item.product_name}
+                            width={48}
+                            height={48}
+                            className="object-cover size-full"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full">
+                            <IconPackage className="size-5 text-muted-foreground/30" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Product Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm line-clamp-1">
+                          {item.product_name}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-mono text-primary font-medium">
+                            {formatCurrency(item.wholesale_price)}
+                          </span>
+                          <span>•</span>
+                          <span>{item.total_quantity} ordered total</span>
+                        </div>
+                      </div>
+
+                      {/* Quick Add Button */}
+                      <Button
+                        size="sm"
+                        variant={isOutOfStock ? "outline" : "default"}
+                        onClick={() => handleQuickAdd(item)}
+                        disabled={isOutOfStock}
+                        className="shrink-0 gap-1"
+                      >
+                        <IconPlus className="size-4" />
+                        {isOutOfStock ? "Out" : "Add"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Orders */}
+      <div className="grid grid-cols-1 gap-4">
+
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between w-full">
@@ -312,4 +424,6 @@ export function VendorDashboard({
     </div>
   );
 }
+
+
 

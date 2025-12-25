@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -55,6 +55,7 @@ import { useNotificationStore } from "@/stores/use-notification-store";
 
 // Category display name mapping (database value -> UI-friendly name)
 const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  "SOFTDRINKS_CASE": "Soft Drinks Case",
   "BEVERAGES": "Beverages",
   "CANNED_GOODS": "Canned Goods",
   "CONDIMENTS": "Condiments",
@@ -77,10 +78,13 @@ interface VendorOrderClientProps {
   products: VendorProduct[];
   categories: string[];
   customerId: number;
+  /** Product ID to auto-add to cart (from dashboard quick add) */
+  preAddProductId?: number;
 }
 
 interface LocalCartItem extends CartItem {
   image_url: string | null;
+  current_stock: number;
 }
 
 /**
@@ -91,11 +95,49 @@ export function VendorOrderClient({
   products,
   categories,
   customerId,
+  preAddProductId,
 }: VendorOrderClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const hasAddedPreSelectRef = useRef(false);
+
+  // Auto-add product from URL param (from dashboard quick add)
+  useEffect(() => {
+    if (preAddProductId && !hasAddedPreSelectRef.current) {
+      const product = products.find((p) => p.product_id === preAddProductId);
+      if (product && product.current_stock > 0) {
+        // Add to cart
+        setCart((prev) => {
+          const existing = prev.find((item) => item.product_id === product.product_id);
+          if (existing) {
+            return prev.map((item) =>
+              item.product_id === product.product_id
+                ? { ...item, quantity: item.quantity + 1 }
+                : item
+            );
+          }
+          return [
+            ...prev,
+            {
+              product_id: product.product_id,
+              product_name: product.product_name,
+              quantity: 1,
+              price: product.wholesale_price,
+              image_url: product.image_url,
+              current_stock: product.current_stock,
+            },
+          ];
+        });
+        toast.success(`${product.product_name} added to cart!`);
+        hasAddedPreSelectRef.current = true;
+        
+        // Clean up URL without causing navigation
+        window.history.replaceState({}, "", "/vendor/order");
+      }
+    }
+  }, [preAddProductId, products]);
   const [cart, setCart] = useState<LocalCartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -149,6 +191,7 @@ export function VendorOrderClient({
           quantity: 1,
           price: product.wholesale_price,
           image_url: product.image_url,
+          current_stock: product.current_stock,
         },
       ];
     });
@@ -314,10 +357,10 @@ export function VendorOrderClient({
                   return (
                     <Card
                       key={product.product_id}
-                      className={`group relative overflow-hidden transition-shadow hover:shadow-md ${isOutOfStock ? "opacity-60" : ""}`}
+                      className={`group relative overflow-hidden transition-shadow hover:shadow-md flex flex-col h-full ${isOutOfStock ? "opacity-60" : ""}`}
                     >
                       {/* Product Image */}
-                      <div className="aspect-square relative bg-muted overflow-hidden">
+                      <div className="aspect-square relative bg-muted overflow-hidden shrink-0">
                         {product.image_url ? (
                           <Image
                             src={product.image_url}
@@ -341,14 +384,15 @@ export function VendorOrderClient({
                       </div>
 
                       {/* Product Info */}
-                      <CardContent className="p-3">
+                      <CardContent className="p-3 flex flex-col flex-1">
                         <p className="font-medium text-sm line-clamp-2 mb-1">
                           {product.product_name}
                         </p>
-                        <Badge variant="outline" className="text-xs mb-2">
+                        <Badge variant="outline" className="text-xs mb-2 w-fit">
                           {getCategoryDisplayName(product.category)}
                         </Badge>
-                        <div className="flex items-end justify-between">
+                        {/* Price & Add Button - Pinned to bottom */}
+                        <div className="flex items-end justify-between mt-auto pt-2">
                           <div>
                             <p className="text-lg font-bold text-primary">
                               {formatCurrency(product.wholesale_price)}
@@ -499,9 +543,14 @@ function CartContent({
               {/* Details */}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm line-clamp-1">{item.product_name}</p>
-                <p className="text-sm text-primary font-mono">
-                  {formatCurrency(item.price)}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-primary font-mono">
+                    {formatCurrency(item.price)}
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    • {item.current_stock} in stock
+                  </span>
+                </div>
                 <div className="flex items-center gap-2 mt-1">
                   <Button
                     variant="outline"

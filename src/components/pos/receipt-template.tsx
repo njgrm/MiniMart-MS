@@ -69,8 +69,6 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
       return amount.toFixed(2);
     };
 
-    const separator = "─".repeat(40);
-
     // Total entries count (sum of quantities)
     const totalEntries = data.items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -87,74 +85,104 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
       <div
         ref={ref}
         id="receipt-print-area"
-        className="hidden print:block font-mono text-[11px] leading-tight text-black bg-white p-2"
+        className="hidden print:block font-mono text-black bg-white"
         style={{
-          width: "80mm",
-          maxWidth: "80mm",
-          fontSize: "11px",
-          lineHeight: "1.3",
-          fontFamily: "Consolas, Monaco, 'Courier New', monospace",
+          width: "58mm",
+          maxWidth: "58mm",
+          fontSize: "10pt",
+          lineHeight: "1.2", // Slightly looser for readability with bold text
+          fontFamily: '"Lucida Console", Consolas, monospace',
+          // fontWeight: "bold", -- Removed global bold
+          fontWeight: "normal",
+          WebkitFontSmoothing: "none",
+          padding: "0",
+          margin: "0"
         }}
       >
         {/* Store Header - Exact Match */}
-        <div className="text-center mb-2">
-          <p className="font-bold text-sm">CHRISTIAN MINIMART</p>
+        <div className="text-center" style={{ marginBottom: "2mm" }}>
+          <div className="flex justify-center mb-1">
+            <img 
+              src="/christian_minimart_logo.png" 
+              alt="Logo" 
+              style={{ width: "50mm", height: "auto", filter: "grayscale(100%)" }} 
+            />
+          </div>
+          <p style={{ fontWeight: "bold", fontSize: "14pt" }}>CHRISTIAN MINIMART</p>
           <p>Cor. Fleurdeliz & Concordia Sts.</p>
           <p>Prk. Paghidaet Mansilingan Bacolod City</p>
-          <p>Tel No. 09474467550</p>
-          <p>TIN: 926-018-860-000 NV</p>
-          <p>S/N: DBPDCGU2HVF</p>
-          <p>Prop. : Magabilin, Gracyl Gonzales</p>
-          <p>Permit No. 014-077-185000-000</p>
-          <p>MIN: 140351772</p>
+          
+          <div className="flex justify-between mt-1">
+            <span>Tel No.</span>
+            <span>09474467550</span>
+          </div>
+          <div className="flex justify-between">
+            <span>TIN:</span>
+            <span>926-018-860-000 NV</span>
+          </div>
+          <div className="flex justify-between">
+            <span>S/N:</span>
+            <span>DBPDCGU2HVF</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Prop.:</span>
+            <span>Magabilin, Gracyl</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Permit No.:</span>
+            <span>014-077-185000</span>
+          </div>
+          <div className="flex justify-between">
+            <span>MIN:</span>
+            <span>140351772</span>
+          </div>
         </div>
 
-        <p>{separator}</p>
+        <div className="w-full border-b-2 border-black my-0.5 border-solid"></div>
 
         {/* Receipt Info */}
-        <div className="my-2">
+        <div className="my-1 text-[11pt]">
           <div className="flex justify-between">
-            <span>Date: {formatDate(data.date)}</span>
-            <span>Time: {formatTime(data.date)}</span>
+            <span><span className="font-bold">Date:</span> {formatDate(data.date)}</span>
+            <span>{formatTime(data.date)}</span>
           </div>
-          <p>Cashier: {data.cashierName || "System"}</p>
-          <p>Receipt No. {data.receiptNumber.substring(0, 12)}</p>
-          <p>Sold to: {data.customerName || "CASH"}</p>
+          <p><span className="font-bold">Cashier:</span> {data.cashierName || "System"}</p>
+          <p><span className="font-bold">Rcpt #:</span> {data.receiptNumber.substring(0, 15)}</p>
+          <p><span className="font-bold">Sold to:</span> {data.customerName || "CASH"}</p>
         </div>
 
-        <p>{separator}</p>
+        <div className="w-full border-b-2 border-black my-0.5 border-solid"></div>
 
         {/* Items List - Exact Format */}
-        <div className="my-2 space-y-2">
+        <div className="my-1 space-y-1">
           {data.items.map((item, index) => (
             <div key={index}>
-              <p>[{item.quantity}] {item.name}</p>
-              <div className="flex justify-between pl-6">
-                <span>{item.barcode || "N/A"}</span>
-                <span>{formatCurrency(item.price)}</span>
+              <p className="font-bold leading-tight">{item.quantity} x {item.name}</p>
+              <div className="flex justify-between">
+                <span>@{formatCurrency(item.price)}</span>
                 <span>{formatCurrency(item.subtotal)}</span>
               </div>
             </div>
           ))}
         </div>
 
-        <p>{separator}</p>
+        <div className="w-full border-b-2 border-black my-0.5 border-solid"></div>
 
         {/* Totals - Exact Format */}
-        <div className="my-2">
+        <div className="my-1">
           <div className="flex justify-between">
             <span>Sub Total:</span>
             <span>{formatCurrency(data.subtotal)}</span>
           </div>
         </div>
 
-        <div className="my-2 space-y-1">
-          <p>Terminal No: 01</p>
-          <p>Salesman: {data.cashierName || "System"}</p>
-          <p>Total No. of Entries: {totalEntries}</p>
-          <div className="flex justify-between font-bold">
-            <span>Net Total:</span>
-            <span>{formatCurrency(data.totalDue)}</span>
+        <div className="my-1 space-y-0.5">
+          <p>Items: {totalEntries}</p>
+          <div className="flex justify-between font-bold text-xl items-end mt-1">
+            <span>TOTAL:</span>
+            <span style={{ transform: "scaleX(1.1)", transformOrigin: "right", display: "inline-block" }}>
+              P{formatCurrency(data.totalDue)}
+            </span>
           </div>
           {data.discountAmount > 0 && (
             <div className="flex justify-between">
@@ -169,23 +197,19 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
             </div>
           )}
           <div className="flex justify-between">
-            <span>C Tend:</span>
+            <span>CASH:</span>
             <span>{formatCurrency(data.amountTendered)}</span>
           </div>
           <div className="flex justify-between font-bold">
-            <span>Change:</span>
+            <span>CHANGE:</span>
             <span>{formatCurrency(data.change)}</span>
           </div>
         </div>
 
-        <p>{separator}</p>
+        <div className="w-full border-b-2 border-black my-0.5 border-solid"></div>
 
-        {/* VAT Breakdown - Correct 12% VAT calculation */}
-        <div className="my-2 space-y-1">
-          <div className="flex justify-between">
-            <span>Non VAT Sales:</span>
-            <span>{formatCurrency(nonVatSales)}</span>
-          </div>
+        {/* VAT Breakdown - Compact */}
+        <div className="my-1 space-y-0.5 text-[10pt]">
           <div className="flex justify-between">
             <span>VAT Sales:</span>
             <span>{formatCurrency(vatSales)}</span>
@@ -194,24 +218,24 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
             <span>VAT (12%):</span>
             <span>{formatCurrency(vatAmount)}</span>
           </div>
-          <div className="flex justify-between font-bold">
-            <span>Net Sales:</span>
-            <span>{formatCurrency(netSales)}</span>
+          <div className="flex justify-between">
+            <span>Exempt:</span>
+            <span>{formatCurrency(nonVatSales)}</span>
           </div>
         </div>
 
-        <p>{separator}</p>
+        <div className="w-full border-b-2 border-black my-0.5 border-solid"></div>
 
         {/* Footer - Exact Match */}
-        <div className="text-center mt-3 space-y-1">
-          <p className="font-bold">THANK YOU, COME AGAIN!</p>
-          <p>THIS SERVES AS YOUR OFFICIAL RECEIPT</p>
-          <p className="text-[10px] mt-2">POS Retailer Phis Software ver. 1.3</p>
-          <p className="text-[10px]">Accred. No. 077-906501861-000338</p>
+        <div className="text-center mt-2 space-y-0.5">
+          <p className="font-bold">THANK YOU!</p>
+          <p className="text-[10pt]">OFFICIAL RECEIPT</p>
+          <p className="text-[9pt] mt-1">Enyaw POS Ver. 1.0</p>
+          <p className="text-[9pt]">Accred: 077-906501861-000338</p>
         </div>
 
         {/* Extra space at bottom for paper cutting */}
-        <div className="h-8" />
+        <div className="h-4" />
       </div>
     );
   }

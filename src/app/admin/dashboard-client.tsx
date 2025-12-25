@@ -154,7 +154,7 @@ export function DashboardClient({
           {/* Critical Stock Alert */}
           {inventoryMetrics.outOfStockItems > 0 && (
             <Card
-              className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 cursor-pointer hover:shadow-md transition-shadow"
+              className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
               onClick={() => router.push("/admin/inventory?status=out")}
             >
               <CardContent className="flex items-center gap-4 p-4">
@@ -177,7 +177,7 @@ export function DashboardClient({
           {/* Low Stock Alert */}
           {inventoryMetrics.lowStockItems > 0 && (
             <Card
-              className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 cursor-pointer hover:shadow-md transition-shadow"
+              className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
               onClick={() => router.push("/admin/inventory?status=low")}
             >
               <CardContent className="flex items-center gap-4 p-4">
@@ -201,9 +201,9 @@ export function DashboardClient({
 
       {/* Section Cards - Reference Dashboard Style */}
       <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-3 sm:gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-sm lg:grid-cols-4">
-        {/* Today's Revenue Card */}
+        {/* Today's Revenue Card - Emerald */}
         <Card
-          className="@container/card cursor-pointer hover:shadow-md transition-shadow"
+          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
           onClick={() => router.push("/admin/sales/financial")}
         >
           <CardHeader className="p-4 sm:p-6">
@@ -231,9 +231,9 @@ export function DashboardClient({
           </CardFooter>
         </Card>
 
-        {/* Today's Profit Card */}
+        {/* Today's Profit Card - Indigo */}
         <Card
-          className="@container/card cursor-pointer hover:shadow-md transition-shadow"
+          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
           onClick={() => router.push("/admin/sales/financial")}
         >
           <CardHeader className="p-4 sm:p-6">
@@ -260,9 +260,9 @@ export function DashboardClient({
           </CardFooter>
         </Card>
 
-        {/* Monthly Revenue Card */}
+        {/* Monthly Revenue Card - Emerald */}
         <Card
-          className="@container/card cursor-pointer hover:shadow-md transition-shadow"
+          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
           onClick={() => router.push("/admin/sales/financial")}
         >
           <CardHeader className="p-4 sm:p-6">
@@ -271,7 +271,7 @@ export function DashboardClient({
               {formatCurrency(stats.month.revenue)}
             </CardTitle>
             <CardAction>
-              <Badge variant="outline" className="gap-1 text-xs">
+              <Badge variant="outline" className="gap-1 text-xs text-emerald-600 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800">
                 <IconChartBar className="size-3" />
                 <span className="hidden sm:inline">{stats.month.count} sales</span>
                 <span className="sm:hidden">{stats.month.count}</span>
@@ -292,7 +292,7 @@ export function DashboardClient({
 
         {/* Inventory Status Card */}
         <Card
-          className="@container/card cursor-pointer hover:shadow-md transition-shadow"
+          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
           onClick={() => router.push("/admin/inventory")}
         >
           <CardHeader className="p-4 sm:p-6">
@@ -390,6 +390,7 @@ export function DashboardClient({
                     backgroundColor: "hsl(var(--card))",
                     borderColor: "hsl(var(--border))",
                     borderRadius: "0.5rem",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                   }}
                   formatter={(value: number) => [formatCurrency(value), "Revenue"]}
                 />
@@ -407,7 +408,7 @@ export function DashboardClient({
       </Card>
 
       {/* Bottom Section: Recent Activity, Top Products & Quick Actions */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-6">
         {/* Recent Activity */}
         <Card className="lg:col-span-1">
           <CardHeader>
