@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { ScanBarcode, Search, Camera, ShoppingBag, Truck } from "lucide-react";
+import { ScanBarcode, Search, Camera, ShoppingBag, Truck, Monitor, Smartphone } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,15 +14,19 @@ import {
   getCartTotal,
   filterProductsForCatalog 
 } from "@/stores/use-pos-store";
-import { usePosLayoutStore } from "@/stores/use-pos-layout-store";
+import { usePosLayoutStore, type PosViewMode } from "@/stores/use-pos-layout-store";
 import { ProductGrid } from "@/components/pos/product-grid";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { CameraScanner } from "@/components/pos/camera-scanner";
 import { ResizeHandle } from "@/components/pos/resize-handle";
-import { motion } from "framer-motion";
+import { LegacyPOSLayout } from "@/components/pos/legacy-pos-layout";
+import { usePosAudio } from "@/hooks/use-pos-audio";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 
 type Props = {
   products: PosProduct[];
+  gcashQrUrl?: string | null;
 };
 
 const categoriesFromProducts = (products: PosProduct[]) => {
@@ -48,7 +52,13 @@ const catalogModes: { id: CatalogMode; label: string; icon: React.ElementType }[
   { id: "wholesale", label: "Wholesale", icon: Truck },
 ];
 
-export default function PosClient({ products }: Props) {
+/** View mode options */
+const viewModes: { id: PosViewMode; label: string; icon: React.ElementType }[] = [
+  { id: "touch", label: "Touch", icon: Smartphone },
+  { id: "legacy", label: "Legacy", icon: Monitor },
+];
+
+export default function PosClient({ products, gcashQrUrl }: Props) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -59,13 +69,19 @@ export default function PosClient({ products }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { setProducts, addByBarcode, catalogMode, setCatalogMode, cart } = usePosStore();
-  const { cartWidth, isResizing } = usePosLayoutStore();
+  const { cartWidth, isResizing, viewMode, setViewMode, initializeViewMode, setLastAddedItemId } = usePosLayoutStore();
+  const { playSuccessBeep, playErrorBuzz } = usePosAudio();
+
+  // Initialize view mode based on device type (only once)
+  useEffect(() => {
+    initializeViewMode();
+  }, [initializeViewMode]);
 
   useEffect(() => {
     setProducts(products);
   }, [products, setProducts]);
 
-  // Keyboard scanner listener (USB gun behaves like keyboard)
+  // Keyboard scanner listener (USB gun behaves like keyboard) with audio feedback
   useEffect(() => {
     let buffer = "";
     let lastTime = 0;
@@ -77,6 +93,14 @@ export default function PosClient({ products }: Props) {
       if (e.key === "Enter") {
         if (buffer.trim()) {
           const found = addByBarcode(buffer.trim());
+          if (found) {
+            playSuccessBeep();
+            setLastAddedItemId(found.product_id);
+            setTimeout(() => setLastAddedItemId(null), 1500);
+          } else {
+            playErrorBuzz();
+            toast.error(`Product not found: ${buffer.trim()}`);
+          }
           setLastScan(found ? buffer.trim() : null);
           setScanError(found ? null : `No product for barcode: ${buffer.trim()}`);
         }
@@ -90,7 +114,7 @@ export default function PosClient({ products }: Props) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [addByBarcode]);
+  }, [addByBarcode, playSuccessBeep, playErrorBuzz, setLastAddedItemId]);
 
   // Filter products based on catalog mode first
   const catalogProducts = useMemo(
@@ -98,21 +122,84 @@ export default function PosClient({ products }: Props) {
     [products, catalogMode]
   );
 
-  // Get categories from catalog-filtered products
-  const categories = useMemo(() => categoriesFromProducts(catalogProducts), [catalogProducts]);
-
-  // Further filter by search and category
+  // Then filter by search/category
   const filteredProducts = useMemo(() => {
-    return catalogProducts.filter((product) => {
-      const matchesCategory = category === "all" || product.category === category;
-      const matchesSearch =
-        product.product_name.toLowerCase().includes(search.toLowerCase()) ||
-        (product.barcode ?? "").toLowerCase().includes(search.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
+    let result = catalogProducts;
+    if (category !== "all") {
+      result = result.filter((p) => p.category === category);
+    }
+    if (search.trim()) {
+      const lower = search.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(lower) ||
+          p.barcode.toLowerCase().includes(lower)
+      );
+    }
+    return result;
   }, [catalogProducts, category, search]);
 
-  const cartTotal = getCartTotal(cart);
+  const categories = useMemo(() => categoriesFromProducts(products), [products]);
+
+  const handleCameraScan = (barcode: string) => {
+    const found = addByBarcode(barcode);
+    if (found) {
+      playSuccessBeep();
+      setLastAddedItemId(found.product_id);
+      setTimeout(() => setLastAddedItemId(null), 1500);
+      setLastScan(barcode);
+      setScanError(null);
+      toast.success(`Added: ${found.name}`);
+    } else {
+      playErrorBuzz();
+      setScanError(`No product for barcode: ${barcode}`);
+      toast.error(`Product not found: ${barcode}`);
+    }
+    setCameraOpen(false);
+  };
+
+  // Get cart total
+  const cartTotal = getCartTotal(cart, catalogMode);
+
+  // If in Legacy Mode, render the LegacyPOSLayout
+  if (viewMode === "legacy") {
+    return (
+      <div className="relative">
+        {/* Mode Toggle - Fixed Position */}
+        <div className="fixed top-2 right-4 z-50">
+          <div className="relative flex bg-card border border-border rounded-lg px-1 py-1 shadow-lg">
+            {viewModes.map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setViewMode(mode.id)}
+                className={cn(
+                  "relative flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-md z-10 transition-colors duration-200",
+                  viewMode === mode.id
+                    ? "text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {viewMode === mode.id && (
+                  <motion.div
+                    layoutId="view-mode-highlight"
+                    className="absolute inset-0 bg-primary rounded-md shadow-sm"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <mode.icon className="h-3.5 w-3.5 relative z-10" />
+                <span className="relative z-10">{mode.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <LegacyPOSLayout products={products} gcashQrUrl={gcashQrUrl} />
+      </div>
+    );
+  }
+
+  // Touch Mode (original layout) continues below...
 
   return (
     <div 
@@ -197,6 +284,33 @@ export default function PosClient({ products }: Props) {
                 {scanError}
               </Badge>
             )}
+
+            {/* View Mode Toggle */}
+            <div className="relative flex bg-muted border border-border rounded-lg px-1 py-1 flex-shrink-0 ml-2">
+              {viewModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setViewMode(mode.id)}
+                  className={cn(
+                    "relative flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-medium rounded-md z-10 transition-colors duration-200",
+                    viewMode === mode.id
+                      ? "text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {viewMode === mode.id && (
+                    <motion.div
+                      layoutId="view-mode-highlight-touch"
+                      className="absolute inset-0 bg-primary rounded-md shadow-sm"
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <mode.icon className="h-3.5 w-3.5 relative z-10" />
+                  <span className="relative z-10 hidden lg:inline">{mode.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Category pills row */}
@@ -247,7 +361,7 @@ export default function PosClient({ products }: Props) {
           damping: 30
         }}
       >
-        <CartPanel />
+        <CartPanel gcashQrUrl={gcashQrUrl} />
       </motion.div>
 
       <CameraScanner

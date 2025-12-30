@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { uploadImageRaw } from "@/actions/upload";
 import { updateGcashQr } from "@/actions/settings";
 import { toast } from "sonner";
+import type { PosViewMode } from "@/stores/use-pos-layout-store";
 
 interface PaymentDialogProps {
   open: boolean;
@@ -35,6 +36,8 @@ interface PaymentDialogProps {
   totalDue: number;
   /** Initial GCash QR code URL from database */
   initialGcashQrUrl?: string | null;
+  /** POS view mode - affects UI layout */
+  viewMode?: PosViewMode;
 }
 
 // Payment method options
@@ -54,7 +57,9 @@ export function PaymentDialog({
   taxAmount,
   totalDue,
   initialGcashQrUrl,
+  viewMode = "touch",
 }: PaymentDialogProps) {
+  const isLegacyMode = viewMode === "legacy";
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "GCASH">("CASH");
   const [amountTendered, setAmountTendered] = useState<string>("");
   const [gcashRefNo, setGcashRefNo] = useState<string>("");
@@ -268,42 +273,56 @@ export function PaymentDialog({
                       onChange={(e) => setAmountTendered(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="0.00"
-                      className="h-14 pl-8 text-2xl font-mono text-right pr-4"
+                      className={cn(
+                        "h-14 pl-8 text-2xl font-mono text-right pr-4",
+                        isLegacyMode && "h-16 text-3xl border-2 border-primary/50 focus:border-primary"
+                      )}
                       min="0"
                       step="0.01"
                     />
                   </div>
 
-                  {/* Quick Amount Buttons */}
-                  <div className="flex gap-2 mt-3">
-                    {quickAmounts.map((amount) => (
-                      <Button
-                        key={amount}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 font-mono text-xs"
-                        onClick={() => setAmountTendered(amount.toString())}
-                      >
-                        {amount}
-                      </Button>
-                    ))}
-                  </div>
+                  {/* Quick Amount Buttons - Hidden in Legacy Mode */}
+                  {!isLegacyMode && (
+                    <>
+                      <div className="flex gap-2 mt-3">
+                        {quickAmounts.map((amount) => (
+                          <Button
+                            key={amount}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 font-mono text-xs"
+                            onClick={() => setAmountTendered(amount.toString())}
+                          >
+                            {amount}
+                          </Button>
+                        ))}
+                      </div>
 
-                  {/* Exact Amount Button */}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="w-full mt-2 font-medium font-mono"
-                    onClick={() => setAmountTendered(totalDue.toFixed(2))}
-                  >
-                    Exact Amount (₱{totalDue.toFixed(2)})
-                  </Button>
+                      {/* Exact Amount Button */}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="w-full mt-2 font-medium font-mono"
+                        onClick={() => setAmountTendered(totalDue.toFixed(2))}
+                      >
+                        Exact Amount (₱{totalDue.toFixed(2)})
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Legacy Mode: Simplified hint */}
+                  {isLegacyMode && (
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      Type amount and press <kbd className="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> to confirm
+                    </p>
+                  )}
                 </div>
 
                 {/* Change Due */}
-                <div className="rounded-lg border border-border p-4 bg-muted/30">
+                <div className="rounded-lg border border-border mt-15 p-4 bg-muted/30">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium text-muted-foreground">
                       Change:
