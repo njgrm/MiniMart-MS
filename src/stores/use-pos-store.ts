@@ -106,16 +106,36 @@ export const usePosStore = create<PosState>((set, get) => ({
 
   addByBarcode: (barcode) => {
     const { products, catalogMode } = get();
-    // Find product that matches barcode AND is available in current catalog mode
-    const match = products.find((p) => {
-      if (!p.barcode || p.barcode.trim() !== barcode.trim()) return false;
-      const price = getPriceForMode(p, catalogMode);
-      return price > 0;
-    });
-    if (match) {
+    // Find product that matches barcode
+    const match = products.find((p) => p.barcode && p.barcode.trim() === barcode.trim());
+    
+    if (!match) {
+      return null;
+    }
+    
+    // Get price for current catalog mode
+    const primaryPrice = getPriceForMode(match, catalogMode);
+    
+    if (primaryPrice > 0) {
+      // Primary price is valid, use it
       get().addProduct(match);
       return match;
     }
+    
+    // Fallback: try the other price type
+    const fallbackMode: CatalogMode = catalogMode === "retail" ? "wholesale" : "retail";
+    const fallbackPrice = getPriceForMode(match, fallbackMode);
+    
+    if (fallbackPrice > 0) {
+      // Use fallback price - temporarily switch mode for this add
+      const originalMode = get().catalogMode;
+      get().setCatalogMode(fallbackMode);
+      get().addProduct(match);
+      get().setCatalogMode(originalMode);
+      return match;
+    }
+    
+    // Both prices are 0 - cannot add
     return null;
   },
 

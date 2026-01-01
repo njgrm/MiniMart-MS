@@ -125,6 +125,69 @@ export async function getIncomingOrders(): Promise<GroupedOrders> {
 }
 
 /**
+ * Get recently completed orders for dashboard display
+ */
+export async function getRecentCompletedOrders(limit: number = 10): Promise<IncomingOrder[]> {
+  const orders = await prisma.order.findMany({
+    where: {
+      status: "COMPLETED",
+    },
+    include: {
+      customer: {
+        select: {
+          customer_id: true,
+          name: true,
+          contact_details: true,
+          email: true,
+        },
+      },
+      items: {
+        include: {
+          product: {
+            select: {
+              product_id: true,
+              product_name: true,
+              barcode: true,
+              image_url: true,
+              cost_price: true,
+              retail_price: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      order_date: "desc", // Most recent first
+    },
+    take: limit,
+  });
+
+  // Transform Decimal values to numbers
+  return orders.map((order) => ({
+    order_id: order.order_id,
+    customer_id: order.customer_id,
+    order_date: order.order_date,
+    status: order.status as OrderStatus,
+    total_amount: Number(order.total_amount),
+    customer: order.customer,
+    items: order.items.map((item) => ({
+      order_item_id: item.order_item_id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      price: Number(item.price),
+      product: {
+        product_id: item.product.product_id,
+        product_name: item.product.product_name,
+        barcode: item.product.barcode,
+        image_url: item.product.image_url,
+        cost_price: Number(item.product.cost_price),
+        retail_price: Number(item.product.retail_price),
+      },
+    })),
+  }));
+}
+
+/**
  * Get count of pending orders (for sidebar badge)
  */
 export async function getPendingOrdersCount(): Promise<number> {

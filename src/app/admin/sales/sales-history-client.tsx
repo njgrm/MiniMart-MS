@@ -64,14 +64,18 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  
+  // Track which receipt to auto-open from URL params
+  const [autoOpenReceipt, setAutoOpenReceipt] = useState<string | null>(null);
 
   // Check for auto-open receipt from URL params
   const receiptParam = searchParams.get("receipt");
   const viewParam = searchParams.get("view");
 
   useEffect(() => {
-    // If receipt param exists and view=true, find and open that transaction
+    // If receipt param exists and view=true, set it for auto-open
     if (receiptParam && viewParam === "true") {
+      setAutoOpenReceipt(receiptParam);
       // Clear the URL params after handling
       router.replace("/admin/sales", { scroll: false });
     }

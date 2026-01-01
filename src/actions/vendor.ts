@@ -454,3 +454,163 @@ export async function getTopPurchasedItems(
     .map(({ retail_price, ...item }) => item);
 }
 
+/**
+ * Get vendor spending stats by date range
+ * Used for the dashboard metrics cards with period comparison
+ */
+export interface VendorStatsByDateRange {
+  current: {
+    ordersCount: number;
+    totalSpent: number;
+    itemsOrdered: number;
+  };
+  previous: {
+    ordersCount: number;
+    totalSpent: number;
+    itemsOrdered: number;
+  };
+  periodDays: number;
+}
+
+export async function getVendorStatsByDateRange(
+  customerId: number,
+  startDate: Date,
+  endDate: Date
+): Promise<VendorStatsByDateRange> {
+  // Calculate period length for comparison
+  const periodMs = endDate.getTime() - startDate.getTime();
+  const periodDays = Math.ceil(periodMs / (1000 * 60 * 60 * 24)) + 1;
+  
+  // Previous period dates
+  const prevEndDate = new Date(startDate.getTime() - 1);
+  const prevStartDate = new Date(prevEndDate.getTime() - periodMs);
+
+  // Fetch current period orders
+  const currentOrders = await prisma.order.findMany({
+    where: {
+      customer_id: customerId,
+      order_date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    include: {
+      items: true,
+    },
+  });
+
+  // Fetch previous period orders
+  const previousOrders = await prisma.order.findMany({
+    where: {
+      customer_id: customerId,
+      order_date: {
+        gte: prevStartDate,
+        lte: prevEndDate,
+      },
+    },
+    include: {
+      items: true,
+    },
+  });
+
+  // Calculate current period stats (include all statuses for orders count, only completed for spending)
+  const currentStats = {
+    ordersCount: currentOrders.length,
+    totalSpent: currentOrders
+      .filter((o) => o.status === "COMPLETED")
+      .reduce((sum, o) => sum + Number(o.total_amount), 0),
+    itemsOrdered: currentOrders.reduce(
+      (sum, o) => sum + o.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+      0
+    ),
+  };
+
+  // Calculate previous period stats
+  const previousStats = {
+    ordersCount: previousOrders.length,
+    totalSpent: previousOrders
+      .filter((o) => o.status === "COMPLETED")
+      .reduce((sum, o) => sum + Number(o.total_amount), 0),
+    itemsOrdered: previousOrders.reduce(
+      (sum, o) => sum + o.items.reduce((itemSum, item) => itemSum + item.quantity, 0),
+      0
+    ),
+  };
+
+  return {
+    current: currentStats,
+    previous: previousStats,
+    periodDays,
+  };
+}
+
+/**
+ * Get spending trend data for chart
+ */
+export interface VendorSpendingTrend {
+  date: string;
+  fullDate: string;
+  spent: number;
+  orders: number;
+}
+
+export async function getVendorSpendingTrend(
+  customerId: number,
+  startDate: Date,
+  endDate: Date
+): Promise<VendorSpendingTrend[]> {
+  const orders = await prisma.order.findMany({
+    where: {
+      customer_id: customerId,
+      status: "COMPLETED",
+      order_date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    select: {
+      order_date: true,
+      total_amount: true,
+    },
+  });
+
+  // Group by day
+  const dayMap = new Map<string, { spent: number; orders: number }>();
+  
+  const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  
+  // Initialize all days with 0
+  for (let i = 0; i < diffDays; i++) {
+    const date = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+    const dateKey = date.toISOString().split("T")[0];
+    dayMap.set(dateKey, { spent: 0, orders: 0 });
+  }
+  
+  // Fill in actual data
+  for (const order of orders) {
+    const dateKey = order.order_date.toISOString().split("T")[0];
+    const existing = dayMap.get(dateKey);
+    if (existing) {
+      existing.spent += Number(order.total_amount);
+      existing.orders += 1;
+    }
+  }
+
+  // Convert to array with formatted dates
+  return Array.from(dayMap.entries()).map(([dateKey, data]) => {
+    const date = new Date(dateKey);
+    const dateLabel = diffDays > 60 
+      ? new Intl.DateTimeFormat("en-US", { month: "short" }).format(date)
+      : diffDays > 14 
+        ? date.getDate().toString()
+        : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+    
+    return {
+      date: dateLabel,
+      fullDate: new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(date),
+      spent: data.spent,
+      orders: data.orders,
+    };
+  });
+}
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Receipt, Eye, Calendar, CreditCard, User, Printer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -30,10 +30,24 @@ interface TransactionSheetProps {
       username: string;
     };
   };
+  /** External control: if provided, sheet state is controlled externally */
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function TransactionSheet({ transaction }: TransactionSheetProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function TransactionSheet({ transaction, defaultOpen, onOpenChange }: TransactionSheetProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  // Support both controlled and uncontrolled modes
+  const isOpen = defaultOpen ?? internalIsOpen;
+  const setIsOpen = onOpenChange ?? setInternalIsOpen;
+  
+  // Sync external defaultOpen prop changes
+  useEffect(() => {
+    if (defaultOpen !== undefined) {
+      setInternalIsOpen(defaultOpen);
+    }
+  }, [defaultOpen]);
   const [showDetails, setShowDetails] = useState(false);
 
   const formatCurrency = (amount: number) => {

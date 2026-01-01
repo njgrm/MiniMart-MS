@@ -91,9 +91,15 @@ export function PaymentDialog({
   const tenderedAmount = parseFloat(amountTendered || "0");
   const change = tenderedAmount - totalDue;
   
+  // Use rounded comparison to avoid floating point precision issues
+  // Round to 2 decimal places for currency comparison
+  const roundedTendered = Math.round(tenderedAmount * 100) / 100;
+  const roundedTotal = Math.round(totalDue * 100) / 100;
+  const isEnoughPayment = roundedTendered >= roundedTotal;
+  
   // For GCash, we need both tendered amount >= total AND reference number
-  const canConfirmCash = paymentMethod === "CASH" && tenderedAmount >= totalDue && !isProcessing;
-  const canConfirmGcash = paymentMethod === "GCASH" && tenderedAmount >= totalDue && gcashRefNo.trim().length > 0 && !isProcessing;
+  const canConfirmCash = paymentMethod === "CASH" && isEnoughPayment && !isProcessing;
+  const canConfirmGcash = paymentMethod === "GCASH" && isEnoughPayment && gcashRefNo.trim().length > 0 && !isProcessing;
   const canConfirm = canConfirmCash || canConfirmGcash;
 
   const handleConfirm = async () => {
@@ -330,13 +336,13 @@ export function PaymentDialog({
                     <span
                       className={cn(
                         "font-mono text-2xl font-medium",
-                        change < 0 
+                        !isEnoughPayment 
                           ? "text-muted-foreground" 
                           : "text-primary dark:text-foreground"
                       )}
                     >
                       ₱{Math.abs(change).toFixed(2)}
-                      {change < 0 && (
+                      {!isEnoughPayment && (
                         <span className="text-xs ml-1 font-normal">(short)</span>
                       )}
                     </span>

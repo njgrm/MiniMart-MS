@@ -132,8 +132,8 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
       const lower = search.toLowerCase();
       result = result.filter(
         (p) =>
-          p.name.toLowerCase().includes(lower) ||
-          p.barcode.toLowerCase().includes(lower)
+          p.product_name.toLowerCase().includes(lower) ||
+          (p.barcode && p.barcode.toLowerCase().includes(lower))
       );
     }
     return result;
@@ -149,7 +149,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
       setTimeout(() => setLastAddedItemId(null), 1500);
       setLastScan(barcode);
       setScanError(null);
-      toast.success(`Added: ${found.name}`);
+      toast.success(`Added: ${found.product_name}`);
     } else {
       playErrorBuzz();
       setScanError(`No product for barcode: ${barcode}`);
@@ -159,44 +159,11 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
   };
 
   // Get cart total
-  const cartTotal = getCartTotal(cart, catalogMode);
+  const cartTotal = getCartTotal(cart);
 
-  // If in Legacy Mode, render the LegacyPOSLayout
+  // If in Legacy Mode, render the LegacyPOSLayout (mode toggle is now inside the layout)
   if (viewMode === "legacy") {
-    return (
-      <div className="relative">
-        {/* Mode Toggle - Fixed Position */}
-        <div className="fixed top-2 right-4 z-50">
-          <div className="relative flex bg-card border border-border rounded-lg px-1 py-1 shadow-lg">
-            {viewModes.map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => setViewMode(mode.id)}
-                className={cn(
-                  "relative flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium rounded-md z-10 transition-colors duration-200",
-                  viewMode === mode.id
-                    ? "text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {viewMode === mode.id && (
-                  <motion.div
-                    layoutId="view-mode-highlight"
-                    className="absolute inset-0 bg-primary rounded-md shadow-sm"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <mode.icon className="h-3.5 w-3.5 relative z-10" />
-                <span className="relative z-10">{mode.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <LegacyPOSLayout products={products} gcashQrUrl={gcashQrUrl} />
-      </div>
-    );
+    return <LegacyPOSLayout products={products} gcashQrUrl={gcashQrUrl} />;
   }
 
   // Touch Mode (original layout) continues below...
@@ -249,7 +216,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search or scan barcode..."
-                className="h-9.25 rounded-lg pl-8 pr-10 text-sm"
+                className="h-9.25 rounded-lg pl-8 pr-10 text-sm bg-background"
               />
               <Button
                 type="button"
@@ -286,7 +253,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
             )}
 
             {/* View Mode Toggle */}
-            <div className="relative flex bg-muted border border-border rounded-lg px-1 py-1 flex-shrink-0 ml-2">
+            <div className="relative flex bg-card border border-border rounded-lg px-1 py-1 flex-shrink-0 ml-2">
               {viewModes.map((mode) => (
                 <button
                   key={mode.id}

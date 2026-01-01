@@ -6,6 +6,9 @@ import { ProductsTable } from "./products-table";
 import { ProductDialog } from "./product-dialog";
 import { DeleteProductDialog } from "./delete-product-dialog";
 import { CSVImportDialog } from "./csv-import-dialog";
+import { RestockDialog } from "./restock-dialog";
+import { AdjustStockDialog } from "./adjust-stock-dialog";
+import { StockHistoryView } from "./stock-history-view";
 import { BarcodeModal } from "@/components/inventory/barcode-modal";
 import { printBarcodesInPopup } from "@/lib/print-utils";
 import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
@@ -37,6 +40,11 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
   const [barcodeProducts, setBarcodeProducts] = useState<ProductData[]>([]);
   const [editingProduct, setEditingProduct] = useState<ProductData | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<ProductData | null>(null);
+  
+  // Stock management dialogs
+  const [restockingProduct, setRestockingProduct] = useState<ProductData | null>(null);
+  const [adjustingProduct, setAdjustingProduct] = useState<ProductData | null>(null);
+  const [historyProduct, setHistoryProduct] = useState<ProductData | null>(null);
 
   // Sync products state when initialProducts changes (after router.refresh())
   useEffect(() => {
@@ -70,6 +78,24 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
     router.refresh();
   };
 
+  // Handler for stock updates after restock/adjust operations
+  const handleStockUpdated = (productId: number, newStock: number) => {
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.product_id === productId) {
+          const status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK" = 
+            newStock === 0 
+              ? "OUT_OF_STOCK" 
+              : newStock <= p.reorder_level 
+                ? "LOW_STOCK" 
+                : "IN_STOCK";
+          return { ...p, current_stock: newStock, status };
+        }
+        return p;
+      })
+    );
+  };
+
   // Print handler using popup window approach
   const handlePrint = () => {
     printBarcodesInPopup(barcodeProducts);
@@ -88,6 +114,9 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
           onEdit={setEditingProduct}
           onDelete={setDeletingProduct}
           onBulkDelete={handleBulkDeleted}
+          onRestock={setRestockingProduct}
+          onAdjust={setAdjustingProduct}
+          onViewHistory={setHistoryProduct}
           onPrintBarcodes={(selectedProducts) => {
             setBarcodeProducts(selectedProducts);
             setIsBarcodeModalOpen(true);
@@ -122,6 +151,35 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
           open={isImportDialogOpen}
           onOpenChange={setIsImportDialogOpen}
           onSuccess={handleImportSuccess}
+        />
+
+        {/* Stock Management Dialogs */}
+        <RestockDialog
+          open={!!restockingProduct}
+          onOpenChange={(open) => !open && setRestockingProduct(null)}
+          product={restockingProduct}
+          onSuccess={(newStock) => {
+            if (restockingProduct) {
+              handleStockUpdated(restockingProduct.product_id, newStock);
+            }
+          }}
+        />
+
+        <AdjustStockDialog
+          open={!!adjustingProduct}
+          onOpenChange={(open) => !open && setAdjustingProduct(null)}
+          product={adjustingProduct}
+          onSuccess={(newStock) => {
+            if (adjustingProduct) {
+              handleStockUpdated(adjustingProduct.product_id, newStock);
+            }
+          }}
+        />
+
+        <StockHistoryView
+          open={!!historyProduct}
+          onOpenChange={(open) => !open && setHistoryProduct(null)}
+          product={historyProduct}
         />
 
         {/* Barcode Print Modal - Preview for user */}

@@ -22,7 +22,7 @@ export default async function VendorDashboardPage() {
   const [stats, recentOrders, topPurchasedItems] = await Promise.all([
     getVendorStats(customerId),
     getVendorOrders(customerId),
-    getTopPurchasedItems(customerId, 3),
+    getTopPurchasedItems(customerId, 5),
   ]);
 
   return (
@@ -31,6 +31,7 @@ export default async function VendorDashboardPage() {
       stats={stats}
       recentOrders={recentOrders.slice(0, 5)}
       topPurchasedItems={topPurchasedItems}
+      customerId={customerId}
     />
   );
 }

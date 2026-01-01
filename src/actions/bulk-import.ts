@@ -17,6 +17,8 @@ export interface BulkProductInput {
   barcode?: string | null;
   image_url?: string | null;
   reorder_level?: number;
+  supplier_name?: string | null;
+  reference?: string | null;
 }
 
 export interface BulkImportResult {
@@ -201,7 +203,7 @@ export async function bulkCreateProducts(
           },
         });
 
-        await tx.inventory.create({
+        const newInventory = await tx.inventory.create({
           data: {
             product_id: newProduct.product_id,
             current_stock: product.stock,
@@ -209,6 +211,24 @@ export async function bulkCreateProducts(
             last_restock: new Date(),
           },
         });
+
+        // Create INITIAL_STOCK movement for audit trail (only if stock > 0)
+        if (product.stock > 0) {
+          await tx.stockMovement.create({
+            data: {
+              inventory_id: newInventory.inventory_id,
+              user_id: 1, // TODO: Get actual user from session
+              movement_type: "INITIAL_STOCK",
+              quantity_change: product.stock,
+              previous_stock: 0,
+              new_stock: product.stock,
+              reason: "Initial stock from CSV import",
+              supplier_name: product.supplier_name || null,
+              reference: product.reference || null,
+              cost_price: product.cost_price ? new Decimal(product.cost_price) : null,
+            },
+          });
+        }
       });
 
       successCount++;

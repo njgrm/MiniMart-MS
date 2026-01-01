@@ -36,6 +36,10 @@ const fileSchema = z.custom<File>((val) => {
  * - retail_price = 0 means "Not available for Retail" (Wholesale only)
  * - wholesale_price = 0 means "Not available for Wholesale" (Retail only)
  * - At least one price must be > 0
+ * 
+ * Stock Movement:
+ * - Creating a product automatically records an INITIAL_STOCK movement
+ * - Supplier/receipt fields are optional for tracking initial stock source
  */
 export const createProductSchema = z.object({
   product_name: z
@@ -78,6 +82,22 @@ export const createProductSchema = z.object({
     .optional()
     .nullable()
     .or(z.literal("")),
+  // Optional: Stock movement tracking fields
+  supplier_name: z
+    .string()
+    .max(200, "Supplier name must be less than 200 characters")
+    .optional()
+    .nullable(),
+  reference: z
+    .string()
+    .max(100, "Reference must be less than 100 characters")
+    .optional()
+    .nullable(),
+  receipt_image_url: z
+    .string()
+    .max(500, "Receipt image path must be less than 500 characters")
+    .optional()
+    .nullable(),
 });
 
 /**

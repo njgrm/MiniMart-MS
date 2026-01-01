@@ -28,6 +28,9 @@ import {
   Boxes,
   Coins,
   Printer,
+  PackagePlus,
+  ClipboardEdit,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -46,6 +49,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -77,6 +81,9 @@ interface ProductsTableProps {
   onImportClick?: () => void;
   onAddClick?: () => void;
   onPrintBarcodes?: (products: ProductData[]) => void;
+  onRestock?: (product: ProductData) => void;
+  onAdjust?: (product: ProductData) => void;
+  onViewHistory?: (product: ProductData) => void;
 }
 
 export function ProductsTable({ 
@@ -87,6 +94,9 @@ export function ProductsTable({
   onImportClick,
   onAddClick,
   onPrintBarcodes,
+  onRestock,
+  onAdjust,
+  onViewHistory,
 }: ProductsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -247,6 +257,9 @@ export function ProductsTable({
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("wholesale_price"));
+          if (!amount || amount === 0) {
+            return <span className="text-muted-foreground text-sm">N/A</span>;
+          }
           return (
             <div className="text-sm font-normal tracking-wider tabular-nums">
               ₱{amount.toFixed(2)}
@@ -350,9 +363,26 @@ export function ProductsTable({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {/* Stock Management Actions */}
+                <DropdownMenuItem onClick={() => onRestock?.(product)}>
+                  <PackagePlus className="mr-2 h-4 w-4 text-green-600" />
+                  Restock
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onAdjust?.(product)}>
+                  <ClipboardEdit className="mr-2 h-4 w-4 text-amber-600" />
+                  Adjust Stock
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onViewHistory?.(product)}>
+                  <History className="mr-2 h-4 w-4 text-blue-600" />
+                  View History
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
+                {/* Edit/Delete Actions */}
                 <DropdownMenuItem onClick={() => onEdit(product)}>
                   <Pencil className="mr-2 h-4 w-4" />
-                  Edit
+                  Edit Details
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => onDelete(product)}
@@ -367,7 +397,7 @@ export function ProductsTable({
         },
       },
     ],
-    [onEdit, onDelete]
+    [onEdit, onDelete, onRestock, onAdjust, onViewHistory]
   );
 
   // Custom global filter that includes barcode and prices

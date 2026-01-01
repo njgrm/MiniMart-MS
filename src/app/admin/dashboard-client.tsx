@@ -1,31 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { DateRange } from "react-day-picker";
+import { subDays, subMonths, startOfMonth, endOfMonth, startOfYear, format } from "date-fns";
 import {
   IconTrendingUp,
   IconTrendingDown,
-  IconCash,
   IconReceipt,
   IconPackage,
   IconChartBar,
   IconClock,
-  IconAlertTriangle,
-  IconAlertCircle,
+  IconArrowRight,
+  IconUser,
+  IconCash,
+  IconWallet,
+  IconShoppingCart,
+  IconCurrencyPeso,
+  IconBroadcast,
+  IconPrinter,
+  IconRefresh,
   IconTrophy,
+  IconCategory,
 } from "@tabler/icons-react";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   Select,
   SelectContent,
@@ -41,22 +41,19 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
 } from "recharts";
-import type { SalesHistoryResult } from "@/actions/sales";
+import { getSalesStatsByDateRange, getTopProductsByDateRange } from "@/actions/sales";
+import type { SalesHistoryResult, TopProductWithCategory } from "@/actions/sales";
+import type { GroupedOrders, IncomingOrder } from "@/actions/orders";
 
 interface SalesStats {
-  today: {
-    count: number;
-    revenue: number;
-    cost: number;
-    profit: number;
-  };
-  month: {
-    count: number;
-    revenue: number;
-    cost: number;
-    profit: number;
-  };
+  today: { count: number; revenue: number; cost: number; profit: number };
+  yesterday: { count: number; revenue: number; cost: number; profit: number };
+  month: { count: number; revenue: number; cost: number; profit: number };
+  lastMonth: { count: number; revenue: number; cost: number; profit: number };
 }
 
 interface InventoryMetrics {
@@ -78,20 +75,132 @@ interface DashboardClientProps {
   recentSales: SalesHistoryResult;
   inventoryMetrics: InventoryMetrics;
   topProducts?: TopProduct[];
+  incomingOrders?: GroupedOrders;
+  recentCompletedOrders?: IncomingOrder[];
+  activeOrdersCount?: number;
 }
 
-/**
- * DashboardClient - Enhanced Dashboard with Stock Alerts, Filters & Top Products
- */
+// Chart colors palette
+const CHART_COLORS = ["#AC0F16", "#2EAFC5", "#F1782F", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899", "#6366F1"];
+
+// Category display names mapping
+const CATEGORY_LABELS: Record<string, string> = {
+  "SOFTDRINKS_CASE": "Soft Drinks Case",
+  "SODA": "Soft Drinks",
+  "SNACK": "Snack",
+  "CANNED_GOODS": "Canned Goods",
+  "BEVERAGES": "Beverages",
+  "DAIRY": "Dairy",
+  "BREAD": "Bread",
+  "INSTANT_NOODLES": "Instant Noodles",
+  "CONDIMENTS": "Condiments",
+  "PERSONAL_CARE": "Personal Care",
+  "HOUSEHOLD": "Household",
+  "OTHER": "Other",
+};
+
+// Get category display name
+const getCategoryLabel = (category: string): string => {
+  return CATEGORY_LABELS[category] || category;
+};
+
 export function DashboardClient({
   stats,
   recentSales,
   inventoryMetrics,
   topProducts = [],
+  incomingOrders = { pending: [], preparing: [], ready: [] },
+  recentCompletedOrders = [],
+  activeOrdersCount = 0,
 }: DashboardClientProps) {
   const router = useRouter();
-  const [chartRange, setChartRange] = useState<"7" | "14" | "30">("7");
+  const [isPending, startTransition] = useTransition();
+  
+  // Date range picker state - default to last 30 days
+  const [customDateRange, setCustomDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 31),
+    to: subDays(new Date(), 1),
+  });
+  
+  // Custom stats from date range
+  const [customStats, setCustomStats] = useState<{
+    current: { count: number; revenue: number; cost: number; profit: number };
+    previous: { count: number; revenue: number; cost: number; profit: number };
+    periodDays: number;
+  } | null>(null);
+  
+  // Top products state for the ranking card
+  const [topProductsDateRange, setTopProductsDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 31),
+    to: subDays(new Date(), 1),
+  });
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [rankedProducts, setRankedProducts] = useState<TopProductWithCategory[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  
+  // Selected preset for highlighting
+  const [selectedPreset, setSelectedPreset] = useState<string>("Last 30 days");
+  const [selectedTopProductsPreset, setSelectedTopProductsPreset] = useState<string>("Dec 2025");
+  
+  // Chart line toggles for Sales Overview
+  const [showRevenue, setShowRevenue] = useState(true);
+  const [showProfit, setShowProfit] = useState(true);
+  const [showCost, setShowCost] = useState(false);
+  
+  // Quick date range presets
+  const datePresets = [
+    { label: "Last 7 days", getRange: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
+    { label: "Last 30 days", getRange: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
+    { label: "Last month", getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
+    { label: "Dec 2025", getRange: () => ({ from: new Date(2025, 11, 1), to: new Date(2025, 11, 31) }) },
+    { label: "Nov 2025", getRange: () => ({ from: new Date(2025, 10, 1), to: new Date(2025, 10, 30) }) },
+    { label: "Year 2025", getRange: () => ({ from: startOfYear(new Date(2025, 0, 1)), to: new Date(2025, 11, 31) }) },
+  ];
+  
+  // Fetch custom stats when date range changes
+  useEffect(() => {
+    if (customDateRange?.from && customDateRange?.to) {
+      startTransition(async () => {
+        const result = await getSalesStatsByDateRange(customDateRange.from!, customDateRange.to!);
+        setCustomStats(result);
+      });
+    }
+  }, [customDateRange]);
 
+  // Fetch top products when date range or category changes
+  useEffect(() => {
+    if (topProductsDateRange?.from && topProductsDateRange?.to) {
+      setIsLoadingProducts(true);
+      getTopProductsByDateRange(
+        topProductsDateRange.from,
+        topProductsDateRange.to,
+        selectedCategory === "all" ? undefined : selectedCategory,
+        50 // Fetch more products for scrollable chart
+      ).then((result) => {
+        setRankedProducts(result.products);
+        setCategories(result.categories);
+        setIsLoadingProducts(false);
+      });
+    }
+  }, [topProductsDateRange, selectedCategory]);
+
+  // Display stats calculation
+  const displayStats = customStats ? {
+    primary: customStats.current,
+    comparison: customStats.previous,
+    periodLabel: customDateRange?.from && customDateRange?.to
+      ? `${format(customDateRange.from, "MMM d")} - ${format(customDateRange.to, "MMM d, yyyy")}`
+      : "Selected Period",
+    periodDays: customStats.periodDays,
+  } : {
+    primary: stats.today,
+    comparison: stats.yesterday,
+    periodLabel: "Today",
+    periodDays: 1,
+  };
+
+  // Formatting utilities
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
       style: "currency",
@@ -101,31 +210,112 @@ export function DashboardClient({
     }).format(amount);
   };
 
-  const formatDate = (date: Date) => {
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat("en-PH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num);
+  };
+
+  const formatTime = (date: Date) => {
     return new Intl.DateTimeFormat("en-PH", {
-      month: "short",
-      day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(date));
   };
 
-  const calculateMargin = (profit: number, revenue: number) => {
-    if (revenue === 0) return 0;
-    return ((profit / revenue) * 100).toFixed(1);
+  const formatDateLong = (date: Date) => {
+    return new Intl.DateTimeFormat("en-PH", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(date));
   };
 
-  // Generate chart data based on selected range
-  const generateChartData = () => {
-    const days = [];
-    const now = new Date();
-    const range = parseInt(chartRange);
+  // Calculate percentage changes
+  const calcPercentChange = (current: number, previous: number): number => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Number((((current - previous) / previous) * 100).toFixed(1));
+  };
+
+  const percentages = useMemo(() => ({
+    profit: calcPercentChange(displayStats.primary.profit, displayStats.comparison.profit),
+    revenue: calcPercentChange(displayStats.primary.revenue, displayStats.comparison.revenue),
+    cost: calcPercentChange(displayStats.primary.cost, displayStats.comparison.cost),
+    transactions: calcPercentChange(displayStats.primary.count, displayStats.comparison.count),
+  }), [displayStats]);
+
+  // Custom tooltip for bar chart
+  const ProductTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: TopProductWithCategory }> }) => {
+    if (active && payload && payload.length) {
+      const product = payload[0].payload;
+      return (
+        <div className="bg-card border border-border text-foreground px-3 py-2 rounded-lg shadow-xl max-w-[200px]">
+          <p className="text-xs font-semibold text-foreground truncate">{product.product_name}</p>
+          <p className="text-[10px] text-muted-foreground">{getCategoryLabel(product.category)}</p>
+          <div className="flex items-center justify-between gap-3 mt-1">
+            <span className="text-[10px] text-muted-foreground">{product.quantity_sold} sold</span>
+            <span className="text-xs font-medium text-[#2EAFC5]">{formatCurrency(product.revenue)}</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Percentage badge component
+  const PercentBadge = ({ value, inverted = false }: { value: number; inverted?: boolean }) => {
+    const isPositive = inverted ? value <= 0 : value >= 0;
+    return (
+      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
+        isPositive 
+          ? "bg-[#2EAFC5]/20 text-[#2EAFC5]" 
+          : "bg-destructive/20 text-destructive"
+      }`}>
+        {isPositive ? <IconTrendingUp className="size-3" /> : <IconTrendingDown className="size-3" />}
+        {value >= 0 ? "+" : ""}{value}%
+      </span>
+    );
+  };
+
+  // Handle live feed item click - navigate to sales with drawer open
+  const handleTransactionClick = (receiptNo: string) => {
+    router.push(`/admin/sales?receipt=${receiptNo}&view=true`);
+  };
+
+  // Handle preset click for main date range
+  const handlePresetClick = (preset: { label: string; getRange: () => DateRange }) => {
+    setSelectedPreset(preset.label);
+    setCustomDateRange(preset.getRange());
+  };
+
+  // Handle preset click for top products date range
+  const handleTopProductsPresetClick = (preset: { label: string; getRange: () => DateRange }) => {
+    setSelectedTopProductsPreset(preset.label);
+    setTopProductsDateRange(preset.getRange());
+  };
+
+  // Calculate sidebar metrics
+  const grossSales = displayStats.primary.revenue;
+
+  // Calculate bar chart height based on number of products
+  const barChartHeight = Math.max(300, rankedProducts.length * 40);
+
+  // Generate chart data for Sales Overview based on selected date range
+  const salesChartData = useMemo(() => {
+    if (!customDateRange?.from || !customDateRange?.to) return [];
     
-    for (let i = range - 1; i >= 0; i--) {
-      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-      const dayStr = date.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+    const days: { date: string; fullDate: string; revenue: number; profit: number; cost: number }[] = [];
+    const start = new Date(customDateRange.from);
+    const end = new Date(customDateRange.to);
+    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Group transactions by day
+    for (let i = 0; i < diffDays; i++) {
+      const date = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = format(date, "yyyy-MM-dd");
       
-      // Find transactions for this day
       const dayTransactions = recentSales.transactions.filter((tx) => {
         const txDate = new Date(tx.created_at);
         return (
@@ -136,456 +326,605 @@ export function DashboardClient({
       });
 
       const revenue = dayTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
-      days.push({
-        date: dayStr,
+      const cost = dayTransactions.reduce((sum, tx) => {
+        return sum + tx.items.reduce((itemSum, item) => itemSum + (item.cost_at_sale * item.quantity), 0);
+      }, 0);
+      const profit = revenue - cost;
+      
+      // Format date label based on range length
+      const dateLabel = diffDays > 60 
+        ? format(date, "MMM") 
+        : diffDays > 14 
+          ? format(date, "d") 
+          : format(date, "MMM d");
+      
+      days.push({ 
+        date: dateLabel, 
+        fullDate: format(date, "EEE, MMM d, yyyy"),
         revenue,
+        profit,
+        cost,
       });
     }
     return days;
+  }, [customDateRange, recentSales.transactions]);
+
+  // Custom tooltip for sales chart
+  const SalesChartTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ dataKey: string; value: number; color: string; payload: { fullDate: string } }> }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-card border border-border text-foreground px-3 py-2 rounded-lg shadow-xl">
+          <p className="text-[10px] text-muted-foreground mb-1">{payload[0]?.payload?.fullDate}</p>
+          {payload.map((entry, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <div className="size-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span className="text-xs capitalize">{entry.dataKey}:</span>
+              <span className="text-xs font-medium">{formatCurrency(entry.value)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
   };
 
-  const chartData = generateChartData();
-
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
-      {/* Stock Alert Cards - Clickable */}
-      {(inventoryMetrics.outOfStockItems > 0 || inventoryMetrics.lowStockItems > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          {/* Critical Stock Alert */}
-          {inventoryMetrics.outOfStockItems > 0 && (
-            <Card
-              className="border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-              onClick={() => router.push("/admin/inventory?status=out")}
+    <div className="flex flex-col gap-4 pb-6 relative">
+      {/* Combined Header Row: Date Picker + Presets + Period Label */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Date Range Picker */}
+        <DateRangePicker 
+          date={customDateRange} 
+          onDateChange={(range) => {
+            setCustomDateRange(range);
+            setSelectedPreset(""); // Clear preset selection when manually picking
+          }}
+        />
+        
+        {/* Quick Presets - Clickable badges with primary highlight */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {datePresets.map((preset) => (
+            <button
+              key={preset.label}
+              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium ${
+                selectedPreset === preset.label
+                  ? "bg-[#AC0F16] text-white border-[#AC0F16]"
+                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => handlePresetClick(preset)}
             >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="size-12 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0">
-                  <IconAlertTriangle className="size-6 text-red-600 dark:text-red-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-red-800 dark:text-red-300">Critical Stock Alert</p>
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {inventoryMetrics.outOfStockItems} item{inventoryMetrics.outOfStockItems !== 1 ? "s" : ""} out of stock
-                  </p>
-                </div>
-                <Badge variant="destructive" className="shrink-0">
-                  {inventoryMetrics.outOfStockItems}
-                </Badge>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Low Stock Alert */}
-          {inventoryMetrics.lowStockItems > 0 && (
-            <Card
-              className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-              onClick={() => router.push("/admin/inventory?status=low")}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="size-12 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
-                  <IconAlertCircle className="size-6 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-amber-800 dark:text-amber-300">Low Stock Warning</p>
-                  <p className="text-sm text-amber-600 dark:text-amber-400">
-                    {inventoryMetrics.lowStockItems} item{inventoryMetrics.lowStockItems !== 1 ? "s" : ""} running low
-                  </p>
-                </div>
-                <Badge className="bg-amber-500 text-white shrink-0">
-                  {inventoryMetrics.lowStockItems}
-                </Badge>
-              </CardContent>
-            </Card>
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        
+        {/* Separator */}
+        <div className="h-6 w-px bg-border hidden lg:block" />
+        
+        {/* Period Label */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground">{displayStats.periodLabel}</span>
+          {customStats && (
+            <span className="text-xs text-muted-foreground">
+              ({displayStats.periodDays} days • vs prev {displayStats.periodDays} days)
+            </span>
           )}
         </div>
-      )}
-
-      {/* Section Cards - Reference Dashboard Style */}
-      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-3 sm:gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-sm lg:grid-cols-4">
-        {/* Today's Revenue Card - Emerald */}
-        <Card
-          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-          onClick={() => router.push("/admin/sales/financial")}
-        >
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Today&apos;s Revenue</CardDescription>
-            <CardTitle className="text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(stats.today.revenue)}
-            </CardTitle>
-            <CardAction>
-              <Badge variant="outline" className="gap-1 text-xs text-emerald-600 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800">
-                <IconTrendingUp className="size-3" />
-                <span className="hidden sm:inline">{stats.today.count} sales</span>
-                <span className="sm:hidden">{stats.today.count}</span>
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">{stats.today.revenue > 0 ? "Sales active today" : "No sales yet"}</span>
-              <span className="sm:hidden">{stats.today.revenue > 0 ? "Active" : "No sales"}</span>
-              <IconCash className="size-4 text-emerald-500" />
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              Revenue from {stats.today.count} transaction{stats.today.count !== 1 ? "s" : ""}
-            </div>
-          </CardFooter>
-        </Card>
-
-        {/* Today's Profit Card - Indigo */}
-        <Card
-          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-          onClick={() => router.push("/admin/sales/financial")}
-        >
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Today&apos;s Profit</CardDescription>
-            <CardTitle className={`text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${stats.today.profit >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-600 dark:text-red-400"}`}>
-              {formatCurrency(stats.today.profit)}
-            </CardTitle>
-            <CardAction>
-              <Badge variant="outline" className={`gap-1 text-xs ${stats.today.profit >= 0 ? "text-indigo-600 border-indigo-200 dark:text-indigo-400 dark:border-indigo-800" : "text-red-600 border-red-200 dark:text-red-400 dark:border-red-800"}`}>
-                {stats.today.profit >= 0 ? <IconTrendingUp className="size-3" /> : <IconTrendingDown className="size-3" />}
-                {calculateMargin(stats.today.profit, stats.today.revenue)}%
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">{stats.today.profit >= 0 ? "Healthy margins" : "Review pricing"}</span>
-              <span className="sm:hidden">{stats.today.profit >= 0 ? "Healthy" : "Review"}</span>
-              {stats.today.profit >= 0 ? <IconTrendingUp className="size-4 text-indigo-500" /> : <IconTrendingDown className="size-4 text-red-500" />}
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              Net profit after COGS
-            </div>
-          </CardFooter>
-        </Card>
-
-        {/* Monthly Revenue Card - Emerald */}
-        <Card
-          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-          onClick={() => router.push("/admin/sales/financial")}
-        >
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Monthly Revenue</CardDescription>
-            <CardTitle className="text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(stats.month.revenue)}
-            </CardTitle>
-            <CardAction>
-              <Badge variant="outline" className="gap-1 text-xs text-emerald-600 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800">
-                <IconChartBar className="size-3" />
-                <span className="hidden sm:inline">{stats.month.count} sales</span>
-                <span className="sm:hidden">{stats.month.count}</span>
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">This month&apos;s performance</span>
-              <span className="sm:hidden">This month</span>
-              <IconTrendingUp className="size-4 text-emerald-500" />
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              {stats.month.count} total transactions
-            </div>
-          </CardFooter>
-        </Card>
-
-        {/* Inventory Status Card */}
-        <Card
-          className="@container/card cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all duration-200"
-          onClick={() => router.push("/admin/inventory")}
-        >
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Inventory Value</CardDescription>
-            <CardTitle className="text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {formatCurrency(inventoryMetrics.inventoryValue)}
-            </CardTitle>
-            <CardAction>
-              <Badge 
-                variant="outline" 
-                className={`gap-1 text-xs ${inventoryMetrics.outOfStockItems > 0 ? "text-red-600 border-red-200 dark:text-red-400 dark:border-red-800" : inventoryMetrics.lowStockItems > 0 ? "text-amber-600 border-amber-200 dark:text-amber-400 dark:border-amber-800" : "text-emerald-600 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800"}`}
-              >
-                <IconPackage className="size-3" />
-                <span className="hidden sm:inline">{inventoryMetrics.totalProducts} items</span>
-                <span className="sm:hidden">{inventoryMetrics.totalProducts}</span>
-              </Badge>
-            </CardAction>
-          </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">
-                {inventoryMetrics.outOfStockItems > 0 
-                  ? `${inventoryMetrics.outOfStockItems} out of stock` 
-                  : inventoryMetrics.lowStockItems > 0 
-                    ? `${inventoryMetrics.lowStockItems} low stock`
-                    : "Stock levels healthy"}
-              </span>
-              <span className="sm:hidden">
-                {inventoryMetrics.outOfStockItems > 0 
-                  ? `${inventoryMetrics.outOfStockItems} OOS` 
-                  : inventoryMetrics.lowStockItems > 0 
-                    ? `${inventoryMetrics.lowStockItems} low`
-                    : "Healthy"}
-              </span>
-              <IconPackage className={`size-4 ${inventoryMetrics.outOfStockItems > 0 ? "text-red-500" : inventoryMetrics.lowStockItems > 0 ? "text-amber-500" : "text-emerald-500"}`} />
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              Total retail value of inventory
-            </div>
-          </CardFooter>
-        </Card>
+        
+        {/* Loading indicator */}
+        {isPending && (
+          <div className="flex items-center gap-1.5 text-muted-foreground ml-auto">
+            <IconRefresh className="size-3.5 animate-spin" />
+            <span className="text-xs">Loading...</span>
+          </div>
+        )}
       </div>
 
-      {/* Charts Section with Date Range Picker */}
-      <Card className="@container/card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Revenue Trend</CardTitle>
-            <CardDescription>
-              <span className="hidden @[540px]/card:block">
-                Revenue for the last {chartRange} days
-              </span>
-              <span className="@[540px]/card:hidden">Last {chartRange} days</span>
-            </CardDescription>
+      {/* Top Metric Cards Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Total Profit Card */}
+        <div 
+          className="bg-card rounded-xl border px-4 py-3 cursor-pointer hover:shadow-md transition-all hover:border-[#AC0F16]/30"
+          onClick={() => router.push("/admin/sales/financial")}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <div className="size-7 rounded-lg bg-[#AC0F16]/20 flex items-center justify-center">
+              <IconCurrencyPeso className="size-4 text-[#AC0F16]" />
+            </div>
+            <PercentBadge value={percentages.profit} />
           </div>
-          <Select value={chartRange} onValueChange={(v) => setChartRange(v as "7" | "14" | "30")}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="14">Last 14 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardHeader>
-        <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-          <div className="h-[250px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} className="stroke-border" strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="date"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  className="text-xs fill-muted-foreground"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  className="text-xs fill-muted-foreground"
-                  tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip
-                  cursor={false}
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    borderColor: "hsl(var(--border))",
-                    borderRadius: "0.5rem",
-                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-                  }}
-                  formatter={(value: number) => [formatCurrency(value), "Revenue"]}
-                />
-                <Area
-                  dataKey="revenue"
-                  type="monotone"
-                  fill="url(#fillRevenue)"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
+          <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.profit)}</p>
+          <p className="text-[10px] text-muted-foreground">Profit</p>
+        </div>
 
-      {/* Bottom Section: Recent Activity, Top Products & Quick Actions */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-6">
-        {/* Recent Activity */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <div className="flex items-center justify-between w-full">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <IconReceipt className="size-5 text-primary" />
-                  Recent Activity
-                </CardTitle>
-                <CardDescription className="text-xs">Latest transactions</CardDescription>
+        {/* Total Revenue Card */}
+        <div 
+          className="bg-card rounded-xl border px-4 py-3 cursor-pointer hover:shadow-md transition-all hover:border-[#2EAFC5]/30"
+          onClick={() => router.push("/admin/sales/financial")}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <div className="size-7 rounded-lg bg-[#2EAFC5]/20 flex items-center justify-center">
+              <IconWallet className="size-4 text-[#2EAFC5]" />
+            </div>
+            <PercentBadge value={percentages.revenue} />
+          </div>
+          <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.revenue)}</p>
+          <p className="text-[10px] text-muted-foreground">Sales Revenue</p>
+        </div>
+
+        {/* Total Cost Card */}
+        <div 
+          className="bg-card rounded-xl border px-4 py-3 cursor-pointer hover:shadow-md transition-all hover:border-[#F1782F]/30"
+          onClick={() => router.push("/admin/vendor")}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <div className="size-7 rounded-lg bg-[#F1782F]/20 flex items-center justify-center">
+              <IconShoppingCart className="size-4 text-[#F1782F]" />
+            </div>
+            <PercentBadge value={percentages.cost} inverted />
+          </div>
+          <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.cost)}</p>
+          <p className="text-[10px] text-muted-foreground">Cost of Goods</p>
+        </div>
+
+        {/* Transactions Count Card */}
+        <div 
+          className="bg-card rounded-xl border px-4 py-3 cursor-pointer hover:shadow-md transition-all hover:border-[#AC0F16]/30"
+          onClick={() => router.push("/admin/sales")}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <div className="size-7 rounded-lg bg-[#AC0F16]/20 flex items-center justify-center">
+              <IconReceipt className="size-4 text-[#AC0F16]" />
+            </div>
+            <PercentBadge value={percentages.transactions} />
+          </div>
+          <p className="text-lg font-bold tabular-nums text-foreground">{displayStats.primary.count}</p>
+          <p className="text-[10px] text-muted-foreground">Transactions</p>
+        </div>
+      </div>
+
+      {/* Sales Overview Chart */}
+      <div className="bg-card rounded-xl border p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-medium text-sm text-foreground">Sales Overview</h3>
+            <p className="text-[10px] text-muted-foreground">
+              Revenue, profit, and cost trends for selected period
+            </p>
+          </div>
+          
+          {/* Toggle buttons for chart lines */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowRevenue(!showRevenue)}
+              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                showRevenue
+                  ? "bg-[#2EAFC5] text-white border-[#2EAFC5]"
+                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div className="size-2 rounded-full bg-current" />
+              Revenue
+            </button>
+            <button
+              onClick={() => setShowProfit(!showProfit)}
+              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                showProfit
+                  ? "bg-[#10B981] text-white border-[#10B981]"
+                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div className="size-2 rounded-full bg-current" />
+              Profit
+            </button>
+            <button
+              onClick={() => setShowCost(!showCost)}
+              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                showCost
+                  ? "bg-[#F1782F] text-white border-[#F1782F]"
+                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div className="size-2 rounded-full bg-current" />
+              Cost
+            </button>
+          </div>
+        </div>
+        
+        <div className="h-[220px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={salesChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <defs>
+                <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#2EAFC5" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#2EAFC5" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="fillProfit" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="fillCost" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F1782F" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#F1782F" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border" />
+              <XAxis 
+                dataKey="date" 
+                tickLine={false} 
+                axisLine={false} 
+                tick={{ fontSize: 10 }} 
+                className="fill-muted-foreground"
+                interval="preserveStartEnd"
+              />
+              <YAxis 
+                tickLine={false} 
+                axisLine={false} 
+                tick={{ fontSize: 10 }} 
+                className="fill-muted-foreground" 
+                tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : `${v}`}
+                width={45}
+              />
+              <Tooltip content={<SalesChartTooltip />} />
+              {showRevenue && (
+                <Area 
+                  dataKey="revenue" 
+                  type="monotone" 
+                  fill="url(#fillRevenue)" 
+                  stroke="#2EAFC5"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ fill: "#2EAFC5", stroke: "white", strokeWidth: 2, r: 4 }}
+                />
+              )}
+              {showProfit && (
+                <Area 
+                  dataKey="profit" 
+                  type="monotone" 
+                  fill="url(#fillProfit)" 
+                  stroke="#10B981"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ fill: "#10B981", stroke: "white", strokeWidth: 2, r: 4 }}
+                />
+              )}
+              {showCost && (
+                <Area 
+                  dataKey="cost" 
+                  type="monotone" 
+                  fill="url(#fillCost)" 
+                  stroke="#F1782F"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ fill: "#F1782F", stroke: "white", strokeWidth: 2, r: 4 }}
+                />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Main Content: Sidebar + Top Products */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* Left Column: Shift Summary + Live Feed */}
+        <div className="lg:col-span-1 flex flex-col gap-4">
+          {/* Shift Summary */}
+          <div className="bg-card rounded-xl border">
+            <div className="flex items-center gap-2 p-3 border-b">
+              <IconCash className="size-4 text-foreground" />
+              <h3 className="font-medium text-sm">Shift Summary</h3>
+            </div>
+            <div className="p-3 space-y-2">
+              <div className="flex items-center justify-between py-1.5 border-b border-dashed border-border">
+                <span className="text-xs text-muted-foreground">Transactions</span>
+                <span className="text-xs font-medium tabular-nums">{displayStats.primary.count}</span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
+              <div className="flex items-center justify-between py-1.5 border-b border-dashed border-border">
+                <span className="text-xs text-muted-foreground">Total Revenue</span>
+                <span className="text-xs font-bold tabular-nums text-[#2EAFC5]">{formatCurrency(displayStats.primary.revenue)}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-xs font-medium text-foreground">Net Profit</span>
+                <span className="text-xs font-bold tabular-nums text-[#AC0F16]">{formatCurrency(displayStats.primary.profit)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-3 border-t">
+              <Button 
+                size="sm" 
+                className="flex-1 h-8 text-xs bg-[#2EAFC5] hover:bg-[#2EAFC5]/90 text-white"
                 onClick={() => router.push("/admin/sales")}
               >
-                View All
+                <IconPrinter className="size-3.5 mr-1.5" />
+                View Sales
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="flex-1 h-8 text-xs"
+                onClick={() => router.push("/admin/sales/financial")}
+              >
+                <IconChartBar className="size-3.5 mr-1.5" />
+                Reports
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[280px]">
-              {recentSales.transactions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground">
-                  <IconReceipt className="size-8 mb-2 opacity-50" />
-                  <p>No recent transactions</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {recentSales.transactions.slice(0, 6).map((tx) => (
-                    <div
-                      key={tx.transaction_id}
-                      className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                      onClick={() => router.push(`/admin/sales?receipt=${tx.receipt_no}&view=true`)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center">
-                          <IconReceipt className="size-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">
-                            {tx.itemsCount} item{tx.itemsCount !== 1 ? "s" : ""}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDate(tx.created_at)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium font-mono text-sm text-emerald-600 dark:text-emerald-400">
-                          {formatCurrency(tx.total_amount)}
-                        </p>
-                        <Badge variant="outline" className="text-[10px]">
-                          {tx.payment_method || "N/A"}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Top Products */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <IconTrophy className="size-5 text-amber-500" />
-              Top Selling Items
-            </CardTitle>
-            <CardDescription className="text-xs">Best performers this month</CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[280px]">
-              {topProducts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground">
-                  <IconTrophy className="size-8 mb-2 opacity-50" />
-                  <p>No sales data yet</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {topProducts.slice(0, 5).map((product, index) => (
-                    <div
-                      key={product.product_id}
-                      className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`size-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                          index === 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400" :
-                          index === 1 ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" :
-                          index === 2 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-400" :
-                          "bg-muted text-muted-foreground"
-                        }`}>
-                          {index + 1}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm truncate max-w-[150px]">
-                            {product.product_name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {product.quantity_sold} sold
-                          </p>
-                        </div>
-                      </div>
-                      <p className="font-mono text-sm text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(product.revenue)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        {/* System Status & Quick Actions */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <IconClock className="size-5 text-muted-foreground" />
-              System Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="relative flex size-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full size-3 bg-emerald-500"></span>
+          {/* Live Feed */}
+          <div className="bg-card rounded-xl border flex-1">
+            <div className="flex items-center gap-2 p-3 border-b">
+              <IconBroadcast className="size-4 text-[#AC0F16]" />
+              <h3 className="font-medium text-sm">Live Feed</h3>
+              <span className="relative flex size-2 ml-auto">
+                <span className="animate-ping absolute h-full w-full rounded-full bg-[#2EAFC5] opacity-75"></span>
+                <span className="relative rounded-full size-2 bg-[#2EAFC5]"></span>
               </span>
-              <div>
-                <p className="font-medium text-sm">All Systems Operational</p>
-                <p className="text-xs text-muted-foreground">
-                  Database connected • Sync active
-                </p>
-              </div>
             </div>
+            <ScrollArea className="h-[180px]">
+              {recentSales.transactions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <IconBroadcast className="size-6 mb-1 opacity-30" />
+                  <p className="text-xs">No recent activity</p>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {recentSales.transactions.slice(0, 5).map((tx) => (
+                    <button
+                      key={tx.transaction_id}
+                      onClick={() => handleTransactionClick(tx.receipt_no)}
+                      className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <div className="size-7 rounded-full bg-[#2EAFC5]/20 flex items-center justify-center flex-shrink-0">
+                        <IconUser className="size-3.5 text-[#2EAFC5]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium truncate text-foreground">Sale #{tx.receipt_no.slice(-4)}</p>
+                          <span className="text-[10px] ml-2 text-muted-foreground">{formatTime(tx.created_at)}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{tx.itemsCount} items • {formatCurrency(tx.total_amount)}</p>
+                      </div>
+                      <IconArrowRight className="size-3.5 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+            <div className="flex items-center justify-center p-2 border-t">
+              <p className="text-[10px] text-muted-foreground">{formatDateLong(new Date())}</p>
+            </div>
+          </div>
 
-            <div className="pt-2 border-t">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Quick Actions</p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex-col gap-1.5"
-                  onClick={() => router.push("/admin/pos")}
-                >
-                  <IconCash className="size-4" />
-                  <span className="text-[10px]">New Sale</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex-col gap-1.5"
-                  onClick={() => router.push("/admin/inventory")}
-                >
-                  <IconPackage className="size-4" />
-                  <span className="text-[10px]">Add Product</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex-col gap-1.5"
-                  onClick={() => router.push("/admin/sales")}
-                >
-                  <IconReceipt className="size-4" />
-                  <span className="text-[10px]">View Sales</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-auto py-3 flex-col gap-1.5"
-                  onClick={() => router.push("/admin/sales/financial")}
-                >
-                  <IconChartBar className="size-4" />
-                  <span className="text-[10px]">Reports</span>
-                </Button>
+          {/* Quick Metrics */}
+          <div 
+            className="bg-card rounded-xl border p-3 cursor-pointer hover:shadow-sm transition-all"
+            onClick={() => router.push("/admin/orders")}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Active Orders</p>
+                <p className="text-base font-bold tabular-nums text-foreground">{activeOrdersCount}</p>
               </div>
+              {activeOrdersCount > 0 ? (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#F1782F]/20 text-[#F1782F]">
+                  {activeOrdersCount} pending
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#2EAFC5]/20 text-[#2EAFC5]">
+                  All clear
+                </span>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        {/* Top Products Ranking Card - Takes 3 columns */}
+        <div className="lg:col-span-3 bg-card rounded-xl border flex flex-col">
+          {/* Header with filters */}
+          <div className="flex flex-wrap items-center gap-2 p-3 border-b">
+            <IconTrophy className="size-4 text-[#F1782F]" />
+            <h3 className="font-medium text-sm">Top Selling Products</h3>
+            
+            {/* Category Filter - Shadcn Select */}
+            <div className="flex items-center gap-2 ml-auto">
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="SOFTDRINKS_CASE">Soft Drinks Case</SelectItem>
+                  <SelectItem value="SODA">Soft Drinks</SelectItem>
+                  <SelectItem value="SNACK">Snack</SelectItem>
+                  <SelectItem value="CANNED_GOODS">Canned Goods</SelectItem>
+                  <SelectItem value="BEVERAGES">Beverages</SelectItem>
+                  <SelectItem value="DAIRY">Dairy</SelectItem>
+                  <SelectItem value="BREAD">Bread</SelectItem>
+                  <SelectItem value="INSTANT_NOODLES">Instant Noodles</SelectItem>
+                  <SelectItem value="CONDIMENTS">Condiments</SelectItem>
+                  <SelectItem value="PERSONAL_CARE">Personal Care</SelectItem>
+                  <SelectItem value="HOUSEHOLD">Household</SelectItem>
+                  <SelectItem value="OTHER">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Date Range Picker for this card */}
+              <DateRangePicker 
+                date={topProductsDateRange} 
+                onDateChange={(range) => {
+                  setTopProductsDateRange(range);
+                  setSelectedTopProductsPreset(""); // Clear preset selection when manually picking
+                }}
+              />
+            </div>
+            
+            {isLoadingProducts && (
+              <IconRefresh className="size-3.5 animate-spin text-muted-foreground" />
+            )}
+          </div>
+          
+          {/* Date Presets Row - Clickable badges */}
+          <div className="flex items-center gap-1 flex-wrap px-3 py-2 border-b bg-muted/30">
+            {datePresets.map((preset) => (
+              <button
+                key={`top-${preset.label}`}
+                className={`text-[10px] px-2.5 py-1 rounded-full border transition-colors font-medium ${
+                  selectedTopProductsPreset === preset.label
+                    ? "bg-[#AC0F16] text-white border-[#AC0F16]"
+                    : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => handleTopProductsPresetClick(preset)}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          
+          {/* Chart + Ranking Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-3 flex-1">
+            {/* Scrollable Bar Chart */}
+            <ScrollArea className="h-[480px]">
+              <div style={{ height: barChartHeight, minHeight: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={rankedProducts} 
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} className="stroke-border" />
+                    <XAxis 
+                      type="number" 
+                      tickLine={false} 
+                      axisLine={false}
+                      tick={{ fontSize: 10 }}
+                      className="fill-muted-foreground"
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="product_name" 
+                      tickLine={false} 
+                      axisLine={false}
+                      tick={{ fontSize: 10 }}
+                      width={100}
+                      className="fill-muted-foreground"
+                      tickFormatter={(value) => value.length > 15 ? value.slice(0, 15) + "..." : value}
+                    />
+                    <Tooltip content={<ProductTooltip />} />
+                    <Bar dataKey="quantity_sold" radius={[0, 4, 4, 0]}>
+                      {rankedProducts.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </ScrollArea>
+            
+            {/* Ranking List */}
+            <ScrollArea className="h-[480px]">
+              <div className="space-y-2 pr-2">
+                {rankedProducts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
+                    <IconCategory className="size-8 mb-2 opacity-30" />
+                    <p className="text-xs">No sales data for this period</p>
+                  </div>
+                ) : (
+                  rankedProducts.map((product, index) => (
+                    <div 
+                      key={product.product_id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      {/* Rank Badge */}
+                      <div 
+                        className="size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                        style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                      >
+                        {index + 1}
+                      </div>
+                      
+                      {/* Product Image */}
+                      <div className="size-10 rounded-lg overflow-hidden bg-muted shrink-0">
+                        {product.image_url ? (
+                          <img 
+                            src={product.image_url} 
+                            alt={product.product_name}
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <div className="size-full flex items-center justify-center">
+                            <IconPackage className="size-5 text-muted-foreground/50" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Product Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate text-foreground">{product.product_name}</p>
+                        <p className="text-[10px] text-muted-foreground">{getCategoryLabel(product.category)}</p>
+                        {/* Stock indicator */}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                            product.current_stock === 0 
+                              ? "bg-destructive/20 text-destructive" 
+                              : product.current_stock <= 10 
+                                ? "bg-[#F1782F]/20 text-[#F1782F]" 
+                                : "bg-[#2EAFC5]/20 text-[#2EAFC5]"
+                          }`}>
+                            {product.current_stock} in stock
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Stats */}
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-bold tabular-nums text-foreground">{product.quantity_sold} sold</p>
+                        <p className="text-[10px] text-[#2EAFC5] tabular-nums">{formatCurrency(product.revenue)}</p>
+                        <p className={`text-[10px] tabular-nums ${product.profit >= 0 ? "text-[#10B981]" : "text-destructive"}`}>
+                          {product.profit >= 0 ? "+" : ""}{formatCurrency(product.profit)} profit
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Button 
+          variant="outline" 
+          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#AC0F16]/50"
+          onClick={() => router.push("/admin/pos")}
+        >
+          <IconReceipt className="size-4 text-[#AC0F16]" />
+          <span>New Sale</span>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#F1782F]/50"
+          onClick={() => router.push("/admin/inventory")}
+        >
+          <IconPackage className="size-4 text-[#F1782F]" />
+          <span>Inventory</span>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#2EAFC5]/50"
+          onClick={() => router.push("/admin/orders")}
+        >
+          <IconClock className="size-4 text-[#2EAFC5]" />
+          <span>Orders</span>
+        </Button>
+        <Button 
+          variant="outline" 
+          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#AC0F16]/50"
+          onClick={() => router.push("/admin/sales/financial")}
+        >
+          <IconChartBar className="size-4 text-[#AC0F16]" />
+          <span>Reports</span>
+        </Button>
       </div>
     </div>
   );

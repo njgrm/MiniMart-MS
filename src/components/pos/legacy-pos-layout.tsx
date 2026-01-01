@@ -20,6 +20,11 @@ import {
   Calculator,
   Percent,
   ChevronDown,
+  Bell,
+  Monitor,
+  Smartphone,
+  Camera,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +42,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   usePosStore,
@@ -45,9 +60,11 @@ import {
   type PosProduct,
   type PosCartItem,
 } from "@/stores/use-pos-store";
-import { usePosLayoutStore } from "@/stores/use-pos-layout-store";
+import { usePosLayoutStore, type PosViewMode } from "@/stores/use-pos-layout-store";
 import { usePosAudio } from "@/hooks/use-pos-audio";
 import { PaymentDialog } from "@/components/pos/payment-dialog";
+import { CameraScanner } from "@/components/pos/camera-scanner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ReceiptTemplate } from "@/components/pos/receipt-template";
 import { createTransaction } from "@/actions/transaction";
 import { toast } from "sonner";
@@ -123,6 +140,10 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
     text: string;
     visible: boolean;
   }>({ text: "", visible: false });
+  const [voidDialogOpen, setVoidDialogOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [editingQtyIndex, setEditingQtyIndex] = useState<number | null>(null);
+  const [editingQtyValue, setEditingQtyValue] = useState<string>("");
 
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
@@ -144,6 +165,8 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
     setSelectedItemIndex,
     lastAddedItemId,
     setLastAddedItemId,
+    viewMode,
+    setViewMode,
   } = usePosLayoutStore();
 
   // Audio
@@ -216,8 +239,18 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
       );
       setSearchResults(results);
       if (results.length === 1) {
+        const product = results[0];
+        // Zero-stock check
+        if (product.current_stock <= 0) {
+          playErrorBuzz();
+          toast.error(`"${product.product_name}" is out of stock!`, {
+            description: "Cannot add items with zero stock.",
+          });
+          setBarcodeInput("");
+          return;
+        }
         // Single result - add it
-        const found = addByBarcode(results[0].barcode || "");
+        const found = addByBarcode(product.barcode || "");
         if (found) {
           playSuccessBeep();
           showTypingAnimation(found.product_name);
@@ -230,7 +263,21 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
         setSearchResults([]);
       }
     } else {
-      // Normal barcode mode
+      // Normal barcode mode - first find the product to check stock
+      const productMatch = products.find(
+        (p) => p.barcode && p.barcode.trim() === barcodeInput.trim()
+      );
+      
+      // Zero-stock check
+      if (productMatch && productMatch.current_stock <= 0) {
+        playErrorBuzz();
+        toast.error(`"${productMatch.product_name}" is out of stock!`, {
+          description: "Cannot add items with zero stock.",
+        });
+        setBarcodeInput("");
+        return;
+      }
+
       const found = addByBarcode(barcodeInput.trim());
       if (found) {
         playSuccessBeep();
@@ -289,13 +336,8 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
           setIsSearchMode(false);
           setSearchResults([]);
         } else if (cart.length > 0) {
-          // Could add confirmation dialog here
-          const confirmVoid = window.confirm("Void entire transaction?");
-          if (confirmVoid) {
-            clearCart();
-            setSelectedItemIndex(-1);
-            toast.info("Transaction voided");
-          }
+          // Open void confirmation dialog
+          setVoidDialogOpen(true);
         }
         inputRef.current?.focus();
         return;
@@ -313,27 +355,38 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
         return;
       }
 
-      // Plus/Minus - Adjust quantity
+      // Plus/Minus - Adjust quantity with strict stock guardrails
       if ((e.key === "+" || e.key === "=") && selectedItemIndex >= 0 && selectedItemIndex < cart.length) {
         e.preventDefault();
         const item = cart[selectedItemIndex];
+        // Strict guardrail: cannot exceed current_stock
+        if (item.quantity >= item.current_stock) {
+          playErrorBuzz();
+          toast.error(`Stock limit reached (${item.current_stock} available)`, {
+            description: `Cannot add more "${item.product_name}"`,
+          });
+          return;
+        }
         updateQuantity(item.product_id, item.quantity + 1);
         return;
       }
       if (e.key === "-" && selectedItemIndex >= 0 && selectedItemIndex < cart.length) {
         e.preventDefault();
         const item = cart[selectedItemIndex];
+        // Safety: stop at 1, never remove via minus key
         if (item.quantity > 1) {
           updateQuantity(item.product_id, item.quantity - 1);
         } else {
-          removeFromCart(item.product_id);
-          setSelectedItemIndex(Math.max(0, selectedItemIndex - 1));
+          playErrorBuzz();
+          toast.warning("Quantity already at minimum", {
+            description: "Use Delete key to remove item",
+          });
         }
         return;
       }
 
       // Delete - Remove selected item
-      if ((e.key === "Delete" || e.key === "Backspace") && 
+      if ((e.key === "Delete" ) && 
           selectedItemIndex >= 0 && 
           selectedItemIndex < cart.length &&
           !barcodeInput) {
@@ -356,6 +409,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
     updateQuantity,
     removeFromCart,
     setSelectedItemIndex,
+    playErrorBuzz,
   ]);
 
   // Auto-scroll to selected item
@@ -453,6 +507,69 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
     }
   };
 
+  // View mode options
+  const viewModes: { id: PosViewMode; label: string; icon: React.ElementType }[] = [
+    { id: "touch", label: "Touch", icon: Smartphone },
+    { id: "legacy", label: "Legacy", icon: Monitor },
+  ];
+
+  // Handle camera scan
+  const handleCameraScan = useCallback((barcode: string) => {
+    // Check stock first
+    const productMatch = products.find(
+      (p) => p.barcode && p.barcode.trim() === barcode.trim()
+    );
+    
+    if (productMatch && productMatch.current_stock <= 0) {
+      playErrorBuzz();
+      toast.error(`"${productMatch.product_name}" is out of stock!`, {
+        description: "Cannot add items with zero stock.",
+      });
+      setCameraOpen(false);
+      return;
+    }
+
+    const found = addByBarcode(barcode);
+    if (found) {
+      playSuccessBeep();
+      setLastAddedItemId(found.product_id);
+      setTimeout(() => setLastAddedItemId(null), 1500);
+      showTypingAnimation(found.product_name);
+      toast.success(`Added: ${found.product_name}`);
+    } else {
+      playErrorBuzz();
+      toast.error(`Product not found: ${barcode}`);
+    }
+    setCameraOpen(false);
+  }, [products, addByBarcode, playSuccessBeep, playErrorBuzz, setLastAddedItemId, showTypingAnimation]);
+
+  // Handle void confirmation
+  const handleVoidConfirm = useCallback(() => {
+    clearCart();
+    setSelectedItemIndex(-1);
+    setVoidDialogOpen(false);
+    toast.info("Transaction voided");
+    inputRef.current?.focus();
+  }, [clearCart, setSelectedItemIndex]);
+
+  // Handle editable quantity submit with stock guardrails
+  const handleQtySubmit = useCallback((productId: number, maxStock: number) => {
+    const qty = parseInt(editingQtyValue);
+    if (!isNaN(qty) && qty > 0) {
+      // Clamp to available stock
+      const clampedQty = Math.min(qty, maxStock);
+      if (clampedQty < qty) {
+        playErrorBuzz();
+        toast.warning(`Quantity clamped to ${clampedQty}`, {
+          description: `Only ${maxStock} units available in stock`,
+        });
+      }
+      updateQuantity(productId, clampedQty);
+    }
+    setEditingQtyIndex(null);
+    setEditingQtyValue("");
+  }, [editingQtyValue, updateQuantity, playErrorBuzz]);
+
   return (
     <div
       className="w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground bg-background"
@@ -463,23 +580,33 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
         {/* Header with barcode input */}
         <div className="flex-shrink-0 border-b border-border px-4 py-3 bg-card dark:bg-dark-foreground">
           <div className="flex items-center gap-3">
-            {/* Mode indicator */}
-            <Badge
-              variant={isSearchMode ? "secondary" : "outline"}
-              className="gap-1.5 px-3 py-3 border-border radius-md text-xs font-medium"
-            >
-              {isSearchMode ? (
-                <>
-                  <Search className="h-3 w-3" />
-                  Search Mode
-                </>
-              ) : (
-                <>
-                  <ScanBarcode className="h-3 w-3" />
-                  Scan Mode
-                </>
-              )}
-            </Badge>
+            {/* Mode indicator - now clickable to open camera */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant={isSearchMode ? "secondary" : "outline"}
+                    className="gap-1.5 px-3 py-3.5 text-xs border-border rounded-lg font-medium cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => setCameraOpen(true)}
+                  >
+                    {isSearchMode ? (
+                      <>
+                        <Search className="h-3 w-3" />
+                        Search Mode
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-3 w-3" />
+                        Scan
+                      </>
+                    )}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Click to open camera scanner</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             {/* Barcode input (phantom input - always focused) */}
             <div className="relative flex-1">
@@ -495,7 +622,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                   }
                 }}
                 placeholder={isSearchMode ? "Type product name..." : "Type barcode or search product name(F2)"}
-                className="h-11 pl-10 text-lg font-mono bg-background border-2 border-primary/20 focus:border-primary"
+                className="h-11 w-full pl-10 text-lg font-mono bg-background border-2 border-primary/20 focus:border-primary"
                 autoComplete="off"
               />
             </div>
@@ -517,6 +644,37 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                 </motion.div>
               )}
             </AnimatePresence>
+
+
+
+            {/* View Mode Toggle */}
+            <div className="relative flex bg-card border border-border rounded-lg py-1.5 px-1">
+              {viewModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setViewMode(mode.id)}
+                  className={cn(
+                    "relative flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium rounded-md z-10 transition-colors duration-200",
+                    viewMode === mode.id
+                      ? "text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {viewMode === mode.id && (
+                    <motion.div
+                      layoutId="legacy-view-mode-highlight"
+                      className="absolute inset-0 bg-primary rounded-md shadow-sm"
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <mode.icon className="h-3.5 w-3.5 relative z-10" />
+                  <span className="relative z-10">{mode.label}</span>
+                </button>
+              ))}
+            </div>
+
+         
           </div>
 
           {/* Search results dropdown */}
@@ -599,17 +757,18 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                   <th className="w-32 px-4 py-3">Barcode</th>
                   <th className="px-4 py-3">Item Name</th>
                   <th className="w-24 px-4 py-3 text-right">Price</th>
-                  <th className="w-24 px-4 py-3 text-center">Qty</th>
+                  <th className="w-32 px-4 py-3 text-center">Qty / Stock</th>
                   <th className="w-28 px-4 py-3 text-right">Total</th>
                   <th className="w-20 px-4 py-3 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-card">
                 <AnimatePresence>
                   {cart.map((item, index) => {
                     const isSelected = index === selectedItemIndex;
                     const isLastAdded = item.product_id === lastAddedItemId;
                     const unitPrice = getCartItemPrice(item);
+                    const isEditing = editingQtyIndex === index;
 
                     return (
                       <motion.tr
@@ -621,7 +780,9 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                           x: 0,
                           backgroundColor: isLastAdded
                             ? ["rgba(172, 15, 22, 0.2)", "rgba(172, 15, 22, 0)", "rgba(172, 15, 22, 0.1)", "rgba(172, 15, 22, 0)"]
-                            : "transparent",
+                            : isSelected
+                              ? "rgba(172, 15, 22, 0.1)"
+                              : "transparent",
                         }}
                         exit={{ opacity: 0, x: 20 }}
                         transition={{
@@ -630,7 +791,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                         }}
                         className={cn(
                           "border-b border-border cursor-pointer transition-colors",
-                          isSelected && "bg-primary/10 border-l-4 border-l-primary",
+                          isSelected && "border-l-4 border-l-primary",
                           !isSelected && "hover:bg-muted/50"
                         )}
                         onClick={() => setSelectedItemIndex(index)}
@@ -661,35 +822,52 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (item.quantity > 1) {
-                                  updateQuantity(item.product_id, item.quantity - 1);
-                                } else {
-                                  removeFromCart(item.product_id);
-                                }
-                              }}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="w-8 text-center font-mono text-sm font-medium">
-                              {item.quantity}
+                            {/* Editable Quantity - no +/- buttons, keyboard only */}
+                            {isEditing ? (
+                              <Input
+                                type="number"
+                                value={editingQtyValue}
+                                onChange={(e) => setEditingQtyValue(e.target.value)}
+                                onBlur={() => handleQtySubmit(item.product_id, item.current_stock)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    handleQtySubmit(item.product_id, item.current_stock);
+                                  }
+                                  if (e.key === "Escape") {
+                                    setEditingQtyIndex(null);
+                                    setEditingQtyValue("");
+                                  }
+                                }}
+                                className="w-14 h-7 text-center font-mono text-sm p-1"
+                                autoFocus
+                                onClick={(e) => e.stopPropagation()}
+                                min={1}
+                                max={item.current_stock}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                className="min-w-[2.5rem] text-center font-mono text-sm font-semibold hover:bg-primary/10 rounded px-2 py-1 transition-colors border border-transparent hover:border-primary/20"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingQtyIndex(index);
+                                  setEditingQtyValue(item.quantity.toString());
+                                }}
+                                title="Click to edit quantity"
+                              >
+                                {item.quantity}
+                              </button>
+                            )}
+                            
+                            {/* Stock indicator */}
+                            <span className={cn(
+                              "text-[10px] font-mono",
+                              item.current_stock <= item.reorder_level
+                                ? "text-secondary"
+                                : "text-muted-foreground"
+                            )}>
+                              /{item.current_stock}
                             </span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateQuantity(item.product_id, item.quantity + 1);
-                              }}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
                           </div>
                         </td>
                         <td className="px-4 py-3 font-mono text-sm text-right font-medium">
@@ -840,51 +1018,29 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
           </Button>
         </div>
 
-        {/* Keyboard Shortcuts Reference */}
+        {/* Keyboard Shortcuts Reference - Static Display */}
         <div className="flex-1 overflow-y-auto p-4">
           <h3 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
             <Keyboard className="h-4 w-4" />
             Keyboard Shortcuts
           </h3>
 
-          <TooltipProvider>
-            <div className="space-y-1.5">
-              {keyboardShortcuts.map((shortcut) => (
-                <Tooltip key={shortcut.key}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-between h-9 px-3 text-left hover:bg-muted"
-                      onClick={() => {
-                        // Execute the shortcut action
-                        if (shortcut.key === "Enter") {
-                          handleBarcodeSubmit();
-                        } else if (shortcut.key === "F2") {
-                          setIsSearchMode(true);
-                          inputRef.current?.focus();
-                        } else if (shortcut.key === "Esc") {
-                          if (barcodeInput) {
-                            setBarcodeInput("");
-                          }
-                        }
-                      }}
-                    >
-                      <span className="flex items-center gap-2 text-xs">
-                        <shortcut.icon className="h-3.5 w-3.5 text-muted-foreground" />
-                        {shortcut.description}
-                      </span>
-                      <kbd className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-muted-foreground">
-                        {shortcut.key}
-                      </kbd>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">
-                    <p>{shortcut.description}</p>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
-            </div>
-          </TooltipProvider>
+          <div className="space-y-1">
+            {keyboardShortcuts.map((shortcut) => (
+              <div
+                key={shortcut.key}
+                className="w-full flex items-center justify-between h-8 px-3 rounded-md bg-muted/30"
+              >
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <shortcut.icon className="h-3.5 w-3.5" />
+                  {shortcut.description}
+                </span>
+                <kbd className="px-2 py-0.5 rounded bg-background border border-border text-[10px] font-mono text-foreground shadow-sm">
+                  {shortcut.key}
+                </kbd>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Status Bar */}
@@ -911,6 +1067,40 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
         totalDue={totalDue}
         initialGcashQrUrl={gcashQrUrl}
         viewMode="legacy"
+      />
+
+      {/* Void Confirmation Dialog */}
+      <AlertDialog open={voidDialogOpen} onOpenChange={setVoidDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Void Transaction?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove all <strong>{cart.length} item{cart.length !== 1 ? "s" : ""}</strong> from the current transaction.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => inputRef.current?.focus()}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleVoidConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Void All Items
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Camera Scanner */}
+      <CameraScanner
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onDetected={handleCameraScan}
       />
 
       {/* Hidden Receipt Template */}

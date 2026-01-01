@@ -79,6 +79,9 @@ export async function getProductById(productId: number) {
 
 /**
  * Create a new product with inventory
+ * 
+ * This creates the product, inventory record, AND an INITIAL_STOCK movement
+ * to properly track the initial stock source in the audit trail.
  */
 export async function createProduct(data: CreateProductInput): Promise<ActionResult> {
   const parsed = createProductSchema.safeParse(data);
@@ -97,6 +100,10 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
     reorder_level,
     barcode,
     image_url,
+    // Stock movement tracking fields
+    supplier_name,
+    reference,
+    receipt_image_url,
   } = parsed.data;
 
   try {
@@ -122,7 +129,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
       }
     }
 
-    // Create product and inventory in a transaction
+    // Create product, inventory, and INITIAL_STOCK movement in a transaction
     const product = await prisma.$transaction(async (tx) => {
       const newProduct = await tx.product.create({
         data: {
@@ -136,7 +143,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
         },
       });
 
-      await tx.inventory.create({
+      const newInventory = await tx.inventory.create({
         data: {
           product_id: newProduct.product_id,
           current_stock: initial_stock,
@@ -144,6 +151,25 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
           last_restock: new Date(),
         },
       });
+
+      // Create INITIAL_STOCK movement for audit trail (only if stock > 0)
+      if (initial_stock > 0) {
+        await tx.stockMovement.create({
+          data: {
+            inventory_id: newInventory.inventory_id,
+            user_id: 1, // TODO: Get actual user from session
+            movement_type: "INITIAL_STOCK",
+            quantity_change: initial_stock,
+            previous_stock: 0,
+            new_stock: initial_stock,
+            reason: "Initial stock when product was created",
+            supplier_name: supplier_name || null,
+            reference: reference || null,
+            cost_price: cost_price ? new Decimal(cost_price) : null,
+            receipt_image_url: receipt_image_url || null,
+          },
+        });
+      }
 
       return newProduct;
     });
@@ -372,7 +398,19 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
 
     // HARD DELETE: Product has no history, safe to delete completely
     await prisma.$transaction(async (tx) => {
-      // Delete inventory first
+      // Get inventory to find stock movements
+      const inventory = await tx.inventory.findUnique({
+        where: { product_id: productId },
+      });
+
+      // Delete stock movements first (if inventory exists)
+      if (inventory) {
+        await tx.stockMovement.deleteMany({
+          where: { inventory_id: inventory.inventory_id },
+        });
+      }
+
+      // Delete inventory
       await tx.inventory.deleteMany({
         where: { product_id: productId },
       });

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Moon, Sun, LogOut, User, Settings, ChevronDown } from "lucide-react";
+import { Moon, Sun, LogOut, User, Settings, ChevronDown, AlertTriangle, AlertCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
 import { NotificationBell } from "@/components/ui/notification-bell";
+import { getInventoryAlerts } from "@/actions/inventory";
 
 interface TopNavProps {
   user?: {
@@ -30,9 +31,25 @@ export default function TopNav({ user }: TopNavProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [stockAlerts, setStockAlerts] = useState({ outOfStock: 0, lowStock: 0 });
 
   useEffect(() => {
     setMounted(true);
+    
+    // Fetch stock alerts
+    const fetchAlerts = async () => {
+      try {
+        const alerts = await getInventoryAlerts();
+        setStockAlerts(alerts);
+      } catch (err) {
+        console.error("Failed to fetch stock alerts:", err);
+      }
+    };
+    
+    fetchAlerts();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchAlerts, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogout = async () => {
@@ -52,11 +69,35 @@ export default function TopNav({ user }: TopNavProps) {
 
   return (
     <div className="h-full flex items-center dark:bg-sidebar justify-between px-4 bg-card">
-      {/* Left side - Breadcrumb */}
-      <div className="flex items-center gap-4 mt-4 ml-4 flex-1 min-w-0">
-        <div className="flex-1 min-w-0">
+      {/* Left side - Breadcrumb + Stock Alerts */}
+      <div className="flex justify-start gap-4 mt-0 ml-4 min-w-0">
+        <div className="flex-1 min-w-0 mt-4">
           <DynamicBreadcrumb />
         </div>
+        
+        {/* Stock Alerts - inline badges */}
+        {mounted && (stockAlerts.outOfStock > 0 || stockAlerts.lowStock > 0) && (
+          <div className="flex items-center gap-2 shrink-0">
+            {stockAlerts.outOfStock > 0 && (
+              <button
+                onClick={() => router.push("/admin/inventory?status=out")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-destructive/10 border border-destructive/30 hover:bg-destructive/20 transition-colors"
+              >
+                <AlertTriangle className="size-3.5 text-destructive" />
+                <span className="text-[13px] font-medium text-destructive">{stockAlerts.outOfStock} out of stock</span>
+              </button>
+            )}
+            {stockAlerts.lowStock > 0 && (
+              <button
+                onClick={() => router.push("/admin/inventory?status=low")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[#F1782F]/10 border border-[#F1782F]/30 hover:bg-[#F1782F]/20 transition-colors"
+              >
+                <AlertCircle className="size-3.5 text-[#F1782F]" />
+                <span className="text-[13px] font-medium text-[#F1782F]">{stockAlerts.lowStock} low stock</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right side */}

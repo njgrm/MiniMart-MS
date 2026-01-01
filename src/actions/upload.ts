@@ -138,3 +138,16 @@ export async function uploadImageRaw(file: File): Promise<UploadResult> {
     return { success: false, error: "Failed to upload image" };
   }
 }
+
+/**
+ * uploadReceiptImage
+ * 
+ * Alias for uploadImageRaw - uploads receipt/document images without
+ * background removal. Used for supplier receipts, invoices, etc.
+ * 
+ * @param file - The image File object from FormData
+ * @returns UploadResult with success status and path or error
+ */
+export async function uploadReceiptImage(file: File): Promise<UploadResult> {
+  return uploadImageRaw(file);
+}

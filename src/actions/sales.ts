@@ -395,11 +395,34 @@ export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> 
  * Get quick sales stats for dashboard
  * Only includes COMPLETED transactions, excludes VOID/CANCELLED
  * Calculates revenue from item prices (not total_amount) to handle discounts correctly
+ * Includes previous period data for percentage change calculation
+ * 
+ * NOTE: Uses Philippine Standard Time (UTC+8) for business day calculations
  */
 export async function getSalesStats() {
+  // Philippine timezone offset is UTC+8 (8 hours = 8 * 60 * 60 * 1000 ms)
+  const PHT_OFFSET = 8 * 60 * 60 * 1000;
+  
+  // Get current time in PHT
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nowPHT = new Date(now.getTime() + PHT_OFFSET);
+  
+  // Calculate start of today in PHT, then convert back to UTC for database query
+  const todayPHT = new Date(Date.UTC(nowPHT.getUTCFullYear(), nowPHT.getUTCMonth(), nowPHT.getUTCDate()));
+  const todayStart = new Date(todayPHT.getTime() - PHT_OFFSET); // Convert PHT midnight to UTC
+  
+  // Yesterday in UTC
+  const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+  
+  // Start of current month in PHT, converted to UTC
+  const monthPHT = new Date(Date.UTC(nowPHT.getUTCFullYear(), nowPHT.getUTCMonth(), 1));
+  const monthStart = new Date(monthPHT.getTime() - PHT_OFFSET);
+  
+  // Last month's range
+  const lastMonthPHT = new Date(Date.UTC(nowPHT.getUTCFullYear(), nowPHT.getUTCMonth() - 1, 1));
+  const lastMonthStart = new Date(lastMonthPHT.getTime() - PHT_OFFSET);
+  const lastMonthEndPHT = new Date(Date.UTC(nowPHT.getUTCFullYear(), nowPHT.getUTCMonth(), 0, 23, 59, 59, 999));
+  const lastMonthEnd = new Date(lastMonthEndPHT.getTime() - PHT_OFFSET);
 
   // Today's stats - only COMPLETED transactions
   const todayTransactions = await prisma.transaction.findMany({
@@ -410,10 +433,28 @@ export async function getSalesStats() {
     include: { items: true },
   });
 
+  // Yesterday's stats for comparison
+  const yesterdayTransactions = await prisma.transaction.findMany({
+    where: {
+      created_at: { gte: yesterdayStart, lt: todayStart },
+      status: "COMPLETED",
+    },
+    include: { items: true },
+  });
+
   // Month's stats - only COMPLETED transactions
   const monthTransactions = await prisma.transaction.findMany({
     where: {
       created_at: { gte: monthStart },
+      status: "COMPLETED",
+    },
+    include: { items: true },
+  });
+
+  // Last month's stats for comparison
+  const lastMonthTransactions = await prisma.transaction.findMany({
+    where: {
+      created_at: { gte: lastMonthStart, lte: lastMonthEnd },
       status: "COMPLETED",
     },
     include: { items: true },
@@ -447,7 +488,78 @@ export async function getSalesStats() {
 
   return {
     today: calculateStats(todayTransactions),
+    yesterday: calculateStats(yesterdayTransactions),
     month: calculateStats(monthTransactions),
+    lastMonth: calculateStats(lastMonthTransactions),
+  };
+}
+
+/**
+ * Get sales stats for a custom date range
+ * Accepts start and end dates, calculates comparison with previous period of same length
+ */
+export async function getSalesStatsByDateRange(startDate: Date, endDate: Date) {
+  // Philippine timezone offset is UTC+8
+  const PHT_OFFSET = 8 * 60 * 60 * 1000;
+  
+  // Ensure end date includes the full day (23:59:59)
+  const rangeStart = new Date(startDate);
+  const rangeEnd = new Date(endDate);
+  rangeEnd.setHours(23, 59, 59, 999);
+  
+  // Calculate the length of the period in milliseconds
+  const periodLength = rangeEnd.getTime() - rangeStart.getTime();
+  
+  // Calculate previous period (same length, immediately before)
+  const prevEnd = new Date(rangeStart.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - periodLength);
+
+  // Current period transactions
+  const currentTransactions = await prisma.transaction.findMany({
+    where: {
+      created_at: { gte: rangeStart, lte: rangeEnd },
+      status: "COMPLETED",
+    },
+    include: { items: true },
+  });
+
+  // Previous period transactions for comparison
+  const previousTransactions = await prisma.transaction.findMany({
+    where: {
+      created_at: { gte: prevStart, lte: prevEnd },
+      status: "COMPLETED",
+    },
+    include: { items: true },
+  });
+
+  const calculateStats = (transactions: typeof currentTransactions) => {
+    let revenue = 0;
+    let cost = 0;
+
+    for (const tx of transactions) {
+      for (const item of tx.items) {
+        const itemPrice = Number(item.price_at_sale);
+        const itemCost = Number(item.cost_at_sale);
+        
+        if (itemPrice > 0) {
+          revenue += itemPrice * item.quantity;
+          cost += itemCost * item.quantity;
+        }
+      }
+    }
+
+    return {
+      count: transactions.length,
+      revenue,
+      cost,
+      profit: revenue - cost,
+    };
+  };
+
+  return {
+    current: calculateStats(currentTransactions),
+    previous: calculateStats(previousTransactions),
+    periodDays: Math.ceil(periodLength / (24 * 60 * 60 * 1000)),
   };
 }
 
@@ -532,4 +644,105 @@ export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
     .slice(0, limit);
 
   return sorted;
+}
+
+export interface TopProductWithCategory {
+  product_id: number;
+  product_name: string;
+  category: string;
+  quantity_sold: number;
+  revenue: number;
+  profit: number;
+  image_url: string | null;
+  current_stock: number;
+}
+
+/**
+ * Get top selling products with category filtering and custom date range
+ */
+export async function getTopProductsByDateRange(
+  startDate: Date,
+  endDate: Date,
+  category?: string,
+  limit: number = 10
+): Promise<{ products: TopProductWithCategory[]; categories: string[] }> {
+  // Ensure end date includes the full day
+  const rangeEnd = new Date(endDate);
+  rangeEnd.setHours(23, 59, 59, 999);
+
+  // Get all transaction items within date range
+  const whereClause: {
+    transaction: { created_at: { gte: Date; lte: Date }; status: string };
+    product?: { category: string };
+  } = {
+    transaction: {
+      created_at: { gte: startDate, lte: rangeEnd },
+      status: "COMPLETED",
+    },
+  };
+
+  if (category && category !== "all") {
+    whereClause.product = { category };
+  }
+
+  const transactionItems = await prisma.transactionItem.findMany({
+    where: whereClause,
+    include: {
+      product: {
+        select: {
+          product_id: true,
+          product_name: true,
+          category: true,
+          image_url: true,
+          inventory: {
+            select: {
+              current_stock: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Get all unique categories
+  const allCategories = await prisma.product.findMany({
+    select: { category: true },
+    distinct: ["category"],
+    where: { is_archived: false },
+  });
+  const categories = allCategories.map(c => c.category).sort();
+
+  // Aggregate by product
+  const productMap = new Map<number, TopProductWithCategory>();
+
+  for (const item of transactionItems) {
+    const existing = productMap.get(item.product_id);
+    const revenue = Number(item.subtotal);
+    const cost = Number(item.cost_at_sale) * item.quantity;
+    const profit = revenue - cost;
+    
+    if (existing) {
+      existing.quantity_sold += item.quantity;
+      existing.revenue += revenue;
+      existing.profit += profit;
+    } else {
+      productMap.set(item.product_id, {
+        product_id: item.product_id,
+        product_name: item.product.product_name,
+        category: item.product.category,
+        quantity_sold: item.quantity,
+        revenue,
+        profit,
+        image_url: item.product.image_url,
+        current_stock: item.product.inventory?.current_stock ?? 0,
+      });
+    }
+  }
+
+  // Sort by quantity sold and take top N
+  const products = Array.from(productMap.values())
+    .sort((a, b) => b.quantity_sold - a.quantity_sold)
+    .slice(0, limit);
+
+  return { products, categories };
 }

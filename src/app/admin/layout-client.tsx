@@ -51,7 +51,7 @@ export default function AdminLayoutClient({ children, user, pendingOrdersCount =
             <main
               className={cn(
                 "flex-1 overflow-auto",
-                isPosPage ? "p-0 bg-background" : "p-4 md:p-6 bg-muted/30"
+                isPosPage ? "p-0 bg-background" : "p-4 md:p-6 bg-[#f5f3ef] dark:bg-muted/30"
               )}
             >
               <div className={cn(

@@ -32,6 +32,8 @@ interface ParsedRow {
   barcode?: string;
   image_url?: string;
   reorder_level?: string;
+  supplier_name?: string;
+  reference?: string;
 }
 
 interface ValidationError {
@@ -163,6 +165,8 @@ export function CSVImportDialog({
         barcode,
         image_url: row.image_url?.trim() || null,
         reorder_level: isNaN(reorderLevel) ? 10 : reorderLevel,
+        supplier_name: row.supplier_name?.trim() || null,
+        reference: row.reference?.trim() || null,
       });
     });
 
@@ -347,12 +351,14 @@ export function CSVImportDialog({
               <code className="text-xs bg-background px-1 rounded border border-border">stock</code>
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              Optional: <code className="bg-background px-1 rounded border border-border">cost_price</code> (supply cost, defaults to 0),{" "}
-              <code className="bg-background px-1 rounded border border-border">barcode</code> (auto-generated if empty),{" "}
+              Optional: <code className="bg-background px-1 rounded border border-border">cost_price</code>,{" "}
+              <code className="bg-background px-1 rounded border border-border">barcode</code>,{" "}
               <code className="bg-background px-1 rounded border border-border">image_url</code>,{" "}
-              <code className="bg-background px-1 rounded border border-border">reorder_level</code>
+              <code className="bg-background px-1 rounded border border-border">reorder_level</code>,{" "}
+              <code className="bg-background px-1 rounded border border-border">supplier_name</code>,{" "}
+              <code className="bg-background px-1 rounded border border-border">reference</code>
             </p>
-            <p className="text-muted-foreground text-xs mt-1 text-secondary">
+            <p className="text-secondary text-xs mt-1">
               💡 Tip: Use <code className="bg-background px-1 rounded border border-border">0</code> for prices if product is N/A or not priced.
             </p>
           </div>
