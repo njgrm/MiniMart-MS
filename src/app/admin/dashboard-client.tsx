@@ -606,117 +606,6 @@ export function DashboardClient({
 
       {/* Main Content: Sidebar + Top Products */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Left Column: Shift Summary + Live Feed */}
-        <div className="lg:col-span-1 flex flex-col gap-4">
-          {/* Shift Summary */}
-          <div className="bg-card rounded-xl border">
-            <div className="flex items-center gap-2 p-3 border-b">
-              <IconCash className="size-4 text-foreground" />
-              <h3 className="font-medium text-sm">Shift Summary</h3>
-            </div>
-            <div className="p-3 space-y-2">
-              <div className="flex items-center justify-between py-1.5 border-b border-dashed border-border">
-                <span className="text-xs text-muted-foreground">Transactions</span>
-                <span className="text-xs font-medium tabular-nums">{displayStats.primary.count}</span>
-              </div>
-              <div className="flex items-center justify-between py-1.5 border-b border-dashed border-border">
-                <span className="text-xs text-muted-foreground">Total Revenue</span>
-                <span className="text-xs font-bold tabular-nums text-[#2EAFC5]">{formatCurrency(displayStats.primary.revenue)}</span>
-              </div>
-              <div className="flex items-center justify-between py-1.5">
-                <span className="text-xs font-medium text-foreground">Net Profit</span>
-                <span className="text-xs font-bold tabular-nums text-[#AC0F16]">{formatCurrency(displayStats.primary.profit)}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-3 border-t">
-              <Button 
-                size="sm" 
-                className="flex-1 h-8 text-xs bg-[#2EAFC5] hover:bg-[#2EAFC5]/90 text-white"
-                onClick={() => router.push("/admin/sales")}
-              >
-                <IconPrinter className="size-3.5 mr-1.5" />
-                View Sales
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="flex-1 h-8 text-xs"
-                onClick={() => router.push("/admin/sales/financial")}
-              >
-                <IconChartBar className="size-3.5 mr-1.5" />
-                Reports
-              </Button>
-            </div>
-          </div>
-
-          {/* Live Feed */}
-          <div className="bg-card rounded-xl border flex-1">
-            <div className="flex items-center gap-2 p-3 border-b">
-              <IconBroadcast className="size-4 text-[#AC0F16]" />
-              <h3 className="font-medium text-sm">Live Feed</h3>
-              <span className="relative flex size-2 ml-auto">
-                <span className="animate-ping absolute h-full w-full rounded-full bg-[#2EAFC5] opacity-75"></span>
-                <span className="relative rounded-full size-2 bg-[#2EAFC5]"></span>
-              </span>
-            </div>
-            <ScrollArea className="h-[180px]">
-              {recentSales.transactions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                  <IconBroadcast className="size-6 mb-1 opacity-30" />
-                  <p className="text-xs">No recent activity</p>
-                </div>
-              ) : (
-                <div className="p-3 space-y-2">
-                  {recentSales.transactions.slice(0, 5).map((tx) => (
-                    <button
-                      key={tx.transaction_id}
-                      onClick={() => handleTransactionClick(tx.receipt_no)}
-                      className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
-                    >
-                      <div className="size-7 rounded-full bg-[#2EAFC5]/20 flex items-center justify-center flex-shrink-0">
-                        <IconUser className="size-3.5 text-[#2EAFC5]" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-medium truncate text-foreground">Sale #{tx.receipt_no.slice(-4)}</p>
-                          <span className="text-[10px] ml-2 text-muted-foreground">{formatTime(tx.created_at)}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">{tx.itemsCount} items • {formatCurrency(tx.total_amount)}</p>
-                      </div>
-                      <IconArrowRight className="size-3.5 text-muted-foreground" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-            <div className="flex items-center justify-center p-2 border-t">
-              <p className="text-[10px] text-muted-foreground">{formatDateLong(new Date())}</p>
-            </div>
-          </div>
-
-          {/* Quick Metrics */}
-          <div 
-            className="bg-card rounded-xl border p-3 cursor-pointer hover:shadow-sm transition-all"
-            onClick={() => router.push("/admin/orders")}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground">Active Orders</p>
-                <p className="text-base font-bold tabular-nums text-foreground">{activeOrdersCount}</p>
-              </div>
-              {activeOrdersCount > 0 ? (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#F1782F]/20 text-[#F1782F]">
-                  {activeOrdersCount} pending
-                </span>
-              ) : (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#2EAFC5]/20 text-[#2EAFC5]">
-                  All clear
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Top Products Ranking Card - Takes 3 columns */}
         <div className="lg:col-span-3 bg-card rounded-xl border flex flex-col">
           {/* Header with filters */}
@@ -887,6 +776,116 @@ export function DashboardClient({
                 )}
               </div>
             </ScrollArea>
+          </div>
+        </div>
+         {/* Left Column: Shift Summary + Live Feed */}
+        <div className="lg:col-span-1 flex flex-col gap-4">
+          {/* Shift Summary */}
+          <div className="bg-card rounded-xl border">
+            <div className="flex items-center gap-2 p-3 border-b">
+              <IconCash className="size-4 text-foreground" />
+              <h3 className="font-medium text-sm">Shift Summary</h3>
+            </div>
+            <div className="p-3 space-y-2">
+              <div className="flex items-center justify-between py-1.5 border-b border-dashed border-border">
+                <span className="text-xs text-muted-foreground">Transactions</span>
+                <span className="text-xs font-medium tabular-nums">{displayStats.primary.count}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-dashed border-border">
+                <span className="text-xs text-muted-foreground">Total Revenue</span>
+                <span className="text-xs font-bold tabular-nums text-[#2EAFC5]">{formatCurrency(displayStats.primary.revenue)}</span>
+              </div>
+              <div className="flex items-center justify-between py-1.5">
+                <span className="text-xs font-medium text-foreground">Net Profit</span>
+                <span className="text-xs font-bold tabular-nums text-[#AC0F16]">{formatCurrency(displayStats.primary.profit)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-3 border-t">
+              <Button 
+                size="sm" 
+                className="flex-1 h-8 text-xs bg-[#2EAFC5] hover:bg-[#2EAFC5]/90 text-white"
+                onClick={() => router.push("/admin/sales")}
+              >
+                <IconPrinter className="size-3.5 mr-1.5" />
+                View Sales
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="flex-1 h-8 text-xs"
+                onClick={() => router.push("/admin/sales/financial")}
+              >
+                <IconChartBar className="size-3.5 mr-1.5" />
+                Reports
+              </Button>
+            </div>
+          </div>
+
+          {/* Live Feed */}
+          <div className="bg-card rounded-xl border flex-1">
+            <div className="flex items-center gap-2 p-3 border-b">
+              <IconBroadcast className="size-4 text-[#AC0F16]" />
+              <h3 className="font-medium text-sm">Live Feed</h3>
+              <span className="relative flex size-2 ml-auto">
+                <span className="animate-ping absolute h-full w-full rounded-full bg-[#2EAFC5] opacity-75"></span>
+                <span className="relative rounded-full size-2 bg-[#2EAFC5]"></span>
+              </span>
+            </div>
+            <ScrollArea className="h-[180px]">
+              {recentSales.transactions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                  <IconBroadcast className="size-6 mb-1 opacity-30" />
+                  <p className="text-xs">No recent activity</p>
+                </div>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {recentSales.transactions.slice(0, 5).map((tx) => (
+                    <button
+                      key={tx.transaction_id}
+                      onClick={() => handleTransactionClick(tx.receipt_no)}
+                      className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <div className="size-7 rounded-full bg-[#2EAFC5]/20 flex items-center justify-center flex-shrink-0">
+                        <IconUser className="size-3.5 text-[#2EAFC5]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium truncate text-foreground">Sale #{tx.receipt_no.slice(-4)}</p>
+                          <span className="text-[10px] ml-2 text-muted-foreground">{formatTime(tx.created_at)}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{tx.itemsCount} items • {formatCurrency(tx.total_amount)}</p>
+                      </div>
+                      <IconArrowRight className="size-3.5 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+            <div className="flex items-center justify-center p-2 border-t">
+              <p className="text-[10px] text-muted-foreground">{formatDateLong(new Date())}</p>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div 
+            className="bg-card rounded-xl border p-3 cursor-pointer hover:shadow-sm transition-all"
+            onClick={() => router.push("/admin/orders")}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Active Orders</p>
+                <p className="text-base font-bold tabular-nums text-foreground">{activeOrdersCount}</p>
+              </div>
+              {activeOrdersCount > 0 ? (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#F1782F]/20 text-[#F1782F]">
+                  {activeOrdersCount} pending
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#2EAFC5]/20 text-[#2EAFC5]">
+                  All clear
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

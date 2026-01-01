@@ -346,7 +346,7 @@ export function OrderPaymentDialog({
                   </h3>
 
                   {/* QR Code Display - Larger */}
-                  <div className="relative group w-56 h-56 rounded-xl border-2 border-dashed border-border bg-white dark:bg-card flex items-center justify-center overflow-hidden shadow-sm">
+                  <div className="relative group w-56 h-56 rounded-xl border-2 border-dashed border-border bg-card flex items-center justify-center overflow-hidden shadow-sm">
                     {isUploadingQr ? (
                       <div className="flex flex-col items-center gap-3 text-muted-foreground">
                         <Loader2 className="h-12 w-12 animate-spin text-primary" />

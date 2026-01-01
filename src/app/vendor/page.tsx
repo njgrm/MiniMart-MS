@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getVendorStats, getVendorOrders, getTopPurchasedItems } from "@/actions/vendor";
+import { getVendorDashboardData, getVendorStats } from "@/actions/vendor";
 import { VendorDashboard } from "./vendor-dashboard";
 
 /**
- * Vendor Dashboard - Welcome page with stats and quick actions
+ * Vendor Dashboard - Welcome page with live order status, quick re-order, and recent orders
  */
 export default async function VendorDashboardPage() {
   const session = await auth();
@@ -19,19 +19,21 @@ export default async function VendorDashboardPage() {
   if (isNaN(customerId) || customerId <= 0) {
     redirect("/login");
   }
-  const [stats, recentOrders, topPurchasedItems] = await Promise.all([
-    getVendorStats(customerId),
-    getVendorOrders(customerId),
-    getTopPurchasedItems(customerId, 5),
+
+  // Fetch dashboard data using the new combined function
+  const [dashboardData, stats] = await Promise.all([
+    getVendorDashboardData(customerId),
+    getVendorStats(customerId), // Keep for additional stats like pendingOrders
   ]);
 
   return (
     <VendorDashboard
       userName={session.user.name || "Vendor"}
-      stats={stats}
-      recentOrders={recentOrders.slice(0, 5)}
-      topPurchasedItems={topPurchasedItems}
       customerId={customerId}
+      activeOrders={dashboardData.activeOrders}
+      quickReorderItems={dashboardData.quickReorderItems}
+      recentOrders={dashboardData.recentOrders}
+      stats={stats}
     />
   );
 }

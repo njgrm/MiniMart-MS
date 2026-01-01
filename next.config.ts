@@ -6,6 +6,13 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",
+      // Allow server actions from devtunnels and local network access
+      allowedOrigins: [
+        "localhost:3000",
+        "localhost:3001",
+        "*.devtunnels.ms",
+        "*.asse.devtunnels.ms",
+      ],
     },
   },
   images: {

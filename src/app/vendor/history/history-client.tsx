@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 const AUTO_REFRESH_INTERVAL = 2000; // 2 seconds
+const CANCEL_WINDOW_MINUTES = 10; // Minutes after order placement when cancellation is allowed
+
 import {
   IconHistory,
   IconPackage,
@@ -13,6 +16,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconRefresh,
+  IconInfoCircle,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 import {
@@ -41,6 +45,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { VendorOrder } from "@/actions/vendor";
 import { cancelVendorOrder } from "@/actions/vendor";
 import { cn } from "@/lib/utils";
@@ -48,20 +58,39 @@ import { cn } from "@/lib/utils";
 interface VendorHistoryClientProps {
   orders: VendorOrder[];
   customerId: number;
+  highlightOrderId?: number;
 }
 
 /**
  * VendorHistoryClient - Order history with expandable details
+ * Supports deep-linking via highlightOrderId prop
  */
 export function VendorHistoryClient({
   orders,
   customerId,
+  highlightOrderId,
 }: VendorHistoryClientProps) {
-  const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [expandedOrders, setExpandedOrders] = useState<Set<number>>(() => {
+    // Auto-expand the highlighted order on initial render
+    if (highlightOrderId) {
+      return new Set([highlightOrderId]);
+    }
+    return new Set();
+  });
   const [isPending, startTransition] = useTransition();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
+  const highlightedRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to highlighted order on mount
+  useEffect(() => {
+    if (highlightOrderId && highlightedRef.current) {
+      setTimeout(() => {
+        highlightedRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    }
+  }, [highlightOrderId]);
 
   // Auto-refresh every 2 seconds (silent)
   const silentRefresh = useCallback(() => {
@@ -204,14 +233,47 @@ export function VendorHistoryClient({
                 <p className="text-sm">Your orders will appear here</p>
               </div>
             ) : (
-              <div className="divide-y">
-                {orders.map((order) => {
+              <AnimatePresence>
+                {orders.map((order, index) => {
                   const isExpanded = expandedOrders.has(order.order_id);
-                  const canCancel = order.status === "PENDING";
+                  const isHighlighted = order.order_id === highlightOrderId;
+                  
+                  // Cancellation policy: Only PENDING + within 10 minutes of order
+                  const orderAge = Date.now() - new Date(order.order_date).getTime();
+                  const minutesSinceOrder = orderAge / (1000 * 60);
+                  const msRemaining = Math.max(0, (CANCEL_WINDOW_MINUTES * 60 * 1000) - orderAge);
+                  const isWithinCancelWindow = minutesSinceOrder <= CANCEL_WINDOW_MINUTES;
+                  const canCancel = order.status === "PENDING" && isWithinCancelWindow;
+                  
+                  // Format remaining time
+                  const formatTimeRemaining = () => {
+                    const totalSecs = Math.ceil(msRemaining / 1000);
+                    const mins = Math.floor(totalSecs / 60);
+                    const secs = totalSecs % 60;
+                    return `${mins}:${secs.toString().padStart(2, "0")}`;
+                  };
+                  
+                  // Determine why cancellation is not allowed
+                  let cancelDisabledReason = "";
+                  if (order.status !== "PENDING" && order.status !== "COMPLETED" && order.status !== "CANCELLED") {
+                    cancelDisabledReason = "Orders cannot be cancelled once preparation begins.";
+                  } else if (order.status === "PENDING" && !isWithinCancelWindow) {
+                    cancelDisabledReason = `Cancellation window expired. Orders can only be cancelled within ${CANCEL_WINDOW_MINUTES} minutes.`;
+                  }
 
                   return (
-                    <Collapsible
+                    <motion.div
                       key={order.order_id}
+                      ref={isHighlighted ? highlightedRef : undefined}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      className={cn(
+                        "border-b last:border-b-0",
+                        isHighlighted && "bg-primary/5 ring-2 ring-primary/20 ring-inset"
+                      )}
+                    >
+                    <Collapsible
                       open={isExpanded}
                       onOpenChange={() => toggleExpanded(order.order_id)}
                     >
@@ -276,46 +338,70 @@ export function VendorHistoryClient({
                             </div>
 
                             {/* Actions */}
-                            {canCancel && (
-                              <div className="flex justify-end">
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      disabled={isPending}
-                                    >
-                                      <IconX className="size-4 mr-2" />
-                                      Cancel Order
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to cancel Order #{order.order_id}? This action cannot be undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Keep Order</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() => handleCancelOrder(order.order_id)}
-                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            <div className="flex items-center justify-between">
+                              {/* Status info for PREPARING+ orders */}
+                              {cancelDisabledReason && order.status !== "COMPLETED" && order.status !== "CANCELLED" && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <IconInfoCircle className="size-4" />
+                                        <span>Why can&apos;t I cancel?</span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="max-w-[200px]">{cancelDisabledReason}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                              
+                              {canCancel && (
+                                <div className="flex justify-end flex-1">
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        disabled={isPending}
+                                        className="gap-2"
                                       >
-                                        Cancel Order
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            )}
+                                        <IconX className="size-4" />
+                                        Cancel
+                                        <span className="font-mono text-xs opacity-80">
+                                          ({formatTimeRemaining()})
+                                        </span>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Cancel Order?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Are you sure you want to cancel Order #{order.order_id}? This action cannot be undone and items will be restocked.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Keep Order</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleCancelOrder(order.order_id)}
+                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        >
+                                          Cancel Order
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </CollapsibleContent>
                       </div>
                     </Collapsible>
+                    </motion.div>
                   );
                 })}
-              </div>
+              </AnimatePresence>
             )}
           </ScrollArea>
         </CardContent>

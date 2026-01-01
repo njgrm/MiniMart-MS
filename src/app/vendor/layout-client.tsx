@@ -101,7 +101,7 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-screen w-full overflow-hidden bg-card">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card">
         {/* Logo */}
@@ -265,7 +265,7 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
 
       {/* Mobile Sidebar Sheet */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="left" className="w-[80%] sm:w-[350px] p-0">
+        <SheetContent side="left" className="w-[80%] sm:w-[350px] p-0 bg-card">
           <SheetHeader className="sr-only">
             <SheetTitle>Navigation Menu</SheetTitle>
           </SheetHeader>
@@ -323,7 +323,7 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pt-0 pt-14">
-        <div className="flex-1 overflow-auto bg-muted/30 p-4 md:p-6">
+        <div className="flex-1 overflow-auto bg-zinc-50 dark:bg-zinc-950 p-4 md:p-6">
           {children}
         </div>
       </main>

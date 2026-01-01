@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import {
-  IconCash,
-  IconTrendingUp,
-  IconTrendingDown,
-  IconChartPie,
-  IconChartBar,
-  IconCalendar,
-  IconReceipt,
-  IconPercentage,
-} from "@tabler/icons-react";
+  Banknote,
+  TrendingUp,
+  TrendingDown,
+  PieChart,
+  BarChart3,
+  Calendar,
+  Receipt,
+  Percent,
+  ShoppingCart,
+} from "lucide-react";
 import {
   Card,
   CardAction,
@@ -239,130 +240,128 @@ export function FinancialBreakdownClient({
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      {/* Top Row: Key Financial Metrics */}
-      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-3 sm:gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-sm lg:grid-cols-4">
+      {/* Top Row: Key Financial Metrics - Dashboard Style Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {/* Monthly Revenue - Emerald */}
-        <Card className="@container/card hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-pointer">
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Monthly Revenue</CardDescription>
-            <CardTitle className="text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl text-emerald-600 dark:text-emerald-400">
-              {formatCurrency(stats.month.revenue)}
-            </CardTitle>
-            <CardAction>
+        <Card className="group relative overflow-hidden bg-card border-border shadow-card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 rounded-bl-full" />
+          <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-3">
+            <div className="flex items-center justify-between">
+              <div className="size-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center ring-1 ring-emerald-200 dark:ring-emerald-800">
+                <Banknote className="size-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
               <Badge variant="outline" className="gap-1 text-xs text-emerald-600 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800">
-                <IconTrendingUp className="size-3" />
-                <span className="hidden sm:inline">{stats.month.count} sales</span>
-                <span className="sm:hidden">{stats.month.count}</span>
+                <TrendingUp className="size-3" />
+                {stats.month.count}
               </Badge>
-            </CardAction>
+            </div>
           </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">Total sales revenue</span>
-              <span className="sm:hidden">Revenue</span>
-              <IconCash className="size-4 text-emerald-500" />
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              From {stats.month.count} transactions
-            </div>
-          </CardFooter>
+          <CardContent className="p-4 sm:p-5 pt-0 sm:pt-0">
+            <p className="text-xs text-muted-foreground font-medium mb-1">Monthly Revenue</p>
+            <p className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+              {formatCurrency(stats.month.revenue)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {stats.month.count} total transactions
+            </p>
+          </CardContent>
         </Card>
 
         {/* Cost of Goods Sold - Rose */}
-        <Card className="@container/card hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-pointer">
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">COGS</CardDescription>
-            <CardTitle className="text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl text-rose-600 dark:text-rose-400">
-              {formatCurrency(stats.month.cost)}
-            </CardTitle>
-            <CardAction>
+        <Card className="group relative overflow-hidden bg-card border-border shadow-card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 rounded-bl-full" />
+          <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-3">
+            <div className="flex items-center justify-between">
+              <div className="size-10 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center ring-1 ring-rose-200 dark:ring-rose-800">
+                <TrendingDown className="size-5 text-rose-600 dark:text-rose-400" />
+              </div>
               <Badge variant="outline" className="gap-1 text-xs text-rose-600 border-rose-200 dark:text-rose-400 dark:border-rose-800">
-                <IconTrendingDown className="size-3" />
                 {stats.month.revenue > 0 ? ((stats.month.cost / stats.month.revenue) * 100).toFixed(0) : 0}%
               </Badge>
-            </CardAction>
+            </div>
           </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">Supply costs</span>
-              <span className="sm:hidden">Costs</span>
-              <IconTrendingDown className="size-4 text-rose-500" />
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              Percentage of revenue
-            </div>
-          </CardFooter>
+          <CardContent className="p-4 sm:p-5 pt-0 sm:pt-0">
+            <p className="text-xs text-muted-foreground font-medium mb-1">Cost of Goods Sold</p>
+            <p className="text-xl sm:text-2xl font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+              {formatCurrency(stats.month.cost)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {stats.month.revenue > 0 ? ((stats.month.cost / stats.month.revenue) * 100).toFixed(1) : 0}% of revenue
+            </p>
+          </CardContent>
         </Card>
 
         {/* Gross Profit - Indigo */}
-        <Card className="@container/card hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-pointer">
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Gross Profit</CardDescription>
-            <CardTitle className={`text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${stats.month.profit >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-600 dark:text-red-400"}`}>
-              {formatCurrency(stats.month.profit)}
-            </CardTitle>
-            <CardAction>
+        <Card className="group relative overflow-hidden bg-card border-border shadow-card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+          <div className={`absolute top-0 right-0 w-20 h-20 ${stats.month.profit >= 0 ? "bg-indigo-500/10" : "bg-red-500/10"} rounded-bl-full`} />
+          <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-3">
+            <div className="flex items-center justify-between">
+              <div className={`size-10 rounded-xl ${stats.month.profit >= 0 ? "bg-indigo-100 dark:bg-indigo-900/30 ring-indigo-200 dark:ring-indigo-800" : "bg-red-100 dark:bg-red-900/30 ring-red-200 dark:ring-red-800"} flex items-center justify-center ring-1`}>
+                {stats.month.profit >= 0 ? (
+                  <TrendingUp className="size-5 text-indigo-600 dark:text-indigo-400" />
+                ) : (
+                  <TrendingDown className="size-5 text-red-600 dark:text-red-400" />
+                )}
+              </div>
               <Badge 
                 variant="outline" 
                 className={`gap-1 text-xs ${stats.month.profit >= 0 ? "text-indigo-600 border-indigo-200 dark:text-indigo-400 dark:border-indigo-800" : "text-red-600 border-red-200 dark:text-red-400 dark:border-red-800"}`}
               >
-                {stats.month.profit >= 0 ? <IconTrendingUp className="size-3" /> : <IconTrendingDown className="size-3" />}
+                {stats.month.profit >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
                 {calculateMargin(stats.month.profit, stats.month.revenue)}%
               </Badge>
-            </CardAction>
+            </div>
           </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">Net earnings</span>
-              <span className="sm:hidden">Profit</span>
-              {stats.month.profit >= 0 ? <IconTrendingUp className="size-4 text-indigo-500" /> : <IconTrendingDown className="size-4 text-red-500" />}
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              Profit margin after COGS
-            </div>
-          </CardFooter>
+          <CardContent className="p-4 sm:p-5 pt-0 sm:pt-0">
+            <p className="text-xs text-muted-foreground font-medium mb-1">Gross Profit</p>
+            <p className={`text-xl sm:text-2xl font-bold tabular-nums ${stats.month.profit >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-600 dark:text-red-400"}`}>
+              {formatCurrency(stats.month.profit)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Margin after COGS
+            </p>
+          </CardContent>
         </Card>
 
         {/* Average Sale */}
-        <Card className="@container/card hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-pointer">
-          <CardHeader className="p-4 sm:p-6">
-            <CardDescription className="text-xs sm:text-sm">Avg Sale</CardDescription>
-            <CardTitle className="text-lg sm:text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {formatCurrency(stats.month.count > 0 ? stats.month.revenue / stats.month.count : 0)}
-            </CardTitle>
-            <CardAction>
-              <Badge variant="outline" className="gap-1 text-xs">
-                <IconChartBar className="size-3" />
-                <span className="hidden sm:inline">per txn</span>
+        <Card className="group relative overflow-hidden bg-card border-border shadow-card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-bl-full" />
+          <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-3">
+            <div className="flex items-center justify-between">
+              <div className="size-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center ring-1 ring-amber-200 dark:ring-amber-800">
+                <ShoppingCart className="size-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <Badge variant="outline" className="gap-1 text-xs text-amber-600 border-amber-200 dark:text-amber-400 dark:border-amber-800">
+                <BarChart3 className="size-3" />
+                avg
               </Badge>
-            </CardAction>
+            </div>
           </CardHeader>
-          <CardFooter className="flex-col items-start gap-1 sm:gap-1.5 text-xs sm:text-sm p-4 sm:p-6 pt-0 sm:pt-0">
-            <div className="line-clamp-1 flex gap-2 font-medium">
-              <span className="hidden sm:inline">Transaction value</span>
-              <span className="sm:hidden">Per sale</span>
-              <IconChartBar className="size-4 text-primary" />
-            </div>
-            <div className="text-muted-foreground hidden sm:block">
-              Average basket size
-            </div>
-          </CardFooter>
+          <CardContent className="p-4 sm:p-5 pt-0 sm:pt-0">
+            <p className="text-xs text-muted-foreground font-medium mb-1">Avg Sale Value</p>
+            <p className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+              {formatCurrency(stats.month.count > 0 ? stats.month.revenue / stats.month.count : 0)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Per transaction
+            </p>
+          </CardContent>
         </Card>
       </div>
 
       {/* Financial Trend Chart with Date Range Picker */}
-      <Card className="@container/card">
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="bg-card border-border shadow-card">
+        <CardHeader className="flex flex-row items-center justify-between p-4 sm:p-6 pb-0 sm:pb-0">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <IconCalendar className="size-5 text-primary" />
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Calendar className="size-5 text-primary" />
               Financial Trend
             </CardTitle>
-            <CardDescription>
-              <span className="hidden @[540px]/card:block">
+            <CardDescription className="mt-1">
+              <span className="hidden sm:block">
                 Daily revenue, COGS, and profit comparison for the last {chartRange} days
               </span>
-              <span className="@[540px]/card:hidden">Last {chartRange} days</span>
+              <span className="sm:hidden">Last {chartRange} days</span>
             </CardDescription>
           </div>
           <Select value={chartRange} onValueChange={(v) => setChartRange(v as "7" | "14" | "30")}>
@@ -454,15 +453,15 @@ export function FinancialBreakdownClient({
       {/* Weekly Performance & Peak Hours */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Weekly Performance Chart */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <IconChartBar className="size-5 text-indigo-500" />
+        <Card className="bg-card border-border shadow-card hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <BarChart3 className="size-5 text-indigo-500" />
               Weekly Performance
             </CardTitle>
-            <CardDescription>Revenue and profit by week with margin trend</CardDescription>
+            <CardDescription className="mt-1">Revenue and profit by week with margin trend</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={weeklyData}>
@@ -514,15 +513,15 @@ export function FinancialBreakdownClient({
         </Card>
 
         {/* Peak Hours Analysis */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <IconReceipt className="size-5 text-primary" />
+        <Card className="bg-card border-border shadow-card hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Receipt className="size-5 text-primary" />
               Peak Hours Analysis
             </CardTitle>
-            <CardDescription>Transaction volume by hour of day</CardDescription>
+            <CardDescription className="mt-1">Transaction volume by hour of day</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={hourlyData}>
@@ -565,15 +564,15 @@ export function FinancialBreakdownClient({
       {/* Pie Charts Row */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Revenue vs COGS Pie Chart */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <IconChartPie className="size-5 text-emerald-500" />
+        <Card className="bg-card border-border shadow-card hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <PieChart className="size-5 text-emerald-500" />
               Profit Breakdown
             </CardTitle>
-            <CardDescription>Revenue allocation this month</CardDescription>
+            <CardDescription className="mt-1">Revenue allocation this month</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsPie>
@@ -608,15 +607,15 @@ export function FinancialBreakdownClient({
         </Card>
 
         {/* Daily Basket Size & Transaction Volume */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <IconPercentage className="size-5 text-amber-500" />
+        <Card className="bg-card border-border shadow-card hover:shadow-md transition-shadow">
+          <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Percent className="size-5 text-amber-500" />
               Daily Sales Patterns
             </CardTitle>
-            <CardDescription>Average basket size and transaction count (last 7 days)</CardDescription>
+            <CardDescription className="mt-1">Average basket size and transaction count (last 7 days)</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={dailyMetrics}>
@@ -668,37 +667,52 @@ export function FinancialBreakdownClient({
       </div>
 
       {/* Today vs Monthly Comparison */}
-      <Card className="hover:shadow-md transition-shadow">
-        <CardHeader>
-          <CardTitle>Today vs Monthly Average</CardTitle>
-          <CardDescription>Performance comparison</CardDescription>
+      <Card className="bg-card border-border shadow-card hover:shadow-md transition-shadow">
+        <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
+          <CardTitle className="text-base sm:text-lg">Today vs Monthly Average</CardTitle>
+          <CardDescription className="mt-1">Performance comparison</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
-              <p className="text-sm text-emerald-700 dark:text-emerald-300 mb-1">Today&apos;s Revenue</p>
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="size-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+                  <Banknote className="size-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Today&apos;s Revenue</p>
+              </div>
               <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{formatCurrency(stats.today.revenue)}</p>
-              <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-1">
+              <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 mt-1.5">
                 {stats.month.revenue > 0
                   ? `${((stats.today.revenue / (stats.month.revenue / 30)) * 100).toFixed(0)}% of daily avg`
                   : "No monthly data"}
               </p>
             </div>
-            <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
-              <p className="text-sm text-rose-700 dark:text-rose-300 mb-1">Today&apos;s COGS</p>
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="size-8 rounded-lg bg-rose-100 dark:bg-rose-900/50 flex items-center justify-center">
+                  <TrendingDown className="size-4 text-rose-600 dark:text-rose-400" />
+                </div>
+                <p className="text-sm font-medium text-rose-700 dark:text-rose-300">Today&apos;s COGS</p>
+              </div>
               <p className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400">{formatCurrency(stats.today.cost)}</p>
-              <p className="text-xs text-rose-600/70 dark:text-rose-400/70 mt-1">
+              <p className="text-xs text-rose-600/70 dark:text-rose-400/70 mt-1.5">
                 {stats.today.revenue > 0
                   ? `${((stats.today.cost / stats.today.revenue) * 100).toFixed(1)}% of revenue`
                   : "No sales today"}
               </p>
             </div>
-            <div className="p-4 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer">
-              <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-1">Today&apos;s Profit</p>
+            <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="size-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+                  <TrendingUp className="size-4 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Today&apos;s Profit</p>
+              </div>
               <p className={`text-xl font-bold font-mono ${stats.today.profit >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-red-600 dark:text-red-400"}`}>
                 {formatCurrency(stats.today.profit)}
               </p>
-              <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70 mt-1">
+              <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70 mt-1.5">
                 {calculateMargin(stats.today.profit, stats.today.revenue)}% margin
               </p>
             </div>

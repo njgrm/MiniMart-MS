@@ -46,13 +46,11 @@ interface SalesHistoryClientProps {
 }
 
 /**
- * SalesHistoryClient - Pixel-Perfect Match to Inventory Page
+ * SalesHistoryClient - Table-based layout matching Inventory Page
  * Features:
- * - Fixed height container (h-[calc(100vh-theme(spacing.16))])
- * - Header/Toolbar fixed at top
- * - Table wrapper with overflow-y-auto
- * - Pagination fixed at bottom
- * - Search by receipt # AND date string
+ * - Single-row toolbar with search, filters, KPI chips, and actions
+ * - Table with internal scroll
+ * - Pagination at bottom
  */
 export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
   const router = useRouter();
@@ -73,10 +71,8 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
   const viewParam = searchParams.get("view");
 
   useEffect(() => {
-    // If receipt param exists and view=true, set it for auto-open
     if (receiptParam && viewParam === "true") {
       setAutoOpenReceipt(receiptParam);
-      // Clear the URL params after handling
       router.replace("/admin/sales", { scroll: false });
     }
   }, [receiptParam, viewParam, router]);
@@ -111,7 +107,6 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
       // Search by formatted date string (e.g., "Dec 15, 2025, 02:58 PM")
       const dateStr = formatDate(tx.created_at).toLowerCase();
       if (dateStr.includes(query)) return true;
-      // Search by payment method
       if (tx.payment_method?.toLowerCase().includes(query)) return true;
       return false;
     });
@@ -148,7 +143,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     toast.success("Sales history imported successfully");
   };
 
-  // Format date for export (no commas, Excel-friendly)
+  // Format date for export
   const formatDateForExport = (date: Date) => {
     const d = new Date(date);
     const year = d.getFullYear();
@@ -159,7 +154,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     return `${year}-${month}-${day} ${hours}:${minutes}`;
   };
 
-  // Export to CSV (Excel-compatible)
+  // Export to CSV
   const handleExportCSV = () => {
     const headers = ["Date", "Receipt #", "Items", "Total Amount", "Cost", "Profit", "Payment", "Status"];
     const rows = data.transactions.map((tx) => {
@@ -177,7 +172,6 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
       ];
     });
 
-    // Add BOM for Excel UTF-8 compatibility
     const BOM = "\uFEFF";
     const csvContent = BOM + [
       headers.join(","),
@@ -192,20 +186,6 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     a.click();
     URL.revokeObjectURL(url);
     toast.success("CSV exported successfully");
-  };
-
-  // Payment method badge
-  const getPaymentMethodBadge = (method: string | null) => {
-    if (!method) return null;
-    return method === "CASH" ? (
-      <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">
-        CASH
-      </Badge>
-    ) : (
-      <Badge variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
-        GCASH
-      </Badge>
-    );
   };
 
   // Check if filters are active
@@ -224,112 +204,118 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
   // Pagination
   const totalPages = Math.ceil(data.totalCount / pageSize);
 
+  // Payment method badge
+  const getPaymentMethodBadge = (method: string | null) => {
+    if (!method) return <span className="text-muted-foreground text-xs">—</span>;
+    return method === "CASH" ? (
+      <Badge variant="default" className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400">
+        CASH
+      </Badge>
+    ) : (
+      <Badge variant="default" className="bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400">
+        GCASH
+      </Badge>
+    );
+  };
+
   return (
-    <div className="h-[calc(100vh-theme(spacing.40))] flex flex-col gap-3 overflow-hidden">
-      {/* Toolbar - Fixed at Top (Mobile Responsive) */}
-      <div className="flex flex-col gap-2 shrink-0">
-        {/* Row 1: Search & Date Filter */}
-        <div className="flex items-center gap-2">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search receipt # or date..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-10 w-full"
-            />
-          </div>
-
-          {/* Date Range Filter */}
-          <Select value={selectedRange} onValueChange={(value) => handleRangeChange(value as DateRange)}>
-            <SelectTrigger className="h-10 w-[120px] sm:w-[140px]">
-              <Calendar className="h-4 w-4 mr-2 hidden sm:block" />
-              <SelectValue placeholder="Date Range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">Last 7 days</SelectItem>
-              <SelectItem value="month">Last 30 days</SelectItem>
-              <SelectItem value="year">Last 12 months</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Reset Filters */}
-          {hasActiveFilters && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 shrink-0"
-              onClick={resetFilters}
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Reset filters</span>
-            </Button>
-          )}
+    <div className="h-full flex flex-col gap-3">
+      {/* Table Toolbar - Single Row (matching inventory) */}
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by receipt # or date..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-10 w-full"
+          />
         </div>
 
-        {/* Row 2: KPI Stats & Actions */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* KPI Stats - Horizontal scroll on mobile */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-card dark:bg-muted/30 border border-border shadow-warm-sm shrink-0">
-              <Receipt className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{data.totalCount}</span>
-              <span className="text-xs text-muted-foreground hidden sm:inline">Sales</span>
-            </div>
+        {/* Date Range Filter */}
+        <Select value={selectedRange} onValueChange={(value) => handleRangeChange(value as DateRange)}>
+          <SelectTrigger className="h-10 w-[140px]">
+            <Calendar className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Date Range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="week">Last 7 days</SelectItem>
+            <SelectItem value="month">Last 30 days</SelectItem>
+            <SelectItem value="year">Last 12 months</SelectItem>
+            <SelectItem value="all">All time</SelectItem>
+          </SelectContent>
+        </Select>
 
-            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-emerald-500 dark:bg-emerald-500/40 border border-emerald-500 text-white dark:text-emerald-500 shadow-warm-sm shrink-0">
-              <DollarSign className="h-4 w-4" />
-              <span className="text-sm font-medium">₱{(data.totalRevenue / 1000).toFixed(1)}k</span>
-              <span className="text-xs opacity-90 hidden sm:inline">Revenue</span>
-            </div>
+        {/* Reset Filters */}
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10"
+            onClick={resetFilters}
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Reset filters</span>
+          </Button>
+        )}
 
-            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent text-white dark:text-accent shadow-warm-sm shrink-0">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm font-medium">₱{(data.totalProfit / 1000).toFixed(1)}k</span>
-              <span className="text-xs opacity-90 hidden sm:inline">Profit</span>
-            </div>
+        {/* Separator */}
+        <div className="h-8 w-px bg-border mx-1" />
 
-            <div className="flex items-center gap-1.5 h-9 px-2 sm:px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary text-white dark:text-secondary shadow-warm-sm shrink-0">
-              <TrendingDown className="h-4 w-4" />
-              <span className="text-sm font-medium">₱{(data.totalCost / 1000).toFixed(1)}k</span>
-              <span className="text-xs opacity-90 hidden sm:inline">COGS</span>
-            </div>
-          </div>
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Import/Export Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              variant="outline"
-              onClick={() => setIsImportDialogOpen(true)}
-              className="h-9 gap-1.5"
-              size="sm"
-            >
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">Import</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={handleExportCSV}
-              className="h-9 gap-1.5"
-              size="sm"
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
-          </div>
+        {/* KPI Chips - Matching inventory style */}
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none">
+          <Receipt className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">{data.totalCount}</span>
+          <span className="text-xs text-muted-foreground">Sales</span>
         </div>
+
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-emerald-500 dark:bg-emerald-500/20 border border-emerald-500 dark:border-emerald-500/40 text-white dark:text-emerald-400 shadow-warm-sm dark:shadow-none">
+          <DollarSign className="h-4 w-4" />
+          <span className="text-sm font-medium">₱{(data.totalRevenue / 1000).toFixed(1)}k</span>
+          <span className="text-xs opacity-90">Revenue</span>
+        </div>
+
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">
+          <TrendingUp className="h-4 w-4" />
+          <span className="text-sm font-medium">₱{(data.totalProfit / 1000).toFixed(1)}k</span>
+          <span className="text-xs opacity-90">Profit</span>
+        </div>
+
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none">
+          <TrendingDown className="h-4 w-4" />
+          <span className="text-sm font-medium">₱{(data.totalCost / 1000).toFixed(1)}k</span>
+          <span className="text-xs opacity-90">COGS</span>
+        </div>
+
+        {/* Separator */}
+        <div className="h-8 w-px bg-border mx-1" />
+
+        {/* Import CSV */}
+        <Button
+          variant="outline"
+          onClick={() => setIsImportDialogOpen(true)}
+          className="h-10 gap-1.5"
+        >
+          <Upload className="h-4 w-4" />
+          Import CSV
+        </Button>
+
+        {/* Export CSV */}
+        <Button
+          variant="outline"
+          onClick={handleExportCSV}
+          className="h-10 gap-1.5"
+        >
+          <Download className="h-4 w-4" />
+          Export CSV
+        </Button>
       </div>
 
-      {/* Table Container - Fixed Height with Internal Scroll */}
+      {/* Table Container with Internal Scroll */}
       <div className="flex-1 min-h-0 rounded-xl border border-border bg-card shadow-card overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-card z-10">
               <TableRow className="hover:bg-transparent">
@@ -408,7 +394,6 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
                           <Badge variant={transaction.status === "COMPLETED" ? "default" : "destructive"}>
                             {transaction.status}
                           </Badge>
-                          {/* PRE-ORDER badge if transaction originated from an order */}
                           {transaction.order_id && (
                             <Badge variant="outline" className="text-[10px] bg-secondary/10 text-secondary border-secondary/30">
                               PRE-ORDER
@@ -428,7 +413,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
         </div>
       </div>
 
-      {/* Pagination Footer - Fixed at Bottom */}
+      {/* Pagination Footer */}
       <div className="shrink-0">
         {totalPages > 1 ? (
           <div className="flex items-center justify-between py-2">

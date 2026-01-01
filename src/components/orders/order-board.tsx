@@ -12,7 +12,6 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { OrderCard } from "./order-card";
 import { OrderDetailsSheet } from "./order-details-sheet";
@@ -36,25 +35,31 @@ interface ColumnProps {
 
 function OrderColumn({ title, icon, orders, badgeColor, onOrderClick }: ColumnProps) {
   return (
-    <div className="flex flex-col h-full min-w-[280px] sm:min-w-[320px]">
-      {/* Column Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2">
-          {icon}
-          <h3 className="font-semibold text-sm">{title}</h3>
+    <div className="flex flex-col h-full min-w-[300px] sm:min-w-[340px] flex-1 bg-muted/30">
+      {/* Column Header - Fixed at top */}
+      <div className="flex items-center justify-between px-4 py-4 border-b border-border bg-card shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="size-9 rounded-lg bg-muted/50 flex items-center justify-center">
+            {icon}
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground">{title}</h3>
+            <p className="text-xs text-muted-foreground">{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
+          </div>
         </div>
-        <Badge variant="secondary" className={cn("font-mono", badgeColor)}>
+        <Badge className={cn("font-mono text-sm px-2.5 py-1", badgeColor)}>
           {orders.length}
         </Badge>
       </div>
 
-      {/* Column Content */}
-      <ScrollArea className="flex-1">
+      {/* Column Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto">
         <div className="p-3 space-y-3">
           {orders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <IconMoodEmpty className="size-10 mb-2 opacity-50" />
-              <p className="text-sm">No orders</p>
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <IconMoodEmpty className="size-12 mb-3 opacity-50" />
+              <p className="font-medium">No orders</p>
+              <p className="text-sm">Waiting for new orders...</p>
             </div>
           ) : (
             orders.map((order) => (
@@ -66,7 +71,7 @@ function OrderColumn({ title, icon, orders, badgeColor, onOrderClick }: ColumnPr
             ))
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -172,12 +177,12 @@ export function OrderBoard({ initialOrders }: OrderBoardProps) {
   const totalOrders = orders.pending.length + orders.preparing.length + orders.ready.length;
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-border shrink-0">
+    <div className="h-full flex flex-col bg-card">
+      {/* Header - Fixed at top */}
+      <div className="flex items-center justify-between px-4 py-4 border-b border-border shrink-0 bg-card">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">Incoming Orders</h1>
-          <Badge variant="outline" className="font-mono">
+          <h1 className="text-xl font-bold text-foreground">Incoming Orders</h1>
+          <Badge className="font-mono bg-[#AC0F16] text-white">
             {totalOrders} active
           </Badge>
         </div>
@@ -193,11 +198,11 @@ export function OrderBoard({ initialOrders }: OrderBoardProps) {
         </Button>
       </div>
 
-      {/* Board */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full flex overflow-x-auto">
-          {/* Pending Column - Most Prominent */}
-          <div className="border-r border-border bg-orange-50/30 dark:bg-orange-950/10">
+      {/* Board - Takes remaining height, contains equal-height columns */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="h-full flex">
+          {/* Pending Column */}
+          <div className="flex-1 border-r border-border flex flex-col min-w-[300px]">
             <OrderColumn
               title="Pending"
               icon={<IconClipboardList className="size-5 text-orange-600 dark:text-orange-400" />}
@@ -208,7 +213,7 @@ export function OrderBoard({ initialOrders }: OrderBoardProps) {
           </div>
 
           {/* Preparing Column */}
-          <div className="border-r border-border bg-blue-50/30 dark:bg-blue-950/10">
+          <div className="flex-1 border-r border-border flex flex-col min-w-[300px]">
             <OrderColumn
               title="Preparing"
               icon={<IconPackage className="size-5 text-blue-600 dark:text-blue-400" />}
@@ -219,12 +224,12 @@ export function OrderBoard({ initialOrders }: OrderBoardProps) {
           </div>
 
           {/* Ready Column */}
-          <div className="bg-green-50/30 dark:bg-green-950/10 flex-1">
+          <div className="flex-1 flex flex-col min-w-[300px]">
             <OrderColumn
               title="Ready for Pickup"
-              icon={<IconCircleCheck className="size-5 text-green-600 dark:text-green-400" />}
+              icon={<IconCircleCheck className="size-5 text-emerald-600 dark:text-emerald-400" />}
               orders={orders.ready}
-              badgeColor="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+              badgeColor="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
               onOrderClick={handleOrderClick}
             />
           </div>

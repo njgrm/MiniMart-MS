@@ -338,9 +338,9 @@ export function OrderDetailsSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 h-full">
+        <SheetContent className="w-full sm:max-w-lg flex flex-col p-0 h-full bg-card dark:bg-background">
           {/* Fixed Header */}
-          <SheetHeader className="p-6 pb-4 border-b border-border shrink-0">
+          <SheetHeader className="p-6 pb-4 border-b border-border shrink-0 bg-card">
             <div className="flex items-center justify-between">
               <div>
                 <SheetTitle className="text-xl">Order #{order.order_id}</SheetTitle>
@@ -359,11 +359,11 @@ export function OrderDetailsSheet({
           <ScrollArea className="flex-1 h-[calc(100vh-300px)]">
             <div className="space-y-6 pb-6 px-6">
               {/* Customer Info */}
-              <div className="space-y-3 pt-4">
+              <div className="space-y-3 pt-0">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                   Customer Details
                 </h3>
-                <div className="bg-muted/30 rounded-lg p-4 space-y-2">
+                <div className="bg-card rounded-lg p-4 space-y-2 border border-border">
                   <div className="flex items-center gap-3">
                     <IconUser className="size-5 text-primary" />
                     <span className="font-medium">{order.customer.name}</span>
@@ -453,7 +453,7 @@ export function OrderDetailsSheet({
                     <span className="font-mono">{formatCurrency(order.total_amount)}</span>
                   </div>
                   <Separator className="my-2" />
-                  <div className="flex items-center justify-between font-semibold">
+                  <div className="flex items-center justify-between font-medium">
                     <span>Total</span>
                     <span className="font-mono text-lg text-primary">
                       {formatCurrency(order.total_amount)}

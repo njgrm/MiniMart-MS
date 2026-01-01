@@ -6,6 +6,19 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 
 // ============================================
+// Custom Error for Stock Validation
+// ============================================
+
+class StockError extends Error {
+  issues: string[];
+  constructor(message: string, issues: string[]) {
+    super(message);
+    this.name = "StockError";
+    this.issues = issues;
+  }
+}
+
+// ============================================
 // Types
 // ============================================
 
@@ -36,6 +49,7 @@ export interface VendorStats {
   totalOrders: number;
   pendingOrders: number;
   totalSpent: number;
+  totalItems: number;
   lastOrderDate: Date | null;
 }
 
@@ -155,6 +169,11 @@ export async function getVendorStats(customerId: number): Promise<VendorStats> {
       status: true,
       total_amount: true,
       order_date: true,
+      items: {
+        select: {
+          quantity: true,
+        },
+      },
     },
     orderBy: {
       order_date: "desc",
@@ -168,23 +187,29 @@ export async function getVendorStats(customerId: number): Promise<VendorStats> {
   const totalSpent = orders
     .filter((o) => o.status === "COMPLETED")
     .reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const totalItems = orders
+    .filter((o) => o.status === "COMPLETED")
+    .reduce((sum, o) => sum + o.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
   const lastOrderDate = orders.length > 0 ? orders[0].order_date : null;
 
   return {
     totalOrders,
     pendingOrders,
     totalSpent,
+    totalItems,
     lastOrderDate,
   };
 }
 
 /**
  * Create a new order from vendor
+ * Uses transaction-based stock validation to prevent race conditions
+ * (First-Come, First-Served - handles concurrent orders for same items)
  */
 export async function createVendorOrder(
   customerId: number,
   items: CartItem[]
-): Promise<{ success: boolean; orderId?: number; error?: string }> {
+): Promise<{ success: boolean; orderId?: number; error?: string; stockIssues?: string[] }> {
   try {
     // Validate customer exists and is a vendor
     const customer = await prisma.customer.findUnique({
@@ -220,7 +245,7 @@ export async function createVendorOrder(
       };
     }
 
-    // Calculate total (only from valid items)
+    // Filter valid items
     const validItems = items.filter((i) => i.price > 0 && i.quantity > 0);
     const totalAmount = validItems.reduce(
       (sum, item) => sum + item.price * item.quantity,
@@ -231,29 +256,86 @@ export async function createVendorOrder(
       return { success: false, error: "Order total must be greater than ₱0.00" };
     }
 
-    // Create order with validated items only
-    const order = await prisma.order.create({
-      data: {
-        customer_id: customerId,
-        total_amount: new Decimal(totalAmount),
-        status: "PENDING",
-        items: {
-          create: validItems.map((item) => ({
-            product_id: item.product_id,
-            quantity: item.quantity,
-            price: new Decimal(item.price),
-          })),
+    // Use transaction for atomic stock check + order creation
+    // This prevents race conditions when multiple vendors order the same item
+    const result = await prisma.$transaction(async (tx) => {
+      // Step 1: Verify stock for ALL items with row-level locking
+      const stockIssues: string[] = [];
+      
+      for (const item of validItems) {
+        const inventory = await tx.inventory.findUnique({
+          where: { product_id: item.product_id },
+          select: { 
+            current_stock: true,
+            product: { select: { product_name: true } }
+          },
+        });
+
+        if (!inventory) {
+          stockIssues.push(`${item.product_name}: Product not found in inventory`);
+          continue;
+        }
+
+        if (inventory.current_stock < item.quantity) {
+          if (inventory.current_stock === 0) {
+            stockIssues.push(`${item.product_name}: Out of stock`);
+          } else {
+            stockIssues.push(`${item.product_name}: Only ${inventory.current_stock} available (requested ${item.quantity})`);
+          }
+        }
+      }
+
+      // If any stock issues, abort transaction
+      if (stockIssues.length > 0) {
+        throw new StockError("Stock validation failed", stockIssues);
+      }
+
+      // Step 2: Deduct stock for all items
+      for (const item of validItems) {
+        await tx.inventory.update({
+          where: { product_id: item.product_id },
+          data: {
+            current_stock: { decrement: item.quantity },
+          },
+        });
+      }
+
+      // Step 3: Create the order
+      const order = await tx.order.create({
+        data: {
+          customer_id: customerId,
+          total_amount: new Decimal(totalAmount),
+          status: "PENDING",
+          items: {
+            create: validItems.map((item) => ({
+              product_id: item.product_id,
+              quantity: item.quantity,
+              price: new Decimal(item.price),
+            })),
+          },
         },
-      },
+      });
+
+      return { orderId: order.order_id };
     });
 
     revalidatePath("/vendor");
     revalidatePath("/vendor/history");
     revalidatePath("/admin/orders");
+    revalidatePath("/admin/inventory");
 
-    return { success: true, orderId: order.order_id };
+    return { success: true, orderId: result.orderId };
   } catch (error: any) {
     console.error("Create vendor order error:", error);
+    
+    // Handle stock validation errors
+    if (error instanceof StockError) {
+      return { 
+        success: false, 
+        error: "Some items in your cart are no longer available. Please refresh and try again.",
+        stockIssues: error.issues,
+      };
+    }
     
     // Handle Prisma foreign key constraint errors
     if (error?.code === "P2003") {
@@ -280,13 +362,15 @@ export async function createVendorOrder(
 }
 
 /**
- * Cancel an order (only if PENDING) - called from Vendor side
- * Revalidates both vendor and admin paths so both see the update
+ * Cancel an order (only if PENDING and within 6 hours) - called from Vendor side
+ * Restocks items and revalidates both vendor and admin paths
  */
 export async function cancelVendorOrder(
   orderId: number,
   customerId: number
 ): Promise<{ success: boolean; error?: string }> {
+  const CANCEL_WINDOW_HOURS = 6;
+  
   try {
     // Verify order belongs to customer and is pending
     const order = await prisma.order.findFirst({
@@ -295,15 +379,48 @@ export async function cancelVendorOrder(
         customer_id: customerId,
         status: "PENDING",
       },
+      include: {
+        items: {
+          select: {
+            product_id: true,
+            quantity: true,
+          },
+        },
+      },
     });
 
     if (!order) {
-      return { success: false, error: "Order not found or cannot be cancelled" };
+      return { success: false, error: "Order not found or cannot be cancelled. Only pending orders can be cancelled." };
     }
 
-    await prisma.order.update({
-      where: { order_id: orderId },
-      data: { status: "CANCELLED" },
+    // Check if order is within cancellation window (6 hours)
+    const orderAge = Date.now() - order.order_date.getTime();
+    const hoursSinceOrder = orderAge / (1000 * 60 * 60);
+    
+    if (hoursSinceOrder > CANCEL_WINDOW_HOURS) {
+      return { 
+        success: false, 
+        error: `Cancellation window expired. Orders can only be cancelled within ${CANCEL_WINDOW_HOURS} hours of placement.` 
+      };
+    }
+
+    // Use transaction to cancel order and restock items atomically
+    await prisma.$transaction(async (tx) => {
+      // Update order status
+      await tx.order.update({
+        where: { order_id: orderId },
+        data: { status: "CANCELLED" },
+      });
+
+      // Restock all items
+      for (const item of order.items) {
+        await tx.inventory.update({
+          where: { product_id: item.product_id },
+          data: {
+            current_stock: { increment: item.quantity },
+          },
+        });
+      }
     });
 
     // Revalidate all relevant paths for both vendor and admin
@@ -311,11 +428,12 @@ export async function cancelVendorOrder(
     revalidatePath("/vendor");
     revalidatePath("/admin/orders");
     revalidatePath("/admin");
+    revalidatePath("/admin/inventory");
     
     return { success: true };
   } catch (error) {
     console.error("Cancel order error:", error);
-    return { success: false, error: "Failed to cancel order" };
+    return { success: false, error: "Failed to cancel order. Please try again." };
   }
 }
 
@@ -612,5 +730,237 @@ export async function getVendorSpendingTrend(
       orders: data.orders,
     };
   });
+}
+
+// ============================================
+// New Dashboard Data Types & Actions
+// ============================================
+
+/**
+ * Active order with detailed status for the live order tracker
+ */
+export interface ActiveOrderStatus {
+  order_id: number;
+  status: "PENDING" | "PREPARING" | "READY";
+  order_date: Date;
+  total_amount: number;
+  items_count: number;
+  items: {
+    product_name: string;
+    quantity: number;
+    price: number;
+  }[];
+}
+
+/**
+ * Quick re-order item with product details
+ */
+export interface QuickReorderItem {
+  product_id: number;
+  product_name: string;
+  image_url: string | null;
+  wholesale_price: number;
+  retail_price: number;
+  current_stock: number;
+  total_ordered: number;
+  order_count: number;
+}
+
+/**
+ * Recent order for the minimal history view
+ */
+export interface RecentOrderSummary {
+  order_id: number;
+  order_date: Date;
+  status: string;
+  total_amount: number;
+  items_count: number;
+}
+
+/**
+ * Combined dashboard data for efficient fetching
+ */
+export interface VendorDashboardData {
+  activeOrders: ActiveOrderStatus[];
+  quickReorderItems: QuickReorderItem[];
+  recentOrders: RecentOrderSummary[];
+  stats: {
+    totalOrders: number;
+    pendingOrders: number;
+  };
+}
+
+/**
+ * Get all dashboard data in one efficient call
+ */
+export async function getVendorDashboardData(
+  customerId: number
+): Promise<VendorDashboardData> {
+  // Fetch all data in parallel
+  const [activeOrdersResult, ordersWithItems, allOrders] = await Promise.all([
+    // Get all active orders (not just most recent)
+    prisma.order.findMany({
+      where: {
+        customer_id: customerId,
+        status: { in: ["PENDING", "PREPARING", "READY"] },
+      },
+      orderBy: { order_date: "desc" },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { product_name: true },
+            },
+          },
+        },
+      },
+    }),
+    // Get completed orders for aggregation (top items)
+    prisma.order.findMany({
+      where: {
+        customer_id: customerId,
+        status: "COMPLETED",
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                inventory: { select: { current_stock: true } },
+              },
+            },
+          },
+        },
+      },
+    }),
+    // Get all orders for recent list and stats
+    prisma.order.findMany({
+      where: { customer_id: customerId },
+      orderBy: { order_date: "desc" },
+      take: 10,
+      include: {
+        _count: { select: { items: true } },
+      },
+    }),
+  ]);
+
+  // Process all active orders
+  const activeOrders: ActiveOrderStatus[] = activeOrdersResult.map((order) => ({
+    order_id: order.order_id,
+    status: order.status as "PENDING" | "PREPARING" | "READY",
+    order_date: order.order_date,
+    total_amount: Number(order.total_amount),
+    items_count: order.items.length,
+    items: order.items.map((item) => ({
+      product_name: item.product.product_name,
+      quantity: item.quantity,
+      price: Number(item.price),
+    })),
+  }));
+
+  // Aggregate top purchased items
+  const productAggregates = new Map<
+    number,
+    {
+      product_id: number;
+      product_name: string;
+      image_url: string | null;
+      wholesale_price: number;
+      retail_price: number;
+      current_stock: number;
+      total_ordered: number;
+      order_count: number;
+    }
+  >();
+
+  for (const order of ordersWithItems) {
+    for (const item of order.items) {
+      const existing = productAggregates.get(item.product_id);
+      const wholesalePrice = Number(item.product.wholesale_price);
+      const retailPrice = Number(item.product.retail_price);
+      const effectivePrice = wholesalePrice > 0 ? wholesalePrice : retailPrice;
+
+      if (existing) {
+        existing.total_ordered += item.quantity;
+        existing.order_count += 1;
+      } else {
+        productAggregates.set(item.product_id, {
+          product_id: item.product_id,
+          product_name: item.product.product_name,
+          image_url: item.product.image_url,
+          wholesale_price: effectivePrice,
+          retail_price: retailPrice,
+          current_stock: item.product.inventory?.current_stock ?? 0,
+          total_ordered: item.quantity,
+          order_count: 1,
+        });
+      }
+    }
+  }
+
+  const quickReorderItems = Array.from(productAggregates.values())
+    .sort((a, b) => b.total_ordered - a.total_ordered)
+    .slice(0, 8);
+
+  // Process recent orders
+  const recentOrders: RecentOrderSummary[] = allOrders.slice(0, 5).map((order) => ({
+    order_id: order.order_id,
+    order_date: order.order_date,
+    status: order.status,
+    total_amount: Number(order.total_amount),
+    items_count: order._count.items,
+  }));
+
+  // Calculate stats
+  const stats = {
+    totalOrders: allOrders.length,
+    pendingOrders: allOrders.filter(
+      (o) => o.status === "PENDING" || o.status === "PREPARING" || o.status === "READY"
+    ).length,
+  };
+
+  return {
+    activeOrders,
+    quickReorderItems,
+    recentOrders,
+    stats,
+  };
+}
+
+/**
+ * Get all active orders for polling/real-time updates (supports multiple orders)
+ */
+export async function getActiveOrderStatus(
+  customerId: number
+): Promise<ActiveOrderStatus[]> {
+  const orders = await prisma.order.findMany({
+    where: {
+      customer_id: customerId,
+      status: { in: ["PENDING", "PREPARING", "READY"] },
+    },
+    orderBy: { order_date: "desc" },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: { product_name: true },
+          },
+        },
+      },
+    },
+  });
+
+  return orders.map((order) => ({
+    order_id: order.order_id,
+    status: order.status as "PENDING" | "PREPARING" | "READY",
+    order_date: order.order_date,
+    total_amount: Number(order.total_amount),
+    items_count: order.items.length,
+    items: order.items.map((item) => ({
+      product_name: item.product.product_name,
+      quantity: item.quantity,
+      price: Number(item.price),
+    })),
+  }));
 }
 
