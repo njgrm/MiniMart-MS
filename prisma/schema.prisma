@@ -45,6 +45,7 @@ model Product {
   orderItems       OrderItem[]
   salesForecasts   SalesForecast[]
   transactionItems TransactionItem[]
+  eventLogs        EventLogProduct[] // Events affecting this product
 
   @@map("products")
 }
@@ -213,4 +214,79 @@ model Notification {
 
   @@index([user_id, user_type, is_read])
   @@map("notifications")
+}
+
+// =============================================================================
+// ENTERPRISE ERP: Forecasting & Intelligence Module
+// =============================================================================
+
+/// Event sources for the forecasting system
+/// STORE_DISCOUNT: Store-initiated promotions
+/// MANUFACTURER_CAMPAIGN: External brand advertising (TV ads, etc.)
+/// HOLIDAY: Public holidays affecting sales
+enum EventSource {
+  STORE_DISCOUNT
+  MANUFACTURER_CAMPAIGN
+  HOLIDAY
+}
+
+/// Event Log for tracking external factors affecting sales
+/// Used by the forecasting engine to distinguish organic vs event-driven spikes
+/// Critical for accurate demand forecasting
+model EventLog {
+  id                 Int           @id @default(autoincrement())
+  name               String        // e.g., "Coke Christmas Ad", "Store Anniversary Sale"
+  description        String?       // Optional detailed description
+  source             EventSource   // Type of event
+  start_date         DateTime
+  end_date           DateTime
+  multiplier         Decimal       @default(1.0) @db.Decimal(4, 2) // Expected sales multiplier
+  affected_brand     String?       // Brand name (for manufacturer campaigns)
+  affected_category  String?       // Product category (optional filter)
+  is_active          Boolean       @default(true) // Whether event is active
+  created_by         String?       // Who logged this event (user/chatbot/system)
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
+
+  // Many-to-many relation with products
+  products           EventLogProduct[]
+
+  @@index([start_date, end_date])
+  @@index([source])
+  @@index([affected_brand])
+  @@map("event_logs")
+}
+
+/// Junction table for EventLog <-> Product many-to-many relation
+model EventLogProduct {
+  id           Int      @id @default(autoincrement())
+  event_id     Int
+  product_id   Int
+  event        EventLog @relation(fields: [event_id], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+
+  @@unique([event_id, product_id])
+  @@map("event_log_products")
+}
+
+/// Historical daily sales aggregation for forecasting
+/// Pre-aggregated data for faster forecast calculations
+model DailySalesAggregate {
+  id              Int       @id @default(autoincrement())
+  product_id      Int
+  date            DateTime  @db.Date
+  quantity_sold   Int
+  revenue         Decimal   @db.Decimal(12, 2)
+  cost            Decimal   @db.Decimal(12, 2)
+  profit          Decimal   @db.Decimal(12, 2)
+  transaction_count Int     @default(1)
+  is_event_day    Boolean   @default(false) // Whether this day had an active event
+  event_source    EventSource? // What type of event (if any)
+  event_id        Int?      // Reference to the event (if any)
+
+  @@unique([product_id, date])
+  @@index([product_id])
+  @@index([date])
+  @@index([is_event_day])
+  @@map("daily_sales_aggregates")
 }

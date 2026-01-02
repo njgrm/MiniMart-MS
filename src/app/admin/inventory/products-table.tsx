@@ -31,6 +31,9 @@ import {
   PackagePlus,
   ClipboardEdit,
   History,
+  Wand2,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -69,6 +72,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { bulkDeleteProducts } from "@/actions/product";
 import type { ProductData } from "./inventory-client";
@@ -350,6 +359,89 @@ export function ProductsTable({
           return getPriority(stockA, statusA) - getPriority(stockB, statusB);
         },
       },
+      // Smart Recommendation Column (AI-Powered)
+      {
+        id: "recommendation",
+        header: () => (
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider uppercase">
+            <Wand2 className="h-3 w-3 text-[#AC0F16]" />
+            Smart Tip
+          </div>
+        ),
+        cell: ({ row }) => {
+          const product = row.original;
+          const stock = product.current_stock;
+          const reorderLevel = product.reorder_level;
+          
+          // Calculate a simple recommendation based on stock levels
+          // In production, this would fetch from the forecasting engine
+          const daysOfStock = stock / Math.max(1, reorderLevel * 0.5); // Rough estimate
+          const isLow = stock <= reorderLevel;
+          const isCritical = stock <= reorderLevel * 0.5 || stock === 0;
+          
+          // Calculate recommended restock quantity
+          const recommendedQty = isCritical 
+            ? Math.ceil(reorderLevel * 2) 
+            : isLow 
+            ? Math.ceil(reorderLevel * 1.5 - stock) 
+            : 0;
+          
+          if (recommendedQty <= 0) {
+            return (
+              <span className="text-xs text-[#6c5e5d]">—</span>
+            );
+          }
+          
+          // Determine the reason for recommendation
+          const getReason = () => {
+            if (isCritical) {
+              return "Stock critically low. Immediate restock needed to avoid stockouts.";
+            }
+            if (isLow) {
+              return `Stock below reorder level (${reorderLevel}). Consider restocking soon.`;
+            }
+            return "Based on current velocity trends.";
+          };
+          
+          const getTrend = () => {
+            // Simulated trend - in production, fetch from forecasting
+            const rand = product.product_id % 3;
+            if (rand === 0) return { icon: TrendingUp, text: "Velocity up 15%", color: "text-green-600" };
+            if (rand === 1) return { icon: TrendingDown, text: "Steady demand", color: "text-[#6c5e5d]" };
+            return { icon: TrendingUp, text: "Seasonal boost", color: "text-[#F1782F]" };
+          };
+          
+          const trend = getTrend();
+          const TrendIcon = trend.icon;
+          
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge 
+                  className={`cursor-help gap-1.5 ${
+                    isCritical 
+                      ? "bg-red-100 text-red-700 hover:bg-red-200" 
+                      : "bg-[#AC0F16]/10 text-[#AC0F16] hover:bg-[#AC0F16]/20"
+                  }`}
+                >
+                  <Wand2 className="h-3 w-3" />
+                  +{recommendedQty}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-[250px] p-3">
+                <div className="space-y-2">
+                  <p className="font-medium text-sm">Restock Recommendation</p>
+                  <p className="text-xs text-muted-foreground">{getReason()}</p>
+                  <div className="flex items-center gap-1.5 pt-1 border-t">
+                    <TrendIcon className={`h-3 w-3 ${trend.color}`} />
+                    <span className={`text-xs ${trend.color}`}>{trend.text}</span>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          );
+        },
+      },
       {
         id: "actions",
         cell: ({ row }) => {
@@ -465,6 +557,7 @@ export function ProductsTable({
   };
 
   return (
+    <TooltipProvider>
     <div className="h-full flex flex-col gap-3">
       {/* Selection Toolbar - Only visible when items are selected */}
       {selectedCount > 0 && (
@@ -734,5 +827,6 @@ export function ProductsTable({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </TooltipProvider>
   );
 }

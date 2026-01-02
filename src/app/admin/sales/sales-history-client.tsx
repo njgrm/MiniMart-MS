@@ -7,11 +7,13 @@ import {
   X,
   Upload,
   Download,
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
   Receipt,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -58,7 +60,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
   const [data, setData] = useState<SalesHistoryResult>(initialData);
   const [selectedRange, setSelectedRange] = useState<DateRange>("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(20);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -264,29 +266,11 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
         {/* Separator */}
         <div className="h-8 w-px bg-border mx-1" />
 
-        {/* KPI Chips - Matching inventory style */}
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none">
-          <Receipt className="h-4 w-4 text-muted-foreground" />
+        {/* Results Count Only */}
+        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-muted/30 border border-border/40">
+          <Filter className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground">{data.totalCount}</span>
           <span className="text-xs text-muted-foreground">Sales</span>
-        </div>
-
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-emerald-500 dark:bg-emerald-500/20 border border-emerald-500 dark:border-emerald-500/40 text-white dark:text-emerald-400 shadow-warm-sm dark:shadow-none">
-          <DollarSign className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{(data.totalRevenue / 1000).toFixed(1)}k</span>
-          <span className="text-xs opacity-90">Revenue</span>
-        </div>
-
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">
-          <TrendingUp className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{(data.totalProfit / 1000).toFixed(1)}k</span>
-          <span className="text-xs opacity-90">Profit</span>
-        </div>
-
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none">
-          <TrendingDown className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{(data.totalCost / 1000).toFixed(1)}k</span>
-          <span className="text-xs opacity-90">COGS</span>
         </div>
 
         {/* Separator */}
@@ -413,56 +397,153 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
         </div>
       </div>
 
-      {/* Pagination Footer */}
+      {/* Pagination Footer - Matching Inventory DataTablePagination Style */}
       <div className="shrink-0">
-        {totalPages > 1 ? (
-          <div className="flex items-center justify-between py-2">
-            <p className="text-sm text-muted-foreground">
-              Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, data.totalCount)} of {data.totalCount} transactions
-            </p>
-            <div className="flex items-center space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1 || isPending}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-2">
+          {/* Left: Showing info + Rows per page */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>
+              Showing <span className="font-medium text-foreground">{data.totalCount > 0 ? ((currentPage - 1) * pageSize) + 1 : 0}</span> to{" "}
+              <span className="font-medium text-foreground">{Math.min(currentPage * pageSize, data.totalCount)}</span> of{" "}
+              <span className="font-medium text-foreground">{data.totalCount}</span> transactions
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs">Rows per page</span>
+              <Select
+                value={`${pageSize}`}
+                onValueChange={(value) => {
+                  setPageSize(Number(value));
+                  setCurrentPage(1);
+                  startTransition(async () => {
+                    const newData = await getSalesHistory(selectedRange, 1, Number(value));
+                    setData(newData);
+                  });
+                }}
               >
-                Previous
-              </Button>
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                  if (pageNum > totalPages) return null;
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => handlePageChange(pageNum)}
-                      disabled={isPending}
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages || isPending}
-              >
-                Next
-              </Button>
+                <SelectTrigger className="h-8 w-[70px]">
+                  <SelectValue placeholder={pageSize} />
+                </SelectTrigger>
+                <SelectContent side="top">
+                  {[10, 20, 30, 50].map((size) => (
+                    <SelectItem key={size} value={`${size}`}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        ) : (
-          <div className="flex items-center justify-center py-2">
-            <p className="text-sm text-muted-foreground">
-              Showing {data.totalCount} transaction{data.totalCount !== 1 ? "s" : ""}
-            </p>
+
+          {/* Right: Page navigation */}
+          <div className="flex items-center gap-1">
+            {/* First Page */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handlePageChange(1)}
+              disabled={currentPage === 1 || isPending}
+            >
+              <ChevronsLeft className="h-4 w-4" />
+              <span className="sr-only">First page</span>
+            </Button>
+
+            {/* Previous Page */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1 || isPending}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="sr-only">Previous page</span>
+            </Button>
+
+            {/* Page Numbers */}
+            <div className="flex items-center gap-1">
+              {(() => {
+                const pages: (number | "ellipsis")[] = [];
+                const maxVisiblePages = 5;
+
+                if (totalPages <= maxVisiblePages + 2) {
+                  for (let i = 1; i <= totalPages; i++) {
+                    pages.push(i);
+                  }
+                } else {
+                  pages.push(1);
+
+                  if (currentPage > 3) {
+                    pages.push("ellipsis");
+                  }
+
+                  const startPage = Math.max(2, currentPage - 1);
+                  const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+                  for (let i = startPage; i <= endPage; i++) {
+                    if (!pages.includes(i)) {
+                      pages.push(i);
+                    }
+                  }
+
+                  if (currentPage < totalPages - 2) {
+                    pages.push("ellipsis");
+                  }
+
+                  if (!pages.includes(totalPages)) {
+                    pages.push(totalPages);
+                  }
+                }
+
+                return pages.map((page, idx) =>
+                  page === "ellipsis" ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="px-2 text-muted-foreground"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handlePageChange(page)}
+                      disabled={isPending}
+                    >
+                      {page}
+                    </Button>
+                  )
+                );
+              })()}
+            </div>
+
+            {/* Next Page */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages || totalPages === 0 || isPending}
+            >
+              <ChevronRight className="h-4 w-4" />
+              <span className="sr-only">Next page</span>
+            </Button>
+
+            {/* Last Page */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handlePageChange(totalPages)}
+              disabled={currentPage === totalPages || totalPages === 0 || isPending}
+            >
+              <ChevronsRight className="h-4 w-4" />
+              <span className="sr-only">Last page</span>
+            </Button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Import Sales Dialog */}

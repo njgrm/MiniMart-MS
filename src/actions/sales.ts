@@ -42,16 +42,30 @@ export interface SalesHistoryResult {
   totalProfit: number;
 }
 
+/**
+ * CSV Sale Row - Supports multiple formats:
+ * 
+ * Simple Format: date, barcode, quantity, paymentMethod
+ * Python Script Format: date, barcode, quantity, retail_price, cost_price, is_event, event_source
+ */
 export interface CsvSaleRow {
   date: string; // ISO date string or common format
   barcode: string;
   quantity: number;
-  paymentMethod: "CASH" | "GCASH";
+  paymentMethod?: "CASH" | "GCASH"; // Optional - defaults to CASH
+  // Extended fields from Python script (generate_history_v2.py)
+  retail_price?: number;
+  cost_price?: number;
+  subtotal?: number;
+  is_event?: boolean | string; // 0/1 or true/false
+  event_source?: string; // STORE_DISCOUNT, MANUFACTURER_CAMPAIGN, HOLIDAY
+  event_name?: string;
 }
 
 export interface ImportResult {
   successCount: number;
   failedCount: number;
+  eventDaysCount: number;
   failedRows: { row: number; reason: string }[];
 }
 
@@ -245,10 +259,14 @@ export async function getSalesHistory(
 
 /**
  * Import sales from CSV data for analytics backfilling
- * Input: Array of { date, barcode, quantity, paymentMethod }
+ * 
+ * Supports two formats:
+ * 1. Simple: date, barcode, quantity, paymentMethod
+ * 2. Python Script (generate_history_v2.py): date, barcode, quantity, retail_price, cost_price, is_event, event_source
  */
 export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> {
   const successCount = { value: 0 };
+  const eventDaysCount = { value: 0 };
   const failedRows: { row: number; reason: string }[] = [];
 
   // Group by date and payment method to create transactions
@@ -261,13 +279,19 @@ export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> 
       return;
     }
 
-    // Group key: date (YYYY-MM-DD) + payment method
+    // Group key: date (YYYY-MM-DD) + payment method (default to CASH if not provided)
     const dateKey = parsedDate.toISOString().split("T")[0];
-    const key = `${dateKey}_${row.paymentMethod}`;
+    const paymentMethod = row.paymentMethod || "CASH";
+    const key = `${dateKey}_${paymentMethod}`;
     
     if (!groupedSales.has(key)) {
       groupedSales.set(key, []);
     }
+    
+    // Track event days
+    const isEvent = row.is_event === true || row.is_event === "1" || row.is_event === "true";
+    if (isEvent) eventDaysCount.value++;
+    
     groupedSales.get(key)!.push({ ...row, date: parsedDate.toISOString() });
   });
 
@@ -316,11 +340,15 @@ export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> 
             continue;
           }
 
+          // Use provided prices from CSV if available, otherwise fall back to product prices
+          const priceAtSale = item.retail_price ?? Number(product.retail_price);
+          const costAtSale = item.cost_price ?? Number(product.cost_price);
+
           validItems.push({
             product_id: product.product_id,
             quantity: item.quantity,
-            price_at_sale: Number(product.retail_price),
-            cost_at_sale: Number(product.cost_price), // Use actual cost_price for accurate profit tracking
+            price_at_sale: priceAtSale,
+            cost_at_sale: costAtSale,
           });
         }
 
@@ -383,10 +411,12 @@ export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> 
   // Revalidate paths
   revalidatePath("/admin/sales");
   revalidatePath("/admin");
+  revalidatePath("/admin/analytics");
 
   return {
     successCount: successCount.value,
     failedCount: failedRows.length,
+    eventDaysCount: eventDaysCount.value,
     failedRows,
   };
 }

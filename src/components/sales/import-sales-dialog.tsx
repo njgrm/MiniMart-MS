@@ -159,6 +159,12 @@ export function ImportSalesDialog({
         const barcode = rowAny.barcode || rowAny.Barcode || row.barcode;
         const quantity = rowAny.quantity || rowAny.Quantity || row.quantity;
         const paymentMethodRaw = rowAny.paymentmethod || rowAny.paymentMethod || rowAny.payment_method || row.paymentMethod || row.payment_method || "";
+        
+        // Extended Python script fields
+        const retailPrice = rowAny.retail_price || rowAny.retailprice;
+        const costPrice = rowAny.cost_price || rowAny.costprice;
+        const isEvent = rowAny.is_event || rowAny.isevent;
+        const eventSource = rowAny.event_source || rowAny.eventsource;
 
         if (!date?.trim()) {
           errors.push({ row: rowNum, field: "date", message: "Date is required" });
@@ -176,8 +182,9 @@ export function ImportSalesDialog({
           return;
         }
 
-        const paymentMethod = String(paymentMethodRaw).toUpperCase();
-        if (!paymentMethod || !["CASH", "GCASH"].includes(paymentMethod)) {
+        // Payment method is now optional - defaults to CASH
+        const paymentMethod = String(paymentMethodRaw || "CASH").toUpperCase();
+        if (paymentMethodRaw && !["CASH", "GCASH"].includes(paymentMethod)) {
           errors.push({ row: rowNum, field: "paymentMethod", message: "Payment method must be CASH or GCASH" });
           return;
         }
@@ -187,6 +194,10 @@ export function ImportSalesDialog({
           barcode: String(barcode).trim(),
           quantity: quantityNum,
           paymentMethod: paymentMethod as "CASH" | "GCASH",
+          retail_price: retailPrice ? parseFloat(String(retailPrice)) : undefined,
+          cost_price: costPrice ? parseFloat(String(costPrice)) : undefined,
+          is_event: isEvent === "1" || isEvent === "true" || isEvent === true,
+          event_source: eventSource ? String(eventSource).trim() : undefined,
         });
       });
 
@@ -200,8 +211,11 @@ export function ImportSalesDialog({
       const importResult = await importSalesCsv(validRows);
 
       if (importResult.successCount > 0) {
+        const eventInfo = importResult.eventDaysCount > 0 
+          ? ` (${importResult.eventDaysCount} event records)` 
+          : "";
         toast.success(
-          `Successfully imported ${importResult.successCount} sale${importResult.successCount !== 1 ? "s" : ""}${
+          `Successfully imported ${importResult.successCount} sale${importResult.successCount !== 1 ? "s" : ""}${eventInfo}${
             importResult.failedCount > 0
               ? `. ${importResult.failedCount} failed (see details).`
               : "."
@@ -251,19 +265,27 @@ export function ImportSalesDialog({
           {/* Helper Text */}
           <div className="rounded-lg bg-muted p-3 text-sm">
             <p className="font-medium text-foreground mb-1">
-              Required Columns:
+              Accepted Column Formats:
             </p>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
+              <strong>Simple:</strong>{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">date</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">barcode</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">quantity</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">paymentMethod</code>
+              <code className="text-xs bg-background px-1 rounded border border-border">paymentMethod</code> (optional)
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              Date formats: YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY. Payment methods: CASH or GCASH.
+              <strong>Python Script:</strong>{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">date</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">barcode</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">quantity</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">retail_price</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">cost_price</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">is_event</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">event_source</code>
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              <strong>Note:</strong> Cost price will be automatically fetched from each product&apos;s current supply cost.
+              Date formats: YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY. Payment defaults to CASH if not specified.
             </p>
           </div>
 
@@ -346,7 +368,7 @@ export function ImportSalesDialog({
               setFileName(null);
               setValidationErrors([]);
             }}
-            placeholder="date,barcode,quantity,paymentMethod&#10;2023-11-15,480864702009,1,GCASH&#10;2023-11-15,965412919731,5,CASH&#10;2023-11-15,480392515112,3,GCASH"
+            placeholder="date,barcode,quantity,retail_price,cost_price&#10;2024-01-15,4800016123456,5,75.00,62.00&#10;2024-01-15,4800016555666,3,45.00,38.00"
             className="w-full h-32 p-3 text-sm font-mono rounded-lg border border-border bg-muted text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/50"
             disabled={isPending}
           />

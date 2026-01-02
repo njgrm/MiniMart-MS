@@ -15,6 +15,7 @@ import {
   IconChartBar,
   IconSun,
   IconMoon,
+  IconBrain,
 } from "@tabler/icons-react";
 import {
   MotionSidebar,
@@ -63,6 +64,11 @@ const navItems: NavItem[] = [
     href: "/admin/sales",
     label: "Sales History",
     icon: IconHistory,
+  },
+  {
+    href: "/admin/analytics",
+    label: "Analytics",
+    icon: IconBrain,
   },
   {
     href: "/admin/reports",

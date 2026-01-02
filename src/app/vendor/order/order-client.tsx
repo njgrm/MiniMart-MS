@@ -580,7 +580,7 @@ export function VendorOrderClient({
             {/* Pickup Policy Disclaimer */}
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
               <p className="text-xs text-amber-800 dark:text-amber-300 font-medium mb-1">
-                📦 Pickup Policy
+                Pickup Policy
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-400">
                 Please pick up your order within 24 hours. Unclaimed orders may be cancelled and items restocked.

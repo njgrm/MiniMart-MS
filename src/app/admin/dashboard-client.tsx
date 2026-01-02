@@ -46,6 +46,7 @@ import {
   Cell,
 } from "recharts";
 import { getSalesStatsByDateRange, getTopProductsByDateRange } from "@/actions/sales";
+import { getDashboardChartDataByDateRange, type DashboardChartDataPoint } from "@/app/admin/analytics/actions";
 import type { SalesHistoryResult, TopProductWithCategory } from "@/actions/sales";
 import type { GroupedOrders, IncomingOrder } from "@/actions/orders";
 
@@ -148,6 +149,9 @@ export function DashboardClient({
   const [showProfit, setShowProfit] = useState(true);
   const [showCost, setShowCost] = useState(false);
   
+  // Chart data from server
+  const [salesChartData, setSalesChartData] = useState<DashboardChartDataPoint[]>([]);
+  
   // Quick date range presets
   const datePresets = [
     { label: "Last 7 days", getRange: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
@@ -162,8 +166,13 @@ export function DashboardClient({
   useEffect(() => {
     if (customDateRange?.from && customDateRange?.to) {
       startTransition(async () => {
+        // Fetch stats
         const result = await getSalesStatsByDateRange(customDateRange.from!, customDateRange.to!);
         setCustomStats(result);
+        
+        // Fetch chart data from server (queries ALL transactions with actual profit/cost)
+        const chartData = await getDashboardChartDataByDateRange(customDateRange.from!, customDateRange.to!);
+        setSalesChartData(chartData);
       });
     }
   }, [customDateRange]);
@@ -301,53 +310,6 @@ export function DashboardClient({
 
   // Calculate bar chart height based on number of products
   const barChartHeight = Math.max(300, rankedProducts.length * 40);
-
-  // Generate chart data for Sales Overview based on selected date range
-  const salesChartData = useMemo(() => {
-    if (!customDateRange?.from || !customDateRange?.to) return [];
-    
-    const days: { date: string; fullDate: string; revenue: number; profit: number; cost: number }[] = [];
-    const start = new Date(customDateRange.from);
-    const end = new Date(customDateRange.to);
-    const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    
-    // Group transactions by day
-    for (let i = 0; i < diffDays; i++) {
-      const date = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-      const dateStr = format(date, "yyyy-MM-dd");
-      
-      const dayTransactions = recentSales.transactions.filter((tx) => {
-        const txDate = new Date(tx.created_at);
-        return (
-          txDate.getDate() === date.getDate() &&
-          txDate.getMonth() === date.getMonth() &&
-          txDate.getFullYear() === date.getFullYear()
-        );
-      });
-
-      const revenue = dayTransactions.reduce((sum, tx) => sum + tx.total_amount, 0);
-      const cost = dayTransactions.reduce((sum, tx) => {
-        return sum + tx.items.reduce((itemSum, item) => itemSum + (item.cost_at_sale * item.quantity), 0);
-      }, 0);
-      const profit = revenue - cost;
-      
-      // Format date label based on range length
-      const dateLabel = diffDays > 60 
-        ? format(date, "MMM") 
-        : diffDays > 14 
-          ? format(date, "d") 
-          : format(date, "MMM d");
-      
-      days.push({ 
-        date: dateLabel, 
-        fullDate: format(date, "EEE, MMM d, yyyy"),
-        revenue,
-        profit,
-        cost,
-      });
-    }
-    return days;
-  }, [customDateRange, recentSales.transactions]);
 
   // Custom tooltip for sales chart
   const SalesChartTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ dataKey: string; value: number; color: string; payload: { fullDate: string } }> }) => {
