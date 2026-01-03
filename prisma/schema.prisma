@@ -51,13 +51,14 @@ model Product {
 }
 
 model Inventory {
-  inventory_id   Int             @id @default(autoincrement())
-  product_id     Int             @unique
-  current_stock  Int             @default(0)
-  reorder_level  Int             @default(10)
-  last_restock   DateTime        @updatedAt
-  product        Product         @relation(fields: [product_id], references: [product_id])
-  stockMovements StockMovement[]
+  inventory_id    Int             @id @default(autoincrement())
+  product_id      Int             @unique
+  current_stock   Int             @default(0)
+  allocated_stock Int             @default(0) // Stock reserved in PENDING/PREPARING orders
+  reorder_level   Int             @default(10)
+  last_restock    DateTime        @updatedAt
+  product         Product         @relation(fields: [product_id], references: [product_id])
+  stockMovements  StockMovement[]
 
   @@map("inventory")
 }
@@ -70,6 +71,7 @@ model Inventory {
 /// DAMAGE: Stock removed due to damage/spoilage
 /// RETURN: Stock added back from customer return
 /// INTERNAL_USE: Stock used internally (not sold)
+/// ORDER_SHORTAGE: Stock removed when item marked unavailable in order
 enum StockMovementType {
   INITIAL_STOCK
   RESTOCK
@@ -78,6 +80,7 @@ enum StockMovementType {
   DAMAGE
   RETURN
   INTERNAL_USE
+  ORDER_SHORTAGE
 }
 
 /// Audit log for all inventory stock changes

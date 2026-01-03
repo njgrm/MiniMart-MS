@@ -150,7 +150,8 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
           {navItems.map((item) => {
             const isActive = pathname === item.href || 
               (item.href !== "/admin" && pathname.startsWith(item.href));
-            const showBadge = item.label === "Incoming Orders" && pendingOrdersCount > 0;
+            // Show badge on "Orders" nav item when there are pending orders
+            const showBadge = item.label === "Orders" && pendingOrdersCount > 0;
             const Icon = item.icon;
 
             return (
@@ -171,9 +172,9 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
                                 : "text-sidebar-foreground"
                           )} 
                         />
-                        {/* Badge for pending orders (visible when collapsed) */}
+                        {/* Badge overlay on icon when collapsed - Red circular badge */}
                         {showBadge && !open && (
-                          <span className="absolute -top-1 -right-1 size-4 flex items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">
+                          <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white ring-2 ring-sidebar">
                             {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
                           </span>
                         )}
@@ -187,7 +188,7 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
                       : ""
                   }
                   badge={showBadge && open ? (
-                    <span className="ml-auto px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-500 text-white">
+                    <span className="ml-auto px-2 py-0.5 text-xs font-bold rounded-full bg-destructive text-white animate-pulse">
                       {pendingOrdersCount}
                     </span>
                   ) : undefined}

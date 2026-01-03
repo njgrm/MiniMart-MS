@@ -205,6 +205,12 @@ export async function getVendorStats(customerId: number): Promise<VendorStats> {
  * Create a new order from vendor
  * Uses transaction-based stock validation to prevent race conditions
  * (First-Come, First-Served - handles concurrent orders for same items)
+ * 
+ * STOCK RESERVATION LOGIC:
+ * - On order create: Increment allocated_stock (stock is "reserved" but still on shelf)
+ * - Available to sell = current_stock - allocated_stock
+ * - On order complete: Decrement allocated_stock AND current_stock
+ * - On order cancel: Decrement allocated_stock (stock becomes available again)
  */
 export async function createVendorOrder(
   customerId: number,
@@ -259,7 +265,7 @@ export async function createVendorOrder(
     // Use transaction for atomic stock check + order creation
     // This prevents race conditions when multiple vendors order the same item
     const result = await prisma.$transaction(async (tx) => {
-      // Step 1: Verify stock for ALL items with row-level locking
+      // Step 1: Verify AVAILABLE stock for ALL items (current_stock - allocated_stock)
       const stockIssues: string[] = [];
       
       for (const item of validItems) {
@@ -267,6 +273,7 @@ export async function createVendorOrder(
           where: { product_id: item.product_id },
           select: { 
             current_stock: true,
+            allocated_stock: true,
             product: { select: { product_name: true } }
           },
         });
@@ -276,11 +283,14 @@ export async function createVendorOrder(
           continue;
         }
 
-        if (inventory.current_stock < item.quantity) {
-          if (inventory.current_stock === 0) {
+        // Available stock = Physical stock - Already allocated stock
+        const availableStock = inventory.current_stock - inventory.allocated_stock;
+
+        if (availableStock < item.quantity) {
+          if (availableStock <= 0) {
             stockIssues.push(`${item.product_name}: Out of stock`);
           } else {
-            stockIssues.push(`${item.product_name}: Only ${inventory.current_stock} available (requested ${item.quantity})`);
+            stockIssues.push(`${item.product_name}: Only ${availableStock} available (requested ${item.quantity})`);
           }
         }
       }
@@ -290,12 +300,12 @@ export async function createVendorOrder(
         throw new StockError("Stock validation failed", stockIssues);
       }
 
-      // Step 2: Deduct stock for all items
+      // Step 2: ALLOCATE stock for all items (increment allocated_stock, NOT decrement current_stock)
       for (const item of validItems) {
         await tx.inventory.update({
           where: { product_id: item.product_id },
           data: {
-            current_stock: { decrement: item.quantity },
+            allocated_stock: { increment: item.quantity },
           },
         });
       }
@@ -363,7 +373,8 @@ export async function createVendorOrder(
 
 /**
  * Cancel an order (only if PENDING and within 6 hours) - called from Vendor side
- * Restocks items and revalidates both vendor and admin paths
+ * STOCK RESERVATION: Decrements allocated_stock to release reservation
+ * Revalidates both vendor and admin paths
  */
 export async function cancelVendorOrder(
   orderId: number,
@@ -404,7 +415,7 @@ export async function cancelVendorOrder(
       };
     }
 
-    // Use transaction to cancel order and restock items atomically
+    // Use transaction to cancel order and release allocated stock atomically
     await prisma.$transaction(async (tx) => {
       // Update order status
       await tx.order.update({
@@ -412,12 +423,12 @@ export async function cancelVendorOrder(
         data: { status: "CANCELLED" },
       });
 
-      // Restock all items
+      // Release allocated stock for all items (decrement allocated_stock)
       for (const item of order.items) {
         await tx.inventory.update({
           where: { product_id: item.product_id },
           data: {
-            current_stock: { increment: item.quantity },
+            allocated_stock: { decrement: item.quantity },
           },
         });
       }

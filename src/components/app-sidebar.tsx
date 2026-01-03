@@ -122,6 +122,7 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
             <SidebarMenu>
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
+                // Show badge on "Orders" nav item when there are pending orders
                 const showBadge = item.label === "Orders" && pendingOrdersCount > 0;
                 const Icon = item.icon;
 
@@ -140,10 +141,19 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
                       }
                     >
                       <Link href={item.href}>
-                        <Icon className="size-4 shrink-0" />
+                        <div className="relative">
+                          <Icon className="size-4 shrink-0" />
+                          {/* Badge overlay on icon when collapsed - Red circular badge */}
+                          {showBadge && isCollapsed && (
+                            <span className="absolute -top-1.5 -right-1.5 size-3.5 flex items-center justify-center rounded-full bg-destructive text-[8px] font-bold text-white ring-1 ring-sidebar">
+                              {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
+                            </span>
+                          )}
+                        </div>
                         <span className="flex-1">{item.label}</span>
-                        {showBadge && (
-                          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs text-destructive-foreground">
+                        {/* Badge pill next to text when expanded - Red */}
+                        {showBadge && !isCollapsed && (
+                          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-bold text-white animate-pulse">
                             {pendingOrdersCount}
                           </span>
                         )}

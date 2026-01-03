@@ -47,6 +47,7 @@ import {
 } from "recharts";
 import { getSalesStatsByDateRange, getTopProductsByDateRange } from "@/actions/sales";
 import { getDashboardChartDataByDateRange, type DashboardChartDataPoint } from "@/app/admin/analytics/actions";
+import { ActiveOrdersFeed } from "@/components/orders/active-orders-feed";
 import type { SalesHistoryResult, TopProductWithCategory } from "@/actions/sales";
 import type { GroupedOrders, IncomingOrder } from "@/actions/orders";
 
@@ -445,58 +446,60 @@ export function DashboardClient({
         </div>
       </div>
 
-      {/* Sales Overview Chart */}
-      <div className="bg-card rounded-xl border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div>
-            <h3 className="font-medium text-sm text-foreground">Sales Overview</h3>
-            <p className="text-[10px] text-muted-foreground">
-              Revenue, profit, and cost trends for selected period
-            </p>
+      {/* Sales Overview + Active Orders - 4-Column Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* Sales Overview Chart - Takes 3 columns */}
+        <div className="lg:col-span-3 bg-card rounded-xl border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-medium text-sm text-foreground">Sales Overview</h3>
+              <p className="text-[10px] text-muted-foreground">
+                Revenue, profit, and cost trends for selected period
+              </p>
+            </div>
+            
+            {/* Toggle buttons for chart lines */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowRevenue(!showRevenue)}
+                className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                  showRevenue
+                    ? "bg-[#2EAFC5] text-white border-[#2EAFC5]"
+                    : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="size-2 rounded-full bg-current" />
+                Revenue
+              </button>
+              <button
+                onClick={() => setShowProfit(!showProfit)}
+                className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                  showProfit
+                    ? "bg-[#10B981] text-white border-[#10B981]"
+                    : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="size-2 rounded-full bg-current" />
+                Profit
+              </button>
+              <button
+                onClick={() => setShowCost(!showCost)}
+                className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                  showCost
+                    ? "bg-[#F1782F] text-white border-[#F1782F]"
+                    : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="size-2 rounded-full bg-current" />
+                Cost
+              </button>
+            </div>
           </div>
           
-          {/* Toggle buttons for chart lines */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowRevenue(!showRevenue)}
-              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
-                showRevenue
-                  ? "bg-[#2EAFC5] text-white border-[#2EAFC5]"
-                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <div className="size-2 rounded-full bg-current" />
-              Revenue
-            </button>
-            <button
-              onClick={() => setShowProfit(!showProfit)}
-              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
-                showProfit
-                  ? "bg-[#10B981] text-white border-[#10B981]"
-                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <div className="size-2 rounded-full bg-current" />
-              Profit
-            </button>
-            <button
-              onClick={() => setShowCost(!showCost)}
-              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
-                showCost
-                  ? "bg-[#F1782F] text-white border-[#F1782F]"
-                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <div className="size-2 rounded-full bg-current" />
-              Cost
-            </button>
-          </div>
-        </div>
-        
-        <div className="h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={salesChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-              <defs>
+          <div className="h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={salesChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <defs>
                 <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#2EAFC5" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="#2EAFC5" stopOpacity={0} />
@@ -564,6 +567,13 @@ export function DashboardClient({
             </AreaChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+        {/* Active Orders Feed - Takes 1 column, matches chart height */}
+        <ActiveOrdersFeed 
+          incomingOrders={incomingOrders} 
+          className="lg:col-span-1 h-[320px]"
+        />
       </div>
 
       {/* Main Content: Sidebar + Top Products */}
@@ -793,9 +803,9 @@ export function DashboardClient({
                 <span className="relative rounded-full size-2 bg-[#2EAFC5]"></span>
               </span>
             </div>
-            <ScrollArea className="h-[180px]">
+            <ScrollArea className="h-[285px] max-h-[290px]">
               {recentSales.transactions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-full mt-20 text-muted-foreground">
                   <IconBroadcast className="size-6 mb-1 opacity-30" />
                   <p className="text-xs">No recent activity</p>
                 </div>
@@ -828,27 +838,7 @@ export function DashboardClient({
             </div>
           </div>
 
-          {/* Quick Metrics */}
-          <div 
-            className="bg-card rounded-xl border p-3 cursor-pointer hover:shadow-sm transition-all"
-            onClick={() => router.push("/admin/orders")}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground">Active Orders</p>
-                <p className="text-base font-bold tabular-nums text-foreground">{activeOrdersCount}</p>
-              </div>
-              {activeOrdersCount > 0 ? (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#F1782F]/20 text-[#F1782F]">
-                  {activeOrdersCount} pending
-                </span>
-              ) : (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#2EAFC5]/20 text-[#2EAFC5]">
-                  All clear
-                </span>
-              )}
-            </div>
-          </div>
+         
         </div>
       </div>
 

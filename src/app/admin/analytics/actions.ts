@@ -321,22 +321,49 @@ export async function getDashboardChartDataByDateRange(
     
     // Format date labels based on range length
     const diffDays = days.length;
-    const result = Array.from(dataMap.values())
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(point => {
+    const sortedData = Array.from(dataMap.values())
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    // For year view (>60 days), aggregate by month
+    if (diffDays > 60) {
+      const monthlyMap = new Map<string, DashboardChartDataPoint>();
+      
+      for (const point of sortedData) {
         const date = new Date(point.date);
-        // Format date label based on range length
-        const dateLabel = diffDays > 60 
-          ? format(date, "MMM") 
-          : diffDays > 14 
-            ? format(date, "d") 
-            : format(date, "MMM d");
+        const monthKey = format(date, "yyyy-MM");
+        const monthLabel = format(date, "MMM");
         
-        return {
-          ...point,
-          date: dateLabel,
-        };
-      });
+        const existing = monthlyMap.get(monthKey);
+        if (existing) {
+          existing.revenue += point.revenue;
+          existing.cost += point.cost;
+          existing.profit += point.profit;
+        } else {
+          monthlyMap.set(monthKey, {
+            date: monthLabel,
+            fullDate: format(date, "MMMM yyyy"),
+            revenue: point.revenue,
+            cost: point.cost,
+            profit: point.profit,
+          });
+        }
+      }
+      
+      return Array.from(monthlyMap.values());
+    }
+    
+    // For shorter ranges, show individual days
+    const result = sortedData.map(point => {
+      const date = new Date(point.date);
+      const dateLabel = diffDays > 14 
+        ? format(date, "d") 
+        : format(date, "MMM d");
+      
+      return {
+        ...point,
+        date: dateLabel,
+      };
+    });
     
     return result;
   } catch (error) {

@@ -338,7 +338,42 @@
  * Print Styles for Receipt Printing
  * Supports both #receipt-print-area and .receipt-template
  * Optimized for 58mm thermal printers (POS58D)
+ * 
+ * PAPER DIMENSIONS:
+ * - 58mm total paper width
+ * - ~48-50mm printable area (accounting for hardware margins)
+ * - Using mm units to ensure consistent sizing across printers
  * =========================================== */
+
+/* Standard Receipt Container Class - use for both POS and Online Order receipts */
+.receipt-print-container {
+  width: 48mm;
+  max-width: 48mm;
+  font-family: "Lucida Console", Consolas, "Courier New", monospace;
+  font-size: 9pt;
+  line-height: 1.15;
+  color: #000;
+  background: #fff;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.receipt-print-container * {
+  box-sizing: border-box;
+}
+
+/* Text wrapping for long product names */
+.receipt-print-container .item-name {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  max-width: 100%;
+}
+
 @media print {
   /* Hide everything by default */
   body * {
@@ -349,40 +384,56 @@
   #receipt-print-area,
   #receipt-print-area *,
   .receipt-template,
-  .receipt-template * {
+  .receipt-template *,
+  .receipt-print-container,
+  .receipt-print-container * {
     visibility: visible !important;
   }
   
-  /* Position receipt at top-left of page */
+  /* Position receipt at top-left of page with exact sizing */
   #receipt-print-area,
-  .receipt-template {
+  .receipt-template,
+  .receipt-print-container {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 58mm !important;
-    max-width: 58mm !important;
-    padding: 0 !important;
+    /* Use 48mm printable width (58mm paper - 10mm for hardware margins) */
+    width: 48mm !important;
+    max-width: 48mm !important;
+    min-width: 48mm !important;
+    padding: 1mm 0 !important;
     margin: 0 !important;
     background: white !important;
     color: black !important;
-    font-size: 10pt !important;
-    line-height: 1.1 !important;
+    /* Slightly smaller font for better fit */
+    font-size: 9pt !important;
+    line-height: 1.15 !important;
+    font-family: "Lucida Console", Consolas, "Courier New", monospace !important;
     display: block !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    /* Prevent text overflow */
+    overflow: hidden !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
   }
   
   /* Remove any shadows/borders in print */
   #receipt-print-area *,
-  .receipt-template * {
+  .receipt-template *,
+  .receipt-print-container * {
     box-shadow: none !important;
     text-shadow: none !important;
+    overflow: hidden !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
   }
   
   /* Ensure monospace font for receipt - use thicker monospace fonts */
   #receipt-print-area,
-  .receipt-template {
-    font-family: "Lucida Console", Consolas, monospace !important;
+  .receipt-template,
+  .receipt-print-container {
+    font-family: "Lucida Console", Consolas, "Courier New", monospace !important;
     -webkit-font-smoothing: none !important;
     -moz-osx-font-smoothing: grayscale !important;
     text-rendering: optimizeSpeed !important;
@@ -390,14 +441,48 @@
   
   /* Bold text should be heavier for thermal clarity */
   #receipt-print-area .font-bold,
-  .receipt-template .font-bold {
-    font-weight: bold !important;
+  .receipt-template .font-bold,
+  .receipt-print-container .font-bold,
+  #receipt-print-area strong,
+  .receipt-template strong,
+  .receipt-print-container strong {
+    font-weight: 700 !important;
+  }
+  
+  /* Product item line formatting */
+  #receipt-print-area .item-line,
+  .receipt-template .item-line,
+  .receipt-print-container .item-line {
+    margin: 1mm 0 !important;
+    page-break-inside: avoid !important;
+  }
+  
+  /* Receipt separator lines */
+  #receipt-print-area .separator,
+  .receipt-template .separator,
+  .receipt-print-container .separator,
+  #receipt-print-area hr,
+  .receipt-template hr,
+  .receipt-print-container hr {
+    border: none !important;
+    border-bottom: 0.5mm dashed #000 !important;
+    margin: 1mm 0 !important;
+    height: 0 !important;
+  }
+  
+  /* Flex rows for price alignment */
+  #receipt-print-area .flex,
+  .receipt-template .flex,
+  .receipt-print-container .flex {
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 1mm !important;
   }
   
   /* Page settings for 58mm thermal printer */
   @page {
     size: 58mm auto;
-    margin: 0;
+    margin: 0 5mm; /* 5mm on each side for hardware margins */
   }
   
   /* Hide dialog backdrop and other UI elements */
@@ -407,8 +492,25 @@
   header,
   nav,
   aside,
-  footer:not(#receipt-print-area footer):not(.receipt-template footer),
+  footer:not(#receipt-print-area footer):not(.receipt-template footer):not(.receipt-print-container footer),
   .print\:hidden {
     display: none !important;
+  }
+  
+  /* Image scaling for logo */
+  #receipt-print-area img,
+  .receipt-template img,
+  .receipt-print-container img {
+    max-width: 40mm !important;
+    height: auto !important;
+    filter: grayscale(100%) !important;
+  }
+  
+  /* Total amount emphasis */
+  #receipt-print-area .total-amount,
+  .receipt-template .total-amount,
+  .receipt-print-container .total-amount {
+    font-size: 12pt !important;
+    font-weight: 700 !important;
   }
 }

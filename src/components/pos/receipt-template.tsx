@@ -85,18 +85,19 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
       <div
         ref={ref}
         id="receipt-print-area"
-        className="hidden print:block font-mono text-black bg-white"
+        className="hidden print:block receipt-print-container font-mono text-black bg-white"
         style={{
-          width: "58mm",
-          maxWidth: "58mm",
-          fontSize: "10pt",
-          lineHeight: "1.2", // Slightly looser for readability with bold text
-          fontFamily: '"Lucida Console", Consolas, monospace',
-          // fontWeight: "bold", -- Removed global bold
+          width: "48mm",
+          maxWidth: "48mm",
+          fontSize: "9pt",
+          lineHeight: "1.15",
+          fontFamily: '"Lucida Console", Consolas, "Courier New", monospace',
           fontWeight: "normal",
           WebkitFontSmoothing: "none",
           padding: "0",
-          margin: "0"
+          margin: "0",
+          overflow: "hidden",
+          wordWrap: "break-word",
         }}
       >
         {/* Store Header - Exact Match */}
@@ -105,12 +106,12 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
             <img 
               src="/christian_minimart_logo.png" 
               alt="Logo" 
-              style={{ width: "50mm", height: "auto", filter: "grayscale(100%)" }} 
+              style={{ width: "40mm", height: "auto", filter: "grayscale(100%)" }} 
             />
           </div>
-          <p style={{ fontWeight: "bold", fontSize: "14pt" }}>CHRISTIAN MINIMART</p>
-          <p>Cor. Fleurdeliz & Concordia Sts.</p>
-          <p>Prk. Paghidaet Mansilingan Bacolod City</p>
+          <p style={{ fontWeight: "bold", fontSize: "11pt" }}>CHRISTIAN MINIMART</p>
+          <p className="item-name" style={{ fontSize: "8pt" }}>Cor. Fleurdeliz & Concordia Sts.</p>
+          <p className="item-name" style={{ fontSize: "8pt" }}>Prk. Paghidaet Mansilingan Bacolod City</p>
           
           <div className="flex justify-between mt-1">
             <span>Tel No.</span>

@@ -224,16 +224,51 @@ export async function updateOrderStatus(
 
 /**
  * Cancel an order (called from Admin side)
+ * STOCK RESERVATION: Releases allocated_stock back to available pool
  * Revalidates both admin and vendor paths so both see the update
  */
 export async function cancelOrder(
   orderId: number
 ): Promise<{ success: boolean; error?: string; customerId?: number }> {
   try {
-    const order = await prisma.order.update({
+    // First get the order with items to release allocated stock
+    const order = await prisma.order.findUnique({
       where: { order_id: orderId },
-      data: { status: "CANCELLED" },
-      select: { customer_id: true },
+      include: {
+        items: {
+          select: {
+            product_id: true,
+            quantity: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return { success: false, error: "Order not found" };
+    }
+
+    // Only release stock if order was in a state where stock was allocated
+    const shouldReleaseStock = order.status === "PENDING" || order.status === "PREPARING" || order.status === "READY";
+
+    await prisma.$transaction(async (tx) => {
+      // Update order status
+      await tx.order.update({
+        where: { order_id: orderId },
+        data: { status: "CANCELLED" },
+      });
+
+      // Release allocated stock if applicable
+      if (shouldReleaseStock) {
+        for (const item of order.items) {
+          await tx.inventory.update({
+            where: { product_id: item.product_id },
+            data: {
+              allocated_stock: { decrement: item.quantity },
+            },
+          });
+        }
+      }
     });
 
     // Revalidate all relevant paths for both admin and vendor
@@ -273,9 +308,13 @@ export interface OrderReceiptData {
  * This is the critical function that:
  * 1. Creates a Transaction record
  * 2. Creates TransactionItem records (with cost_at_sale captured)
- * 3. Deducts inventory
+ * 3. Deducts inventory (both allocated_stock AND current_stock)
  * 4. Creates Payment record
  * 5. Updates Order status to COMPLETED
+ * 
+ * STOCK RESERVATION LOGIC:
+ * - Decrement allocated_stock (release reservation)
+ * - Decrement current_stock (physically remove from inventory)
  * 
  * Returns full receipt data for auto-printing
  * All operations are atomic via Prisma transaction
@@ -318,7 +357,7 @@ export async function completeOrderTransaction(
         throw new Error("Cannot complete a cancelled order");
       }
 
-      // 2. Verify stock availability
+      // 2. Verify stock availability (check current_stock, as allocated should already be reserved)
       for (const item of order.items) {
         const currentStock = item.product.inventory?.current_stock || 0;
         if (currentStock < item.quantity) {
@@ -363,15 +402,14 @@ export async function completeOrderTransaction(
         },
       });
 
-      // 5. Deduct inventory for each item
+      // 5. Deduct inventory for each item (both allocated_stock AND current_stock)
       for (const item of order.items) {
         if (item.product.inventory) {
           await tx.inventory.update({
             where: { inventory_id: item.product.inventory.inventory_id },
             data: {
-              current_stock: {
-                decrement: item.quantity,
-              },
+              current_stock: { decrement: item.quantity },
+              allocated_stock: { decrement: item.quantity },
             },
           });
         }
@@ -544,5 +582,191 @@ export async function getOrderById(orderId: number): Promise<IncomingOrder | nul
       },
     })),
   };
+}
+
+/**
+ * Shortage Reason Types for marking items unavailable
+ */
+export type ShortageReason = "DAMAGE" | "MISSING" | "INTERNAL_USE";
+
+/**
+ * Mark an order item as unavailable (shortage handling)
+ * 
+ * This is used when admin is packing an order but finds an item is damaged/missing.
+ * 
+ * Logic:
+ * 1. Remove or reduce the item from the order
+ * 2. Recalculate order total
+ * 3. Create inventory adjustment (stock movement record)
+ * 4. Decrement both current_stock and allocated_stock
+ * 
+ * @param orderId - The order to modify
+ * @param orderItemId - The specific order item to mark unavailable
+ * @param quantityUnavailable - How many units are unavailable (can be partial)
+ * @param reason - Why the item is unavailable (DAMAGE, MISSING, INTERNAL_USE)
+ * @param notes - Optional additional notes
+ * @param userId - The admin user making this change
+ */
+export async function markOrderItemUnavailable(
+  orderId: number,
+  orderItemId: number,
+  quantityUnavailable: number,
+  reason: ShortageReason,
+  notes?: string,
+  userId: number = 1
+): Promise<{ 
+  success: boolean; 
+  error?: string; 
+  newTotal?: number;
+  itemRemoved?: boolean;
+  productName?: string;
+}> {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Get the order and verify it's modifiable
+      const order = await tx.order.findUnique({
+        where: { order_id: orderId },
+        include: {
+          items: {
+            include: {
+              product: {
+                include: {
+                  inventory: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!order) {
+        throw new Error("Order not found");
+      }
+
+      // Only allow modifications on PENDING or PREPARING orders
+      if (order.status !== "PENDING" && order.status !== "PREPARING") {
+        throw new Error("Can only modify items on Pending or Preparing orders");
+      }
+
+      // 2. Find the specific order item
+      const orderItem = order.items.find((item) => item.order_item_id === orderItemId);
+      if (!orderItem) {
+        throw new Error("Order item not found");
+      }
+
+      const productName = orderItem.product.product_name;
+      const inventory = orderItem.product.inventory;
+
+      if (!inventory) {
+        throw new Error("Product inventory not found");
+      }
+
+      // Validate quantity
+      if (quantityUnavailable <= 0) {
+        throw new Error("Quantity must be greater than 0");
+      }
+
+      if (quantityUnavailable > orderItem.quantity) {
+        throw new Error(`Cannot mark ${quantityUnavailable} unavailable. Order only has ${orderItem.quantity}`);
+      }
+
+      const willRemoveItem = quantityUnavailable === orderItem.quantity;
+      const itemTotal = Number(orderItem.price) * quantityUnavailable;
+
+      // 3. Create stock movement record for the shortage
+      const movementType = reason === "DAMAGE" 
+        ? "DAMAGE" 
+        : reason === "INTERNAL_USE" 
+          ? "INTERNAL_USE" 
+          : "ORDER_SHORTAGE";
+
+      await tx.stockMovement.create({
+        data: {
+          inventory_id: inventory.inventory_id,
+          user_id: userId,
+          movement_type: movementType,
+          quantity_change: -quantityUnavailable, // Negative for removal
+          previous_stock: inventory.current_stock,
+          new_stock: inventory.current_stock - quantityUnavailable,
+          reason: notes || `Order #${orderId} - Item marked ${reason.toLowerCase()}`,
+          reference: `ORDER-${orderId}`,
+        },
+      });
+
+      // 4. Update inventory (decrement BOTH current_stock and allocated_stock)
+      await tx.inventory.update({
+        where: { inventory_id: inventory.inventory_id },
+        data: {
+          current_stock: { decrement: quantityUnavailable },
+          allocated_stock: { decrement: quantityUnavailable },
+        },
+      });
+
+      // 5. Update or remove the order item
+      if (willRemoveItem) {
+        // Remove the item entirely
+        await tx.orderItem.delete({
+          where: { order_item_id: orderItemId },
+        });
+      } else {
+        // Reduce the quantity
+        await tx.orderItem.update({
+          where: { order_item_id: orderItemId },
+          data: {
+            quantity: { decrement: quantityUnavailable },
+          },
+        });
+      }
+
+      // 6. Recalculate and update order total
+      const newTotal = Number(order.total_amount) - itemTotal;
+      
+      // Check if order still has items
+      const remainingItems = willRemoveItem 
+        ? order.items.length - 1 
+        : order.items.length;
+
+      if (remainingItems === 0) {
+        // If no items left, cancel the order
+        await tx.order.update({
+          where: { order_id: orderId },
+          data: { 
+            status: "CANCELLED",
+            total_amount: new Decimal(0),
+          },
+        });
+      } else {
+        await tx.order.update({
+          where: { order_id: orderId },
+          data: { total_amount: new Decimal(Math.max(0, newTotal)) },
+        });
+      }
+
+      return {
+        newTotal: Math.max(0, newTotal),
+        itemRemoved: willRemoveItem,
+        productName,
+        orderCancelled: remainingItems === 0,
+      };
+    });
+
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin");
+    revalidatePath("/vendor/history");
+
+    return {
+      success: true,
+      newTotal: result.newTotal,
+      itemRemoved: result.itemRemoved,
+      productName: result.productName,
+    };
+  } catch (error) {
+    console.error("Failed to mark item unavailable:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update order",
+    };
+  }
 }
 

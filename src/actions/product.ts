@@ -329,6 +329,20 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
 
       // Hard delete products without history
       if (idsToDelete.length > 0) {
+        // First, get inventory IDs for these products
+        const inventoryRecords = await tx.inventory.findMany({
+          where: { product_id: { in: idsToDelete } },
+          select: { inventory_id: true },
+        });
+        const inventoryIds = inventoryRecords.map((inv) => inv.inventory_id);
+
+        // Delete stock movements first (references inventory)
+        if (inventoryIds.length > 0) {
+          await tx.stockMovement.deleteMany({
+            where: { inventory_id: { in: inventoryIds } },
+          });
+        }
+
         // Delete inventory records
         await tx.inventory.deleteMany({
           where: { product_id: { in: idsToDelete } },

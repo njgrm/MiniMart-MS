@@ -21,7 +21,7 @@ from enum import Enum
 # Configuration
 # =============================================================================
 
-START_DATE = datetime(2024, 1, 1)
+START_DATE = datetime(2023, 1, 1)
 END_DATE = datetime(2026, 1, 3)  # Current date
 
 OUTPUT_FILE = "sales_history_v2.csv"
@@ -237,7 +237,7 @@ def get_seasonality_multiplier(date: datetime, category: str) -> float:
         return 1.2
     
     # Summer boost for beverages (April-May, Philippine summer)
-    if month in [4, 5] and category in ["BEVERAGES", "SODA"]:
+    if month in [4, 5] and category in ["BEVERAGES", "SODA", "SOFTDRINKS_CASE"]:
         return 1.4
     
     # March-April (graduation/summer start)
