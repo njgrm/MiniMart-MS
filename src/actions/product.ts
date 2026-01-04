@@ -86,7 +86,7 @@ export async function getProductById(productId: number) {
 export async function createProduct(data: CreateProductInput): Promise<ActionResult> {
   const parsed = createProductSchema.safeParse(data);
   if (!parsed.success) {
-    const message = parsed.error?.errors?.[0]?.message ?? "Invalid product data";
+    const message = parsed.error?.issues?.[0]?.message ?? "Invalid product data";
     return { success: false, error: message };
   }
 
@@ -139,7 +139,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
           wholesale_price: new Decimal(wholesale_price),
           cost_price: new Decimal(cost_price),
           barcode: barcode || null,
-          image_url: image_url || null,
+          image_url: typeof image_url === 'string' ? image_url : null,
         },
       });
 
@@ -200,7 +200,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
 export async function updateProduct(data: UpdateProductInput): Promise<ActionResult> {
   const parsed = updateProductSchema.safeParse(data);
   if (!parsed.success) {
-    const message = parsed.error?.errors?.[0]?.message ?? "Invalid product data";
+    const message = parsed.error?.issues?.[0]?.message ?? "Invalid product data";
     return { success: false, error: message };
   }
 
@@ -266,7 +266,7 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
           wholesale_price: new Decimal(wholesale_price),
           cost_price: new Decimal(cost_price || 0),
           barcode: barcode || null,
-          image_url: image_url || null,
+          image_url: typeof image_url === 'string' ? image_url : null,
         },
       });
 

@@ -358,7 +358,7 @@ export function PaymentDialog({
               <motion.div
                 key="gcash-panel"
                 initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 300, opacity: 1 }}
+                animate={{ width: 350, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
                 transition={{ 
                   type: "spring", 
@@ -368,7 +368,7 @@ export function PaymentDialog({
                 }}
                 className="border-l border-border bg-muted/20 overflow-hidden flex-shrink-0"
               >
-                <div className="w-[300px] p-3 flex flex-col items-center">
+                <div className="w-[350px] p-3 flex flex-col items-center">
                   <h3 className="text-sm font-semibold text-muted-foreground mb-2 w-full text-center">
                     Scan to Pay
                   </h3>

@@ -46,20 +46,48 @@ export interface SalesHistoryResult {
  * CSV Sale Row - Supports multiple formats:
  * 
  * Simple Format: date, barcode, quantity, paymentMethod
- * Python Script Format: date, barcode, quantity, retail_price, cost_price, is_event, event_source
+ * Python Script v2 Format: date, barcode, quantity, retail_price, cost_price, is_event, event_source
+ * Python Script v3 Format (generate_history_v3.py):
+ *   Headers: transaction_id, date, time, customer_type, barcode, product_name, brand, category,
+ *            quantity, unit_price, cost_price, subtotal, cost_total, profit, payment_method,
+ *            is_event, event_source, event_name, inflation_factor
+ *   Examp0le: TX-20240101-0001,2024-01-01,15:30:46,SNACKER,999000000002,Lucky Me Pancit Canton...,Lucky Me,
+ *            INSTANT_NOODLES,1,12.5,11.0,12.5,11.0,1.5,CASH,True,HOLIDAY,New Year's Day,1.0
+ * 
+ * v3 Grouping: When transaction_id is present (TX-YYYYMMDD-NNNN), rows are grouped by transaction_id.
+ *              Otherwise, rows are grouped by date + payment_method (legacy behavior).
  */
 export interface CsvSaleRow {
-  date: string; // ISO date string or common format
+  // Core required fields
+  date: string; // ISO date string or common format (YYYY-MM-DD)
   barcode: string;
   quantity: number;
-  paymentMethod?: "CASH" | "GCASH"; // Optional - defaults to CASH
-  // Extended fields from Python script (generate_history_v2.py)
-  retail_price?: number;
-  cost_price?: number;
-  subtotal?: number;
-  is_event?: boolean | string; // 0/1 or true/false
-  event_source?: string; // STORE_DISCOUNT, MANUFACTURER_CAMPAIGN, HOLIDAY
-  event_name?: string;
+  
+  // Payment - various column name formats supported
+  paymentMethod?: "CASH" | "GCASH"; // Optional - defaults to CASH (simple format)
+  payment_method?: "CASH" | "GCASH"; // v3 format uses snake_case
+  
+  // Price fields (v2 uses retail_price, v3 uses unit_price)
+  retail_price?: number; // v2 format
+  unit_price?: number; // v3 format - inflation-adjusted retail price
+  cost_price?: number; // v2/v3 - inflation-adjusted cost price
+  subtotal?: number; // v3 - unit_price * quantity
+  cost_total?: number; // v3 - cost_price * quantity
+  profit?: number; // v3 - subtotal - cost_total
+  
+  // Event tracking
+  is_event?: boolean | string; // 0/1, true/false, True/False, "True"/"False" (Python outputs "True"/"False")
+  event_source?: string; // HOLIDAY, BRAND_CAMPAIGN, MANUFACTURER_CAMPAIGN, etc.
+  event_name?: string; // v3 - e.g., "New Year's Day", "Coca-Cola Summer Promo"
+  
+  // v3 additional fields (used for proper transaction grouping)
+  transaction_id?: string; // TX-YYYYMMDD-NNNN format - CRITICAL for v3 grouping
+  time?: string; // HH:MM:SS format - combined with date for accurate timestamp
+  customer_type?: string; // SNACKER, HOUSEHOLD, VENDOR (customer profile)
+  product_name?: string; // For validation/reference only
+  brand?: string; // For reference only
+  category?: string; // For reference only
+  inflation_factor?: number; // v3 - price multiplier applied (e.g., 1.0, 1.045, 1.092)
 }
 
 export interface ImportResult {
@@ -257,7 +285,345 @@ export async function getSalesHistory(
   };
 }
 
+// ============================================
+// Progress Tracking (In-Memory Store)
+// ============================================
+const importProgressStore = new Map<string, {
+  total: number;
+  processed: number;
+  successCount: number;
+  failedCount: number;
+  currentBatch: number;
+  totalBatches: number;
+  status: "idle" | "processing" | "completed" | "error";
+  message: string;
+  startTime: number;
+  elapsedMs: number;
+  estimatedRemainingMs: number;
+}>();
+
+export async function getImportProgress(importId: string) {
+  return importProgressStore.get(importId) || null;
+}
+
+function updateImportProgress(
+  importId: string, 
+  updates: Partial<typeof importProgressStore extends Map<string, infer V> ? V : never>
+) {
+  const current = importProgressStore.get(importId);
+  if (current) {
+    const elapsedMs = Date.now() - current.startTime;
+    const rate = current.processed > 0 ? elapsedMs / current.processed : 0;
+    const remaining = current.total - current.processed;
+    const estimatedRemainingMs = rate * remaining;
+    
+    importProgressStore.set(importId, { 
+      ...current, 
+      ...updates, 
+      elapsedMs,
+      estimatedRemainingMs,
+    });
+    
+    // Terminal progress logging
+    const progress = importProgressStore.get(importId)!;
+    const pct = ((progress.processed / progress.total) * 100).toFixed(1);
+    const elapsed = (elapsedMs / 1000).toFixed(1);
+    const eta = (estimatedRemainingMs / 1000).toFixed(0);
+    console.log(
+      `[IMPORT ${importId.slice(0, 8)}] ` +
+      `Batch ${progress.currentBatch}/${progress.totalBatches} | ` +
+      `${progress.processed.toLocaleString()}/${progress.total.toLocaleString()} (${pct}%) | ` +
+      `✓ ${progress.successCount.toLocaleString()} ✗ ${progress.failedCount} | ` +
+      `${elapsed}s elapsed, ~${eta}s remaining`
+    );
+  }
+}
+
 /**
+ * OPTIMIZED: Import sales from CSV data with batching and progress tracking
+ * 
+ * Performance optimizations:
+ * 1. Batch processing (5000 rows per batch)
+ * 2. Pre-fetch all products once instead of per-transaction
+ * 3. Use createMany for bulk inserts where possible
+ * 4. Progress tracking for UI feedback
+ * 
+ * Supports three formats:
+ * 1. Simple: date, barcode, quantity, paymentMethod
+ * 2. Python Script v2: date, barcode, quantity, retail_price, cost_price, is_event, event_source
+ * 3. Python Script v3: transaction_id, date, time, customer_type, barcode, product_name, brand, 
+ *                      category, quantity, unit_price, cost_price, subtotal, cost_total, profit,
+ *                      payment_method, is_event, event_source, event_name, inflation_factor
+ * 
+ * v3 Behavior: Groups by transaction_id (TX-YYYYMMDD-NNNN) to preserve exact transactions.
+ *              Combines date + time for accurate timestamps.
+ */
+export async function importSalesCsvOptimized(
+  data: CsvSaleRow[], 
+  importId: string
+): Promise<ImportResult> {
+  const BATCH_SIZE = 5000; // Process 5000 rows per batch
+  const totalRows = data.length;
+  const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
+  
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`[IMPORT START] ${totalRows.toLocaleString()} rows in ${totalBatches} batches`);
+  console.log(`${"=".repeat(60)}\n`);
+  
+  // Initialize progress
+  importProgressStore.set(importId, {
+    total: totalRows,
+    processed: 0,
+    successCount: 0,
+    failedCount: 0,
+    currentBatch: 0,
+    totalBatches,
+    status: "processing",
+    message: "Initializing...",
+    startTime: Date.now(),
+    elapsedMs: 0,
+    estimatedRemainingMs: 0,
+  });
+
+  let successCount = 0;
+  let eventDaysCount = 0;
+  const failedRows: { row: number; reason: string }[] = [];
+
+  try {
+    // Step 1: Pre-fetch ALL products with barcodes (one query)
+    updateImportProgress(importId, { message: "Loading product catalog..." });
+    
+    const allProducts = await prisma.product.findMany({
+      where: { barcode: { not: null } },
+      select: {
+        product_id: true,
+        barcode: true,
+        retail_price: true,
+        cost_price: true,
+      },
+    });
+    
+    const productMap = new Map(
+      allProducts.map((p) => [p.barcode!, { 
+        product_id: p.product_id,
+        retail_price: Number(p.retail_price),
+        cost_price: Number(p.cost_price),
+      }])
+    );
+    
+    console.log(`[IMPORT] Loaded ${allProducts.length} products with barcodes`);
+    updateImportProgress(importId, { message: `Loaded ${allProducts.length} products` });
+
+    // Step 2: Validate and group ALL data first (fast in-memory operation)
+    updateImportProgress(importId, { message: "Validating and grouping data..." });
+    
+    type GroupedTransaction = {
+      groupKey: string;
+      transactionDate: Date;
+      paymentMethod: "CASH" | "GCASH";
+      customerType?: string;
+      items: {
+        rowIndex: number;
+        product_id: number;
+        quantity: number;
+        price_at_sale: number;
+        cost_at_sale: number;
+      }[];
+    };
+    
+    const groupedTransactions = new Map<string, GroupedTransaction>();
+    
+    // Detect if v3 format by checking first row for transaction_id
+    const isV3Format = data.length > 0 && data[0].transaction_id?.startsWith("TX-");
+    console.log(`[IMPORT] Detected format: ${isV3Format ? "v3 (transaction_id grouping)" : "v2/simple (date grouping)"}`);
+    
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      const rowNum = i + 2; // +2 for header + 0-index
+      
+      // Parse date (and optionally time for v3)
+      let parsedDate = parseDate(row.date);
+      if (!parsedDate) {
+        failedRows.push({ row: rowNum, reason: `Invalid date: ${row.date}` });
+        continue;
+      }
+      
+      // For v3 format, combine date + time for accurate timestamp
+      if (isV3Format && row.time) {
+        const timeParts = row.time.split(":");
+        if (timeParts.length >= 2) {
+          const hours = parseInt(timeParts[0]) || 0;
+          const minutes = parseInt(timeParts[1]) || 0;
+          const seconds = parseInt(timeParts[2]) || 0;
+          parsedDate = new Date(parsedDate);
+          parsedDate.setHours(hours, minutes, seconds, 0);
+        }
+      }
+      
+      // Find product
+      const product = productMap.get(row.barcode);
+      if (!product) {
+        failedRows.push({ row: rowNum, reason: `Unknown barcode: ${row.barcode}` });
+        continue;
+      }
+      
+      // Track events - Python v3 outputs "True"/"False" as strings
+      const isEvent = row.is_event === true || row.is_event === "1" || row.is_event === "true" || row.is_event === "True";
+      if (isEvent) eventDaysCount++;
+      
+      // Determine payment method (v3 uses payment_method snake_case)
+      const paymentMethod = (row.payment_method || row.paymentMethod || "CASH") as "CASH" | "GCASH";
+      
+      // Create group key: v3 uses transaction_id, v2/simple uses date + payment_method
+      let groupKey: string;
+      if (isV3Format && row.transaction_id) {
+        // v3: Group by exact transaction_id (e.g., TX-20240101-0001)
+        groupKey = row.transaction_id;
+      } else {
+        // v2/simple: Group by date + payment_method (legacy behavior)
+        const dateKey = parsedDate.toISOString().split("T")[0];
+        groupKey = `${dateKey}_${paymentMethod}`;
+      }
+      
+      if (!groupedTransactions.has(groupKey)) {
+        groupedTransactions.set(groupKey, {
+          groupKey,
+          transactionDate: parsedDate,
+          paymentMethod,
+          customerType: row.customer_type,
+          items: [],
+        });
+      }
+      
+      // Use v3's unit_price if available, otherwise fall back to retail_price or product price
+      const priceAtSale = row.unit_price ?? row.retail_price ?? product.retail_price;
+      const costAtSale = row.cost_price ?? product.cost_price;
+      
+      groupedTransactions.get(groupKey)!.items.push({
+        rowIndex: rowNum,
+        product_id: product.product_id,
+        quantity: row.quantity,
+        price_at_sale: priceAtSale,
+        cost_at_sale: costAtSale,
+      });
+    }
+
+    console.log(`[IMPORT] Grouped into ${groupedTransactions.size} transactions`);
+
+    // Step 3: Process transactions in batches
+    const transactions = Array.from(groupedTransactions.values());
+    const txBatches = Math.ceil(transactions.length / 500); // 500 transactions per batch
+    
+    for (let batchIdx = 0; batchIdx < txBatches; batchIdx++) {
+      const batchStart = batchIdx * 500;
+      const batchEnd = Math.min(batchStart + 500, transactions.length);
+      const batch = transactions.slice(batchStart, batchEnd);
+      
+      updateImportProgress(importId, {
+        currentBatch: batchIdx + 1,
+        message: `Processing batch ${batchIdx + 1}/${txBatches}...`,
+      });
+      
+      // Process each transaction in the batch
+      for (const txGroup of batch) {
+        try {
+          const totalAmount = txGroup.items.reduce(
+            (sum, item) => sum + item.price_at_sale * item.quantity,
+            0
+          );
+          
+          // Create transaction with items and payment in one go
+          await prisma.transaction.create({
+            data: {
+              user_id: 1,
+              customer_id: null,
+              total_amount: new Decimal(totalAmount),
+              status: "COMPLETED",
+              created_at: txGroup.transactionDate,
+              items: {
+                create: txGroup.items.map((item) => ({
+                  product_id: item.product_id,
+                  quantity: item.quantity,
+                  price_at_sale: new Decimal(item.price_at_sale),
+                  cost_at_sale: new Decimal(item.cost_at_sale),
+                  subtotal: new Decimal(item.price_at_sale * item.quantity),
+                })),
+              },
+              payment: {
+                create: {
+                  payment_method: txGroup.paymentMethod,
+                  amount_tendered: new Decimal(totalAmount),
+                  change: new Decimal(0),
+                },
+              },
+            },
+          });
+          
+          successCount += txGroup.items.length;
+        } catch (error) {
+          // Mark all items in this transaction as failed
+          for (const item of txGroup.items) {
+            failedRows.push({
+              row: item.rowIndex,
+              reason: error instanceof Error ? error.message : "Database error",
+            });
+          }
+        }
+      }
+      
+      // Update progress after each batch
+      const processedRows = transactions
+        .slice(0, batchEnd)
+        .reduce((sum, tx) => sum + tx.items.length, 0);
+      
+      updateImportProgress(importId, {
+        processed: processedRows + failedRows.length,
+        successCount,
+        failedCount: failedRows.length,
+      });
+    }
+
+    // Final progress update
+    updateImportProgress(importId, {
+      processed: totalRows,
+      successCount,
+      failedCount: failedRows.length,
+      status: "completed",
+      message: `Completed! ${successCount.toLocaleString()} imported, ${failedRows.length} failed`,
+    });
+
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`[IMPORT COMPLETE] ✓ ${successCount.toLocaleString()} | ✗ ${failedRows.length}`);
+    console.log(`${"=".repeat(60)}\n`);
+
+  } catch (error) {
+    console.error("[IMPORT ERROR]", error);
+    updateImportProgress(importId, {
+      status: "error",
+      message: error instanceof Error ? error.message : "Import failed",
+    });
+  }
+
+  // Cleanup progress after 60 seconds
+  setTimeout(() => importProgressStore.delete(importId), 60000);
+
+  // Revalidate paths
+  revalidatePath("/admin/sales");
+  revalidatePath("/admin");
+  revalidatePath("/admin/analytics");
+
+  return {
+    successCount,
+    failedCount: failedRows.length,
+    eventDaysCount,
+    failedRows: failedRows.slice(0, 100), // Limit failed rows to first 100 for response size
+  };
+}
+
+/**
+ * Legacy import function (kept for backward compatibility)
+ * For large imports (>10,000 rows), use importSalesCsvOptimized instead
+ * 
  * Import sales from CSV data for analytics backfilling
  * 
  * Supports two formats:

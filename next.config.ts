@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["sharp", "@imgly/background-removal-node"],
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "1000mb",
       // Allow server actions from devtunnels and local network access
       allowedOrigins: [
         "localhost:3000",

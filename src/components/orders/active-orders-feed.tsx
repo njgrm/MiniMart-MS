@@ -67,7 +67,7 @@ function MiniOrderCard({ order }: { order: IncomingOrder }) {
     <button
       onClick={() => router.push(`/admin/orders?orderId=${order.order_id}`)}
       className={cn(
-        "w-full text-left p-3 rounded-lg border transition-all hover:shadow-sm",
+        "w-[97%] text-left p-3 rounded-lg border transition-all hover:shadow-sm",
         config?.bgClass || "bg-card border-border"
       )}
     >

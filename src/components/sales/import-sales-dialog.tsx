@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
 import Papa from "papaparse";
-import { Upload, FileText, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { Upload, FileText, AlertCircle, CheckCircle2, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { importSalesCsv, type CsvSaleRow } from "@/actions/sales";
+import { Progress } from "@/components/ui/progress";
+import { importSalesCsvOptimized, getImportProgress, type CsvSaleRow } from "@/actions/sales";
 
 interface ImportSalesDialogProps {
   open: boolean;
@@ -42,11 +43,51 @@ export function ImportSalesDialog({
   const [fileName, setFileName] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  
+  // Progress tracking state
+  const [importId, setImportId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{
+    total: number;
+    processed: number;
+    successCount: number;
+    failedCount: number;
+    currentBatch: number;
+    totalBatches: number;
+    status: "idle" | "processing" | "completed" | "error";
+    message: string;
+    elapsedMs: number;
+    estimatedRemainingMs: number;
+  } | null>(null);
+
+  // Poll for progress updates
+  useEffect(() => {
+    if (!importId || !isPending) return;
+    
+    const pollProgress = async () => {
+      const result = await getImportProgress(importId);
+      if (result) {
+        setProgress(result);
+        if (result.status === "completed" || result.status === "error") {
+          return; // Stop polling
+        }
+      }
+    };
+    
+    // Initial poll
+    pollProgress();
+    
+    // Poll every 500ms
+    const interval = setInterval(pollProgress, 500);
+    
+    return () => clearInterval(interval);
+  }, [importId, isPending]);
 
   const resetState = () => {
     setCsvContent("");
     setFileName(null);
     setValidationErrors([]);
+    setImportId(null);
+    setProgress(null);
   };
 
   const handleClose = () => {
@@ -160,11 +201,28 @@ export function ImportSalesDialog({
         const quantity = rowAny.quantity || rowAny.Quantity || row.quantity;
         const paymentMethodRaw = rowAny.paymentmethod || rowAny.paymentMethod || rowAny.payment_method || row.paymentMethod || row.payment_method || "";
         
-        // Extended Python script fields
-        const retailPrice = rowAny.retail_price || rowAny.retailprice;
+        // Extended Python script fields (v2 and v3 compatible)
+        // v3 uses unit_price, v2 uses retail_price
+        const retailPrice = rowAny.unit_price || rowAny.retail_price || rowAny.retailprice;
         const costPrice = rowAny.cost_price || rowAny.costprice;
-        const isEvent = rowAny.is_event || rowAny.isevent;
+        const subtotal = rowAny.subtotal;
+        const costTotal = rowAny.cost_total;
+        const profit = rowAny.profit;
+        
+        // Event tracking (handle Python's True/False and JS true/false)
+        const isEventRaw = rowAny.is_event || rowAny.isevent;
+        const isEvent = isEventRaw === "1" || isEventRaw === "true" || isEventRaw === "True" || isEventRaw === true;
         const eventSource = rowAny.event_source || rowAny.eventsource;
+        const eventName = rowAny.event_name || rowAny.eventname;
+        
+        // v3 additional fields (for reference/logging)
+        const transactionId = rowAny.transaction_id;
+        const time = rowAny.time;
+        const customerType = rowAny.customer_type;
+        const productName = rowAny.product_name;
+        const brand = rowAny.brand;
+        const category = rowAny.category;
+        const inflationFactor = rowAny.inflation_factor;
 
         if (!date?.trim()) {
           errors.push({ row: rowNum, field: "date", message: "Date is required" });
@@ -194,10 +252,24 @@ export function ImportSalesDialog({
           barcode: String(barcode).trim(),
           quantity: quantityNum,
           paymentMethod: paymentMethod as "CASH" | "GCASH",
+          // Support both v2 (retail_price) and v3 (unit_price) formats
           retail_price: retailPrice ? parseFloat(String(retailPrice)) : undefined,
+          unit_price: retailPrice ? parseFloat(String(retailPrice)) : undefined,
           cost_price: costPrice ? parseFloat(String(costPrice)) : undefined,
-          is_event: isEvent === "1" || isEvent === "true" || isEvent === true,
+          subtotal: subtotal ? parseFloat(String(subtotal)) : undefined,
+          cost_total: costTotal ? parseFloat(String(costTotal)) : undefined,
+          profit: profit ? parseFloat(String(profit)) : undefined,
+          is_event: isEvent,
           event_source: eventSource ? String(eventSource).trim() : undefined,
+          event_name: eventName ? String(eventName).trim() : undefined,
+          // v3 additional fields
+          transaction_id: transactionId ? String(transactionId).trim() : undefined,
+          time: time ? String(time).trim() : undefined,
+          customer_type: customerType ? String(customerType).trim() : undefined,
+          product_name: productName ? String(productName).trim() : undefined,
+          brand: brand ? String(brand).trim() : undefined,
+          category: category ? String(category).trim() : undefined,
+          inflation_factor: inflationFactor ? parseFloat(String(inflationFactor)) : undefined,
         });
       });
 
@@ -207,8 +279,29 @@ export function ImportSalesDialog({
         return;
       }
 
-      // Import to database
-      const importResult = await importSalesCsv(validRows);
+      // Generate unique import ID for progress tracking
+      const newImportId = `import_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      setImportId(newImportId);
+      setProgress({
+        total: validRows.length,
+        processed: 0,
+        successCount: 0,
+        failedCount: 0,
+        currentBatch: 0,
+        totalBatches: Math.ceil(validRows.length / 5000),
+        status: "processing",
+        message: "Starting import...",
+        elapsedMs: 0,
+        estimatedRemainingMs: 0,
+      });
+
+      // Show info toast for large imports
+      if (validRows.length > 10000) {
+        toast.info(`Importing ${validRows.length.toLocaleString()} records. This may take a few minutes...`);
+      }
+
+      // Use optimized import with progress tracking
+      const importResult = await importSalesCsvOptimized(validRows, newImportId);
 
       if (importResult.successCount > 0) {
         const eventInfo = importResult.eventDaysCount > 0 
@@ -275,17 +368,24 @@ export function ImportSalesDialog({
               <code className="text-xs bg-background px-1 rounded border border-border">paymentMethod</code> (optional)
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              <strong>Python Script:</strong>{" "}
+              <strong>Python v3 (generate_history_v3.py):</strong>{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">transaction_id</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">date</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">time</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">customer_type</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">barcode</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">product_name</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">brand</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">category</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">quantity</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">retail_price</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">unit_price</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">cost_price</code>,{" "}
+              <code className="text-xs bg-background px-1 rounded border border-border">payment_method</code>,{" "}
               <code className="text-xs bg-background px-1 rounded border border-border">is_event</code>,{" "}
-              <code className="text-xs bg-background px-1 rounded border border-border">event_source</code>
+              <code className="text-xs bg-background px-1 rounded border border-border">event_name</code>, ...
             </p>
             <p className="text-muted-foreground text-xs mt-1">
-              Date formats: YYYY-MM-DD, MM/DD/YYYY, or DD-MM-YYYY. Payment defaults to CASH if not specified.
+              v3 files are grouped by <code className="text-xs bg-background px-1 rounded border border-border">transaction_id</code> (e.g., TX-20240101-0001). Date formats: YYYY-MM-DD. Payment defaults to CASH.
             </p>
           </div>
 
@@ -391,6 +491,76 @@ export function ImportSalesDialog({
                   ))}
                 </ul>
               </ScrollArea>
+            </div>
+          )}
+
+          {/* Progress Bar (during import) */}
+          {progress && progress.status === "processing" && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm font-medium text-foreground">
+                    Importing Sales Data...
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground font-mono">
+                  Batch {progress.currentBatch}/{progress.totalBatches}
+                </span>
+              </div>
+              
+              <Progress 
+                value={(progress.processed / progress.total) * 100} 
+                className="h-2"
+              />
+              
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {progress.processed.toLocaleString()} / {progress.total.toLocaleString()} rows
+                </span>
+                <span>
+                  {((progress.processed / progress.total) * 100).toFixed(1)}%
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-green-600 dark:text-green-400">
+                  ✓ {progress.successCount.toLocaleString()} imported
+                </span>
+                {progress.failedCount > 0 && (
+                  <span className="text-red-600 dark:text-red-400">
+                    ✗ {progress.failedCount.toLocaleString()} failed
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  Elapsed: {Math.round(progress.elapsedMs / 1000)}s
+                </span>
+                <span>
+                  ETA: ~{Math.round(progress.estimatedRemainingMs / 1000)}s remaining
+                </span>
+              </div>
+              
+              <p className="text-xs text-muted-foreground">{progress.message}</p>
+            </div>
+          )}
+
+          {/* Completion Status */}
+          {progress && progress.status === "completed" && (
+            <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                  Import Complete!
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Successfully imported {progress.successCount.toLocaleString()} records
+                {progress.failedCount > 0 && ` (${progress.failedCount.toLocaleString()} failed)`}
+                {" "}in {Math.round(progress.elapsedMs / 1000)}s
+              </p>
             </div>
           )}
         </div>

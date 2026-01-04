@@ -107,98 +107,130 @@ export function TransactionSheet({ transaction, defaultOpen, onOpenChange }: Tra
   const changeAmount = transaction.change ?? 0;
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
+    // Open with specific dimensions matching thermal receipt
+    const printWindow = window.open('', '_blank', 'width=220,height=600');
     if (printWindow) {
       printWindow.document.write(`
         <html>
           <head>
             <title>Receipt #${transaction.receipt_no.substring(0, 8)}</title>
+            <meta charset="UTF-8">
             <style>
-              @media print {
-                body { margin: 0; padding: 0; }
-                .no-print { display: none !important; }
+              /* Page settings for 58mm thermal printer */
+              @page {
+                size: auto;
+                margin: 0;
               }
               
-              body { 
-                font-family: 'Courier New', Consolas, monospace; 
-                margin: 0; 
-                padding: 10px;
+              @media print {
+                html {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                }
+                body {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  transform: scaleX(1.3);
+                  transform-origin: left top;
+                }
+              }
+              
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
+              
+              html, body { 
+                width: 100%;
+                margin: 0;
+                padding: 0;
                 background: white;
               }
               
+              body { 
+                font-family: 'Lucida Console', Consolas, 'Courier New', monospace;
+                font-size: 10pt;
+                line-height: 1.2;
+                color: #000;
+                -webkit-font-smoothing: none;
+              }
+              
               .receipt-container {
-                width: 80mm;
-                max-width: 80mm;
-                margin: 0 auto;
+                width: 100%;
                 padding: 0;
-                font-size: 11px;
-                line-height: 1.3;
+                margin: 0;
+                overflow: hidden;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
               }
               
               .header { 
                 text-align: center; 
-                margin-bottom: 10px; 
+                margin-bottom: 2mm;
               }
               
               .header h2 {
+                font-size: 12pt;
+                font-weight: bold;
                 margin: 0;
-                font-size: 14px;
               }
               
               .header p {
-                margin: 1px 0;
-                font-size: 10px;
+                font-size: 9pt;
+                margin: 0;
+                word-wrap: break-word;
               }
               
               .separator {
-                border-top: 1px dashed #000;
-                margin: 8px 0;
+                border: none;
+                border-bottom: 1px dashed #000;
+                margin: 2mm 0;
               }
               
-              .info-line {
+              .info-line, .total-line {
                 display: flex;
                 justify-content: space-between;
-                margin: 2px 0;
+                gap: 2mm;
               }
               
               .item {
-                margin: 5px 0;
+                margin: 2mm 0;
               }
               
               .item-name {
-                font-weight: normal;
+                font-weight: bold;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
               }
               
               .item-detail {
                 display: flex;
                 justify-content: space-between;
-                padding-left: 20px;
-                font-size: 10px;
+                padding-left: 3mm;
+                font-size: 9pt;
               }
               
               .totals {
-                margin-top: 10px;
-              }
-              
-              .total-line {
-                display: flex;
-                justify-content: space-between;
-                margin: 2px 0;
+                margin-top: 2mm;
               }
               
               .total-bold {
                 font-weight: bold;
               }
               
-              .footer {
-                text-align: center;
-                margin-top: 10px;
-                font-size: 10px;
+              .total-large {
+                font-size: 12pt;
+                font-weight: bold;
               }
               
-              .footer p {
-                margin: 2px 0;
+              .footer {
+                text-align: center;
+                margin-top: 3mm;
+                font-size: 9pt;
               }
+              
+              p { margin: 0; }
             </style>
           </head>
           <body>
@@ -344,7 +376,7 @@ export function TransactionSheet({ transaction, defaultOpen, onOpenChange }: Tra
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-4 sm:space-y-6">
             {/* Thermal Receipt Style */}
-            <div className="bg-white dark:bg-neutral-100 border rounded-lg p-3 sm:p-4 font-mono text-xs sm:text-sm shadow-sm max-w-sm mx-auto text-black">
+            <div className="bg-white dark:bg-neutral-100 border rounded-lg p-3 sm:p-4 font-mono text-xs sm:text-sm shadow-sm max-w-md mx-auto text-black">
               {/* Header */}
               <div className="text-center mb-3">
                 <h2 className="font-bold text-sm sm:text-base">CHRISTIAN MINIMART</h2>

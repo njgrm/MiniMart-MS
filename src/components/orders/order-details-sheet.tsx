@@ -294,16 +294,43 @@ export function OrderDetailsSheet({
       <html>
         <head>
           <title>Receipt - ${data.receiptNo}</title>
+          <meta charset="UTF-8">
           <style>
-            @page { margin: 0 5mm; size: 58mm auto; }
+            @page { 
+              size: 58mm auto; 
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            @media print {
+              html, body { 
+                width: 58mm !important; 
+                min-width: 58mm !important;
+                max-width: 58mm !important;
+                margin: 0 !important; 
+                padding: 0 !important; 
+              }
+              .receipt-wrapper {
+                width: 58mm !important;
+                min-width: 58mm !important;
+                max-width: 58mm !important;
+              }
+            }
+            * { 
+              margin: 0; 
+              padding: 0; 
+              box-sizing: border-box; 
+            }
+            html, body { 
+              width: 58mm;
+              min-width: 58mm;
+              max-width: 58mm;
+              margin: 0;
+              padding: 0;
+            }
             body { 
               font-family: 'Lucida Console', 'Consolas', 'Courier New', monospace; 
-              font-size: 9pt; 
-              line-height: 1.15;
-              padding: 0;
-              width: 48mm;
-              max-width: 48mm;
-              margin: 0;
+              font-size: 10pt; 
+              line-height: 1.2;
               background: white;
               color: black;
               -webkit-font-smoothing: none;
@@ -311,7 +338,13 @@ export function OrderDetailsSheet({
               word-wrap: break-word;
               overflow-wrap: break-word;
             }
-            * { box-sizing: border-box; }
+            .receipt-wrapper {
+              width: 58mm;
+              min-width: 58mm;
+              max-width: 58mm;
+              margin: 0;
+              padding: 1.5mm;
+            }
             .center { text-align: center; }
             .bold { font-weight: 700; }
             .separator { border-bottom: 0.5mm dashed #000; margin: 1mm 0; }
@@ -320,13 +353,14 @@ export function OrderDetailsSheet({
             .item-line { margin: 1mm 0; word-wrap: break-word; overflow-wrap: break-word; }
             .item-name { word-wrap: break-word; overflow-wrap: break-word; max-width: 100%; }
             .logo-container { display: flex; justify-content: center; margin-bottom: 2mm; }
-            .logo { width: 40mm; max-width: 40mm; height: auto; filter: grayscale(100%); }
-            .total-section { font-weight: 700; font-size: 11pt; align-items: flex-end; margin-top: 2mm; }
-            .store-name { font-size: 11pt; font-weight: 700; }
-            .small-text { font-size: 8pt; }
+            .logo { width: 100%; max-width: 50mm; height: auto; filter: grayscale(100%); }
+            .total-section { font-weight: 700; font-size: 12pt; align-items: flex-end; margin-top: 2mm; }
+            .store-name { font-size: 13pt; font-weight: 700; }
+            .small-text { font-size: 9pt; }
           </style>
         </head>
         <body>
+          <div class="receipt-wrapper">
           <div class="center" style="margin-bottom: 2mm;">
             <div class="logo-container">
               <img src="${window.location.origin}/christian_minimart_logo.png" alt="Logo" class="logo" />
@@ -403,6 +437,7 @@ export function OrderDetailsSheet({
             <div style="font-size: 7pt;">Accred: 077-906501861-000338</div>
           </div>
           <div style="height: 10mm;"></div>
+          </div>
         </body>
       </html>
     `;

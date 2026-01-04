@@ -6,7 +6,13 @@ import {
   getReorderAlerts,
   type ForecastResult 
 } from "@/lib/forecasting";
-import { subDays, format, startOfDay, endOfDay, eachDayOfInterval } from "date-fns";
+import { 
+  generateBusinessInsights, 
+  getDefaultInsight,
+  type Insight, 
+  type VelocityData 
+} from "@/lib/insights";
+import { subDays, format, startOfDay, endOfDay, eachDayOfInterval, startOfMonth, subMonths } from "date-fns";
 
 // =============================================================================
 // Types
@@ -73,11 +79,10 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     // Get historical sales data for chart (last 30 days)
     const chartData = await getChartData();
     
-    // Transform forecasts to table format
+    // Transform forecasts to table format - show ALL products needing restock
     const forecastTable: ForecastTableItem[] = forecasts
       .filter(f => f.suggestedReorderQty > 0)
       .sort((a, b) => b.suggestedReorderQty - a.suggestedReorderQty)
-      .slice(0, 20)
       .map(f => ({
         productId: f.productId,
         productName: f.productName,
@@ -539,16 +544,32 @@ export async function getStatsByDateRange(startDate: Date, endDate: Date) {
 }
 
 function getRecommendedAction(forecast: ForecastResult): string {
+  // CRITICAL FIX: Handle DEAD_STOCK - items with 0 velocity should NOT be restocked
+  if (forecast.stockStatus === "DEAD_STOCK") {
+    return "Dead Stock: Discount to clear";
+  }
+  
   if (forecast.stockStatus === "OUT_OF_STOCK") {
-    return "Urgent: Restock immediately";
+    // Only urgent if there's actual demand
+    if (forecast.avgDailyVelocity >= 0.1) {
+      return "Urgent: Restock immediately";
+    }
+    return "Out of Stock (No demand)";
   }
   
   if (forecast.stockStatus === "CRITICAL") {
-    return "Critical: Order within 24h";
+    // Only critical if there's actual demand
+    if (forecast.avgDailyVelocity >= 0.1) {
+      return "Critical: Order within 24h";
+    }
+    return "Low Stock (No recent sales)";
   }
   
   if (forecast.stockStatus === "LOW") {
-    return "Order soon";
+    if (forecast.avgDailyVelocity >= 0.1) {
+      return "Order soon";
+    }
+    return "Monitor: Low velocity";
   }
   
   if (forecast.velocityTrend === "INCREASING" && forecast.suggestedReorderQty > 0) {
@@ -788,10 +809,13 @@ export async function importEventsCsv(data: CsvEventRow[]): Promise<EventImportR
 // =============================================================================
 
 export interface TopMoverResult {
+  product_id: number;
   product_name: string;
   velocity: number;
+  total_sold: number;
   current_stock: number;
   category: string;
+  image_url: string | null;
 }
 
 /**
@@ -834,6 +858,7 @@ export async function getTopMovers(startDate: Date, endDate: Date): Promise<TopM
         product_id: true,
         product_name: true,
         category: true,
+        image_url: true,
         inventory: {
           select: {
             current_stock: true,
@@ -850,15 +875,120 @@ export async function getTopMovers(startDate: Date, endDate: Date): Promise<TopM
         if (!product) return null;
         
         return {
+          product_id: product.product_id,
           product_name: product.product_name,
           velocity: Math.round((p._sum.quantity ?? 0) / diffDays * 10) / 10,
+          total_sold: p._sum.quantity ?? 0,
           current_stock: product.inventory?.current_stock ?? 0,
           category: product.category,
+          image_url: product.image_url,
         };
       })
       .filter((p): p is TopMoverResult => p !== null);
   } catch (error) {
     console.error("[Analytics] Error fetching top movers:", error);
+    return [];
+  }
+}
+
+// =============================================================================
+// Category Sales Share - For Donut Chart
+// =============================================================================
+
+export interface CategorySalesResult {
+  category: string;
+  label: string;
+  revenue: number;
+  percentage: number;
+  color: string;
+}
+
+// Category color palette matching design system
+const CATEGORY_COLORS: Record<string, string> = {
+  BEVERAGES: "#2EAFC5",      // Teal
+  SODA: "#10B981",           // Emerald
+  SOFTDRINKS_CASE: "#6366F1", // Indigo
+  SNACK: "#F59E0B",          // Amber
+  CANNED_GOODS: "#EF4444",   // Red
+  DAIRY: "#EC4899",          // Pink
+  BREAD: "#F97316",          // Orange
+  INSTANT_NOODLES: "#8B5CF6", // Purple
+  CONDIMENTS: "#14B8A6",     // Teal
+  PERSONAL_CARE: "#06B6D4",  // Cyan
+  HOUSEHOLD: "#84CC16",      // Lime
+  OTHER: "#6B7280",          // Gray
+};
+
+/**
+ * Get sales distribution by category for a given date range
+ */
+export async function getCategorySalesShare(startDate: Date, endDate: Date): Promise<CategorySalesResult[]> {
+  try {
+    const rangeStart = startOfDay(startDate);
+    const rangeEnd = endOfDay(endDate);
+    
+    // Get transaction items with product category
+    const items = await prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          created_at: { gte: rangeStart, lte: rangeEnd },
+          status: "COMPLETED",
+        },
+      },
+      select: {
+        subtotal: true,
+        product: {
+          select: {
+            category: true,
+          },
+        },
+      },
+    });
+    
+    // Aggregate by category
+    const categoryMap = new Map<string, number>();
+    let totalRevenue = 0;
+    
+    for (const item of items) {
+      const category = item.product.category;
+      const revenue = Number(item.subtotal);
+      totalRevenue += revenue;
+      categoryMap.set(category, (categoryMap.get(category) ?? 0) + revenue);
+    }
+    
+    // Format and sort by revenue
+    const results: CategorySalesResult[] = Array.from(categoryMap.entries())
+      .map(([category, revenue]) => ({
+        category,
+        label: category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
+        revenue: Math.round(revenue),
+        percentage: totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 1000) / 10 : 0,
+        color: CATEGORY_COLORS[category] ?? CATEGORY_COLORS.OTHER,
+      }))
+      .sort((a, b) => b.revenue - a.revenue);
+    
+    // Return top 8 categories, group rest as "Other"
+    if (results.length > 8) {
+      const top7 = results.slice(0, 7);
+      const others = results.slice(7);
+      const otherRevenue = others.reduce((sum, c) => sum + c.revenue, 0);
+      const otherPercentage = others.reduce((sum, c) => sum + c.percentage, 0);
+      
+      return [
+        ...top7,
+        {
+          category: "OTHER",
+          label: "Other",
+          revenue: Math.round(otherRevenue),
+          percentage: Math.round(otherPercentage * 10) / 10,
+          color: CATEGORY_COLORS.OTHER,
+        },
+      ];
+    }
+    
+    return results;
+  } catch (error) {
+    console.error("[Analytics] Error fetching category sales:", error);
     return [];
   }
 }
@@ -921,12 +1051,16 @@ export interface ForecastDataPoint {
   date: string;
   historical: number | null;
   forecast: number | null;
+  forecastUpper: number | null;  // Upper confidence band (+15%)
+  forecastLower: number | null;  // Lower confidence band (-15%)
+  bridge: number | null;         // Bridge connecting historical to forecast
   isEvent: boolean;
   eventName?: string;
 }
 
 /**
  * Get historical sales (last 7 days) and forecast (next 7 days)
+ * with confidence interval and visual bridge
  */
 export async function getForecastData(): Promise<ForecastDataPoint[]> {
   try {
@@ -971,17 +1105,28 @@ export async function getForecastData(): Promise<ForecastDataPoint[]> {
     
     // Build the data points
     const result: ForecastDataPoint[] = [];
+    let lastHistoricalValue = 0;
+    let firstForecastValue = 0;
     
     // Past 7 days (historical)
     for (let i = 6; i >= 0; i--) {
       const date = subDays(today, i + 1);
       const dateKey = format(date, "yyyy-MM-dd");
       const dateLabel = format(date, "MMM d");
+      const historicalValue = historicalMap.get(dateKey) ?? 0;
+      
+      // Track last historical value for bridge
+      if (i === 0) {
+        lastHistoricalValue = historicalValue;
+      }
       
       result.push({
         date: dateLabel,
-        historical: historicalMap.get(dateKey) ?? 0,
+        historical: historicalValue,
         forecast: null,
+        forecastUpper: null,
+        forecastLower: null,
+        bridge: null,
         isEvent: false,
       });
     }
@@ -1007,19 +1152,216 @@ export async function getForecastData(): Promise<ForecastDataPoint[]> {
       
       // Add some randomness for visual effect
       forecastValue *= (0.85 + Math.random() * 0.3);
+      forecastValue = Math.round(forecastValue);
+      
+      // Track first forecast value for bridge
+      if (i === 0) {
+        firstForecastValue = forecastValue;
+      }
+      
+      // Calculate confidence interval (±15%)
+      const confidenceMargin = 0.15;
+      const upper = Math.round(forecastValue * (1 + confidenceMargin));
+      const lower = Math.round(forecastValue * (1 - confidenceMargin));
       
       result.push({
         date: dateLabel,
         historical: null,
-        forecast: Math.round(forecastValue),
+        forecast: forecastValue,
+        forecastUpper: upper,
+        forecastLower: lower,
+        bridge: null,
         isEvent: !!activeEvent,
         eventName: activeEvent?.name,
       });
+    }
+    
+    // Add bridge data - connects last historical point to first forecast point
+    // Find the last historical entry and first forecast entry
+    const lastHistoricalIdx = result.findIndex(r => r.forecast !== null) - 1;
+    const firstForecastIdx = lastHistoricalIdx + 1;
+    
+    if (lastHistoricalIdx >= 0 && firstForecastIdx < result.length) {
+      // Add bridge value to last historical point
+      result[lastHistoricalIdx].bridge = lastHistoricalValue;
+      // Add bridge value to first forecast point
+      result[firstForecastIdx].bridge = firstForecastValue;
     }
     
     return result;
   } catch (error) {
     console.error("[Analytics] Error fetching forecast data:", error);
     return [];
+  }
+}
+
+// =============================================================================
+// Smart Insights Data Fetching
+// =============================================================================
+
+/**
+ * Get smart business insights based on current sales velocity and stock levels.
+ * Returns up to 4 prioritized insights for the analytics dashboard.
+ */
+export async function getSmartInsights(): Promise<Insight[]> {
+  try {
+    const today = startOfDay(new Date());
+    const last7Days = subDays(today, 7);
+    const last14Days = subDays(today, 14);
+    const last30Days = subDays(today, 30);
+    const thisMonthStart = startOfMonth(today);
+    const lastMonthStart = startOfMonth(subMonths(today, 1));
+    const dayOfMonth = today.getDate();
+    
+    // Get all products with current stock via inventory relation
+    const products = await prisma.product.findMany({
+      where: { is_archived: false },
+      select: {
+        product_id: true,
+        product_name: true,
+        category: true,
+        cost_price: true,
+        retail_price: true,
+        inventory: {
+          select: {
+            current_stock: true,
+          },
+        },
+      },
+    });
+    
+    // Get sales for last 14 days (this week + last week for velocity comparison)
+    const recentSales = await prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          status: "COMPLETED",
+          created_at: { gte: last14Days },
+        },
+      },
+      select: {
+        product_id: true,
+        quantity: true,
+        transaction: {
+          select: {
+            created_at: true,
+            total_amount: true,
+          },
+        },
+      },
+    });
+    
+    // Calculate this month's revenue vs last month (same day range)
+    const thisMonthTransactions = await prisma.transaction.aggregate({
+      where: {
+        status: "COMPLETED",
+        created_at: {
+          gte: thisMonthStart,
+          lte: today,
+        },
+      },
+      _sum: { total_amount: true },
+    });
+    
+    // Last month up to the same day
+    const lastMonthSameDay = new Date(lastMonthStart);
+    lastMonthSameDay.setDate(Math.min(dayOfMonth, new Date(lastMonthStart.getFullYear(), lastMonthStart.getMonth() + 1, 0).getDate()));
+    
+    const lastMonthTransactions = await prisma.transaction.aggregate({
+      where: {
+        status: "COMPLETED",
+        created_at: {
+          gte: lastMonthStart,
+          lte: lastMonthSameDay,
+        },
+      },
+      _sum: { total_amount: true },
+    });
+    
+    // Build velocity data for each product
+    const velocityMap = new Map<number, {
+      thisWeek: number;
+      lastWeek: number;
+      lastSaleDate: Date | null;
+    }>();
+    
+    for (const sale of recentSales) {
+      const productId = sale.product_id;
+      const saleDate = sale.transaction.created_at;
+      const isThisWeek = saleDate >= last7Days;
+      
+      const existing = velocityMap.get(productId) || {
+        thisWeek: 0,
+        lastWeek: 0,
+        lastSaleDate: null,
+      };
+      
+      if (isThisWeek) {
+        existing.thisWeek += sale.quantity;
+      } else {
+        existing.lastWeek += sale.quantity;
+      }
+      
+      if (!existing.lastSaleDate || saleDate > existing.lastSaleDate) {
+        existing.lastSaleDate = saleDate;
+      }
+      
+      velocityMap.set(productId, existing);
+    }
+    
+    // Transform to VelocityData array
+    const velocityData: VelocityData[] = products.map(product => {
+      const sales = velocityMap.get(product.product_id);
+      const thisWeekQty = sales?.thisWeek ?? 0;
+      const lastWeekQty = sales?.lastWeek ?? 0;
+      const lastSaleDate = sales?.lastSaleDate ?? null;
+      
+      const dailyVelocity = thisWeekQty / 7;
+      const weeklyVelocity = thisWeekQty;
+      const lastWeekVelocity = lastWeekQty;
+      
+      // Calculate % change (handle division by zero)
+      let velocityChange = 0;
+      if (lastWeekVelocity > 0) {
+        velocityChange = ((weeklyVelocity - lastWeekVelocity) / lastWeekVelocity) * 100;
+      } else if (weeklyVelocity > 0) {
+        velocityChange = 100; // New sales this week
+      }
+      
+      // Days since last sale
+      let daysSinceLastSale = 9999;
+      if (lastSaleDate) {
+        daysSinceLastSale = Math.floor((today.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24));
+      }
+      
+      return {
+        productId: product.product_id,
+        productName: product.product_name,
+        category: product.category,
+        currentStock: product.inventory?.current_stock ?? 0,
+        dailyVelocity,
+        weeklyVelocity,
+        lastWeekVelocity,
+        velocityChange,
+        lastSaleDate,
+        daysSinceLastSale,
+      };
+    });
+    
+    // Generate insights
+    const insights = generateBusinessInsights({
+      velocityData,
+      thisMonthRevenue: Number(thisMonthTransactions._sum.total_amount ?? 0),
+      lastMonthSameDayRevenue: Number(lastMonthTransactions._sum.total_amount ?? 0),
+    });
+    
+    // Return default insight if no insights generated
+    if (insights.length === 0) {
+      return [getDefaultInsight()];
+    }
+    
+    return insights;
+  } catch (error) {
+    console.error("[Analytics] Error generating insights:", error);
+    return [getDefaultInsight()];
   }
 }

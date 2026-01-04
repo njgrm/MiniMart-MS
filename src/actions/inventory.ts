@@ -12,7 +12,8 @@ type StockMovementType =
   | "ADJUSTMENT" 
   | "DAMAGE" 
   | "RETURN" 
-  | "INTERNAL_USE";
+  | "INTERNAL_USE"
+  | "ORDER_SHORTAGE";
 
 export type ActionResult<T = unknown> = {
   success: boolean;

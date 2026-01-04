@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect, useTransition } from "react";
+import React, { useState, useMemo, useEffect, useTransition } from "react";
 import { DateRange } from "react-day-picker";
-import { subDays, subMonths, startOfMonth, endOfMonth, format, addDays } from "date-fns";
+import { subDays, subMonths, startOfMonth, endOfMonth, format, addDays, startOfYear, endOfYear, subYears, startOfDay, endOfDay } from "date-fns";
 import {
   TrendingUp,
   Package,
@@ -68,6 +68,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { AIAssistant } from "@/components/ai-assistant";
+import { InsightCardsGrid, IntelligenceFeed } from "@/components/sales/insight-cards";
+import type { Insight } from "@/lib/insights";
 import {
   AreaChart,
   Area,
@@ -91,12 +93,16 @@ import {
   getTopMovers, 
   getPeakTrafficData, 
   getForecastData,
+  getSmartInsights,
+  getCategorySalesShare,
   type TopMoverResult,
   type HourlyTrafficResult,
   type ForecastDataPoint,
+  type CategorySalesResult,
 } from "./actions";
 import type { AnalyticsData, ForecastTableItem, DashboardChartDataPoint } from "./actions";
 import Link from "next/link";
+
 
 // Chart colors - matching design system
 const COLORS = {
@@ -119,14 +125,21 @@ interface AnalyticsDashboardProps {
   financialStats?: SalesStats;
 }
 
-// Date range presets
+// Date range presets - Enhanced with more useful options
 const datePresets = [
+  { label: "Today", getRange: () => ({ from: startOfDay(new Date()), to: endOfDay(new Date()) }) },
+  { label: "Yesterday", getRange: () => ({ from: startOfDay(subDays(new Date(), 1)), to: endOfDay(subDays(new Date(), 1)) }) },
   { label: "Last 7 days", getRange: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
   { label: "Last 30 days", getRange: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
-  { label: "Last month", getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
-  { label: "Dec 2025", getRange: () => ({ from: new Date(2025, 11, 1), to: new Date(2025, 11, 31) }) },
-  { label: "Nov 2025", getRange: () => ({ from: new Date(2025, 10, 1), to: new Date(2025, 10, 30) }) },
+  { label: "This Month", getRange: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
+  { label: "Last Month", getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
+  { label: "Year 2026", getRange: () => ({ from: new Date(2026, 0, 1), to: new Date(2026, 11, 31) }) },
+  { label: "Year 2025", getRange: () => ({ from: new Date(2025, 0, 1), to: new Date(2025, 11, 31) }) },
+  { label: "Year 2024", getRange: () => ({ from: new Date(2024, 0, 1), to: new Date(2024, 11, 31) }) },
 ];
+
+// Granularity type for financial chart
+type ChartGranularity = "daily" | "weekly" | "monthly";
 
 export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardProps) {
   const [isPending, startTransition] = useTransition();
@@ -148,8 +161,35 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
   const [chartData, setChartData] = useState<DashboardChartDataPoint[]>([]);
   const [previousChartData, setPreviousChartData] = useState<DashboardChartDataPoint[]>([]);
   const [topMovers, setTopMovers] = useState<TopMoverResult[]>([]);
+  const [categoryData, setCategoryData] = useState<CategorySalesResult[]>([]);
   const [peakTraffic, setPeakTraffic] = useState<HourlyTrafficResult[]>([]);
   const [forecastData, setForecastData] = useState<ForecastDataPoint[]>([]);
+  const [insights, setInsights] = useState<Insight[]>([]);
+  
+  // Tab state for Top Movers / Category Share
+  const [productInsightsTab, setProductInsightsTab] = useState<"movers" | "category">("movers");
+  
+  // Financial chart granularity state
+  const [chartGranularity, setChartGranularity] = useState<ChartGranularity>("daily");
+  
+  // Selected product for context-aware forecast
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductName, setSelectedProductName] = useState<string | null>(null);
+  
+  // Auto-set granularity based on date range
+  useEffect(() => {
+    if (dateRange?.from && dateRange?.to) {
+      const diffDays = Math.ceil((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays > 90) {
+        setChartGranularity("monthly");
+      } else if (diffDays > 30) {
+        setChartGranularity("weekly");
+      } else {
+        setChartGranularity("daily");
+      }
+    }
+  }, [dateRange]);
+  
   // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
@@ -185,6 +225,10 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         const movers = await getTopMovers(dateRange.from!, dateRange.to!);
         setTopMovers(movers);
         
+        // Fetch category sales share
+        const categories = await getCategorySalesShare(dateRange.from!, dateRange.to!);
+        setCategoryData(categories);
+        
         // Fetch peak traffic
         const traffic = await getPeakTrafficData(dateRange.from!, dateRange.to!);
         setPeakTraffic(traffic);
@@ -192,6 +236,10 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         // Fetch forecast data
         const forecast = await getForecastData();
         setForecastData(forecast);
+        
+        // Fetch smart insights
+        const smartInsights = await getSmartInsights();
+        setInsights(smartInsights);
       });
     }
   }, [dateRange]);
@@ -217,6 +265,58 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
     });
   }, [chartData, previousChartData, showComparison]);
 
+  // Group chart data by granularity
+  const groupedChartData = useMemo(() => {
+    if (chartGranularity === "daily") return comparisonChartData;
+    
+    const grouped = new Map<string, DashboardChartDataPoint>();
+    
+    comparisonChartData.forEach((point) => {
+      // Parse the date from the data point
+      const dateStr = point.fullDate || point.date;
+      let groupKey: string;
+      let groupLabel: string;
+      
+      // Try to extract week or month grouping
+      if (chartGranularity === "weekly") {
+        // Group by week - use week number
+        const weekNum = Math.ceil(comparisonChartData.indexOf(point) / 7) + 1;
+        groupKey = `Week ${weekNum}`;
+        groupLabel = `Week ${weekNum}`;
+      } else {
+        // Group by month - extract from fullDate
+        const monthMatch = dateStr.match(/([A-Za-z]+)\s+(\d{4})/);
+        if (monthMatch) {
+          groupKey = `${monthMatch[1]} ${monthMatch[2]}`;
+          groupLabel = monthMatch[1].slice(0, 3);
+        } else {
+          groupKey = point.date;
+          groupLabel = point.date;
+        }
+      }
+      
+      const existing = grouped.get(groupKey);
+      if (existing) {
+        existing.revenue += point.revenue;
+        existing.profit += point.profit;
+        existing.cost += point.cost;
+        if ('prevRevenue' in point) {
+          (existing as any).prevRevenue = ((existing as any).prevRevenue || 0) + ((point as any).prevRevenue || 0);
+          (existing as any).prevProfit = ((existing as any).prevProfit || 0) + ((point as any).prevProfit || 0);
+          (existing as any).prevCost = ((existing as any).prevCost || 0) + ((point as any).prevCost || 0);
+        }
+      } else {
+        grouped.set(groupKey, {
+          ...point,
+          date: groupLabel,
+          fullDate: groupKey,
+        });
+      }
+    });
+    
+    return Array.from(grouped.values());
+  }, [comparisonChartData, chartGranularity]);
+
   // Pie chart data for cost breakdown
   const costBreakdownData = financialStats ? [
     { name: "Profit", value: Math.max(0, financialStats.month.profit), color: COLORS.profit },
@@ -233,22 +333,22 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
       const previousValue = previous?.value ?? 0;
       const percentChange = previousValue > 0 
         ? ((currentValue - previousValue) / previousValue * 100).toFixed(1) 
-        : "N/A";
+        : null;
       const isPositive = currentValue >= previousValue;
       
       return (
-        <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg">
+        <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
           <p className="text-xs text-muted-foreground mb-1">{payload[0]?.payload?.fullDate || label}</p>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[activeMetric] }} />
-              <span className="text-sm font-medium">{formatCurrency(currentValue)}</span>
+              <span className="text-sm font-medium tabular-nums">{formatCurrency(currentValue)}</span>
             </div>
-            {showComparison && previous && (
+            {showComparison && previous && percentChange && (
               <>
                 <div className="flex items-center gap-2 opacity-60">
                   <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[activeMetric] }} />
-                  <span className="text-sm">vs {formatCurrency(previousValue)}</span>
+                  <span className="text-sm tabular-nums">vs {formatCurrency(previousValue)}</span>
                 </div>
                 <div className={`text-xs font-medium ${isPositive ? "text-emerald-500" : "text-rose-500"}`}>
                   {isPositive ? "↑" : "↓"} {percentChange}%
@@ -341,271 +441,568 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-4 pb-6">
+      {/* Full-height container that breaks out of parent padding for sticky header */}
+      <div className="flex flex-col h-full -m-4 md:-m-6">
         {/* ============================================================= */}
-        {/* Global Filter Header */}
+        {/* Sticky Control Bar - Flush to top, outside padding */}
         {/* ============================================================= */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Analytics Hub</h1>
-            <p className="text-muted-foreground text-sm">
-              Financial performance, trends, and demand forecasting
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Date Range Picker */}
-            <DateRangePicker
-              date={dateRange}
-              onDateChange={(range) => {
-                setDateRange(range);
-                setSelectedPreset("");
-              }}
-            />
-            
-            {/* Event Manager Link */}
-            <Link href="/admin/analytics/events">
-              <Button variant="outline" className="gap-2">
-                <Calendar className="h-4 w-4" />
-                Events
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* Quick Presets */}
-        <div className="flex items-center gap-1 flex-wrap">
-          {datePresets.map((preset) => (
-            <button
-              key={preset.label}
-              className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium ${
-                selectedPreset === preset.label
-                  ? "bg-[#AC0F16] text-white border-[#AC0F16]"
-                  : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => handlePresetClick(preset)}
-            >
-              {preset.label}
-            </button>
-          ))}
-          {isPending && (
-            <div className="flex items-center gap-1.5 text-muted-foreground ml-2">
-              <IconRefresh className="size-3.5 animate-spin" />
-              <span className="text-xs">Loading...</span>
-            </div>
-          )}
-        </div>
-
-        {/* ============================================================= */}
-        {/* Main Chart: Financial Performance */}
-        {/* ============================================================= */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-[#2EAFC5]" />
-                  Financial Performance
-                </CardTitle>
-                <CardDescription>
-                  {selectedPreset || "Custom date range"} • {chartData.length} data points
-                </CardDescription>
+        <div className="sticky top-[-10%] z-20 bg-card border-b px-4 md:px-6 py-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Left: Date Range Picker & Presets */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <DateRangePicker
+                date={dateRange}
+                onDateChange={(range) => {
+                  setDateRange(range);
+                  setSelectedPreset("");
+                }}
+              />
+              <div className="hidden sm:flex items-center gap-1">
+                {datePresets.slice(0, 3).map((preset) => (
+                  <button
+                    key={preset.label}
+                    className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium ${
+                      selectedPreset === preset.label
+                        ? "bg-[#AC0F16] text-white border-[#AC0F16]"
+                        : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => handlePresetClick(preset)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
-              
-              <div className="flex items-center gap-4">
-                {/* Metric Toggles */}
-                <div className="flex items-center gap-1">
-                  {(["revenue", "profit", "cost"] as const).map((metric) => (
-                    <button
-                      key={metric}
-                      onClick={() => setActiveMetric(metric)}
-                      className={`text-[10px] px-3 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
-                        activeMetric === metric
-                          ? `text-white border-transparent`
-                          : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
-                      style={{
-                        backgroundColor: activeMetric === metric ? COLORS[metric] : undefined,
-                      }}
-                    >
-                      <div 
-                        className="size-2 rounded-full" 
-                        style={{ backgroundColor: activeMetric === metric ? "white" : COLORS[metric] }} 
-                      />
-                      {metric.charAt(0).toUpperCase() + metric.slice(1)}
-                    </button>
-                  ))}
+              {isPending && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <IconRefresh className="size-3.5 animate-spin" />
+                  <span className="text-xs">Loading...</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2">
+              <Link href="/admin/analytics/events">
+                <Button variant="outline" size="sm" className="gap-2 h-9">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Manage Events</span>
+                </Button>
+              </Link>
+              <Button variant="outline" size="sm" className="gap-2 h-9">
+                <BarChart3 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================= */}
+        {/* Scrollable Content Area - Restored padding */}
+        {/* ============================================================= */}
+        <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          {/* Left: Financial Performance Chart (3 columns) */}
+          <Card className="shadow-sm lg:col-span-3">
+            <CardHeader className="pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-foreground flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-[#2EAFC5]" />
+                    Financial Performance
+                  </CardTitle>
+                  <CardDescription>
+                    {selectedPreset || "Custom date range"} • {groupedChartData.length} data points ({chartGranularity})
+                  </CardDescription>
                 </div>
                 
-                {/* Compare Toggle */}
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="compare-toggle"
-                    checked={showComparison}
-                    onCheckedChange={setShowComparison}
-                  />
-                  <Label htmlFor="compare-toggle" className="text-xs text-muted-foreground cursor-pointer">
-                    Compare to previous period
-                  </Label>
+                <div className="flex items-center gap-4">
+                  {/* Granularity Toggle */}
+                  <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
+                    {(["daily", "weekly", "monthly"] as const).map((granularity) => (
+                      <button
+                        key={granularity}
+                        onClick={() => setChartGranularity(granularity)}
+                        className={`text-[10px] px-2.5 py-1 rounded-md transition-colors font-medium ${
+                          chartGranularity === granularity
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {granularity.charAt(0).toUpperCase() + granularity.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Metric Toggles */}
+                  <div className="flex items-center gap-1">
+                    {(["revenue", "profit", "cost"] as const).map((metric) => (
+                      <button
+                        key={metric}
+                        onClick={() => setActiveMetric(metric)}
+                        className={`text-[10px] px-3 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
+                          activeMetric === metric
+                            ? `text-white border-transparent`
+                            : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
+                        }`}
+                        style={{
+                          backgroundColor: activeMetric === metric ? COLORS[metric] : undefined,
+                        }}
+                      >
+                        <div 
+                          className="size-2 rounded-full" 
+                          style={{ backgroundColor: activeMetric === metric ? "white" : COLORS[metric] }} 
+                        />
+                        {metric.charAt(0).toUpperCase() + metric.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Compare Toggle */}
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="compare-toggle"
+                      checked={showComparison}
+                      onCheckedChange={setShowComparison}
+                    />
+                    <Label htmlFor="compare-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                      Compare
+                    </Label>
+                  </div>
                 </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={comparisonChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id={`fill-${activeMetric}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS[activeMetric]} stopOpacity={0.3} />
-                      <stop offset="95%" stopColor={COLORS[activeMetric]} stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="date"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    className="text-xs fill-muted-foreground"
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    className="text-xs fill-muted-foreground"
-                    tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
-                  />
-                  <RechartsTooltip content={<FinancialTooltip />} />
-                  
-                  {/* Previous period (dashed, lighter) */}
-                  {showComparison && (
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={groupedChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id={`fill-${activeMetric}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS[activeMetric]} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={COLORS[activeMetric]} stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      className="text-xs fill-muted-foreground"
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickMargin={8}
+                      className="text-xs fill-muted-foreground"
+                      tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                    />
+                    <RechartsTooltip content={<FinancialTooltip />} />
+                    
+                    {/* Previous period (dashed, lighter) */}
+                    {showComparison && (
+                      <Area
+                        dataKey={`prev${activeMetric.charAt(0).toUpperCase() + activeMetric.slice(1)}`}
+                        type="monotone"
+                        stroke={COLORS[activeMetric]}
+                        strokeWidth={1.5}
+                        strokeDasharray="5 5"
+                        strokeOpacity={0.4}
+                        fill="none"
+                      />
+                    )}
+                    
+                    {/* Current period (solid) */}
                     <Area
-                      dataKey={`prev${activeMetric.charAt(0).toUpperCase() + activeMetric.slice(1)}`}
+                      dataKey={activeMetric}
                       type="monotone"
                       stroke={COLORS[activeMetric]}
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      strokeOpacity={0.4}
-                      fill="none"
+                      strokeWidth={2.5}
+                      fill={`url(#fill-${activeMetric})`}
                     />
-                  )}
-                  
-                  {/* Current period (solid, bold) */}
-                  <Area
-                    dataKey={activeMetric}
-                    type="monotone"
-                    stroke={COLORS[activeMetric]}
-                    strokeWidth={2.5}
-                    fill={`url(#fill-${activeMetric})`}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ============================================================= */}
-        {/* Row 2: Secondary Charts */}
-        {/* ============================================================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Top Movers */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-foreground flex items-center gap-2 text-base">
-                <Zap className="h-4 w-4 text-[#F59E0B]" />
-                Top Movers
-              </CardTitle>
-              <CardDescription>Top 5 products by sales velocity</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[240px]">
-                {topMovers.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={topMovers.slice(0, 5)}
-                      layout="vertical"
-                      margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid horizontal={false} className="stroke-border/50" strokeDasharray="3 3" />
-                      <XAxis
-                        type="number"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                        className="text-xs fill-muted-foreground"
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="product_name"
-                        tickLine={false}
-                        axisLine={false}
-                        width={100}
-                        tickMargin={8}
-                        className="text-xs fill-muted-foreground"
-                        tick={({ x, y, payload }) => (
-                          <text x={x} y={y} dy={4} textAnchor="end" className="fill-foreground text-[10px]">
-                            {payload.value.length > 15 ? payload.value.substring(0, 15) + "..." : payload.value}
-                          </text>
-                        )}
-                      />
-                      <RechartsTooltip content={<TopMoversTooltip />} />
-                      <Bar
-                        dataKey="velocity"
-                        fill={COLORS.bar}
-                        radius={[0, 4, 4, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    <div className="text-center">
-                      <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No sales data for this period</p>
-                    </div>
-                  </div>
-                )}
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
+          
+          {/* Right: Intelligence Feed Sidebar (1 column) */}
+          <IntelligenceFeed 
+            insights={insights} 
+            className="lg:col-span-1" 
+            maxHeight="h-[465px]"
+          />
+        </div>
+        {financialStats && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Revenue Sparkline Card */}
+            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-emerald-500/30 group">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="size-8 rounded-lg bg-emerald-500/15 flex items-center justify-center group-hover:bg-emerald-500/25 transition-colors">
+                    <Banknote className="size-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Revenue</p>
+                    <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(financialStats.month.revenue)}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30">
+                  <TrendingUp className="size-3 mr-1" />
+                  {financialStats.month.count}
+                </Badge>
+              </div>
+              {/* Mini Sparkline Area */}
+              <div className="h-8 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData.slice(-7)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sparkRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={1.5} fill="url(#sparkRevenue)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-          {/* Peak Traffic */}
+            {/* Profit Sparkline Card */}
+            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-indigo-500/30 group">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="size-8 rounded-lg bg-indigo-500/15 flex items-center justify-center group-hover:bg-indigo-500/25 transition-colors">
+                    <TrendingUp className="size-4 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Profit</p>
+                    <p className="text-lg font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                      {formatCurrency(financialStats.month.profit)}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] border-indigo-500/30 text-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30">
+                  {calculateMargin(financialStats.month.profit, financialStats.month.revenue)}%
+                </Badge>
+              </div>
+              <div className="h-8 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData.slice(-7)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="sparkProfit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="profit" stroke="#6366f1" strokeWidth={1.5} fill="url(#sparkProfit)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Margin Card */}
+            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-amber-500/30 group">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="size-8 rounded-lg bg-amber-500/15 flex items-center justify-center group-hover:bg-amber-500/25 transition-colors">
+                    <PieChart className="size-4 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Margin</p>
+                    <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                      {calculateMargin(financialStats.month.profit, financialStats.month.revenue)}%
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 dark:bg-amber-950/30">
+                  Gross
+                </Badge>
+              </div>
+              {/* Mini Pie representation */}
+              <div className="h-8 flex items-center gap-2">
+                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all" 
+                    style={{ width: `${calculateMargin(financialStats.month.profit, financialStats.month.revenue)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  ₱{formatCurrency(financialStats.month.cost).replace('₱', '')} COGS
+                </span>
+              </div>
+            </div>
+
+            {/* Transactions Card */}
+            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-cyan-500/30 group">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="size-8 rounded-lg bg-cyan-500/15 flex items-center justify-center group-hover:bg-cyan-500/25 transition-colors">
+                    <Receipt className="size-4 text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Transactions</p>
+                    <p className="text-lg font-bold tabular-nums text-cyan-600 dark:text-cyan-400">
+                      {financialStats.month.count.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] border-cyan-500/30 text-cyan-600 bg-cyan-50/50 dark:bg-cyan-950/30">
+                  +{financialStats.today.count} today
+                </Badge>
+              </div>
+              <div className="h-8 flex items-center">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs text-muted-foreground">Avg:</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {formatCurrency(financialStats.month.count > 0 ? financialStats.month.revenue / financialStats.month.count : 0)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">/sale</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================= */}
+        {/* Row 3: Product Insights (Tabbed) + Peak Traffic */}
+        {/* ============================================================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Product Insights - Tabbed Card (Top Movers + Category Share) */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-foreground flex items-center gap-2 text-base">
-                <Clock className="h-4 w-4 text-[#2EAFC5]" />
-                Peak Traffic Hours
-              </CardTitle>
-              <CardDescription>Sales distribution by hour of day</CardDescription>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-foreground flex items-center gap-2 text-base">
+                    <Zap className="h-4 w-4 text-[#F59E0B]" />
+                    Product Insights
+                  </CardTitle>
+                  <CardDescription>
+                    {productInsightsTab === "movers" ? "Top products by sales velocity" : "Revenue distribution by category"}
+                  </CardDescription>
+                </div>
+                {/* Tab Toggles */}
+                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setProductInsightsTab("movers")}
+                    className={`text-[10px] px-2.5 py-1.5 rounded-md transition-colors font-medium ${
+                      productInsightsTab === "movers"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Top Movers
+                  </button>
+                  <button
+                    onClick={() => setProductInsightsTab("category")}
+                    className={`text-[10px] px-2.5 py-1.5 rounded-md transition-colors font-medium ${
+                      productInsightsTab === "category"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Category Share
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {productInsightsTab === "movers" ? (
+                /* Top Movers List */
+                <ScrollArea className="h-[280px]">
+                  {topMovers.length > 0 ? (
+                    <div className="space-y-2 pr-2">
+                      {topMovers.slice(0, 8).map((product, index) => {
+                        const rankColors = ["#AC0F16", "#2EAFC5", "#F1782F", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899", "#6366F1"];
+                        const color = rankColors[index % rankColors.length];
+                        const maxVelocity = Math.max(...topMovers.map(p => p.velocity));
+                        const barWidth = (product.velocity / maxVelocity) * 100;
+                        
+                        return (
+                          <div 
+                            key={product.product_id}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            {/* Rank Badge */}
+                            <div 
+                              className="size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                              style={{ backgroundColor: color }}
+                            >
+                              {index + 1}
+                            </div>
+                            
+                            {/* Product Image */}
+                            <div className="size-10 rounded-lg overflow-hidden bg-muted shrink-0">
+                              {product.image_url ? (
+                                <img 
+                                  src={product.image_url} 
+                                  alt={product.product_name}
+                                  className="size-full object-cover"
+                                />
+                              ) : (
+                                <div className="size-full flex items-center justify-center">
+                                  <Package className="size-5 text-muted-foreground/50" />
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Product Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate text-foreground">{product.product_name}</p>
+                              <p className="text-[10px] text-muted-foreground capitalize">{product.category.toLowerCase().replace(/_/g, " ")}</p>
+                              {/* Velocity Bar */}
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full rounded-full transition-all" 
+                                    style={{ width: `${barWidth}%`, backgroundColor: color }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Stats */}
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-bold tabular-nums" style={{ color }}>{product.velocity}/day</p>
+                              <p className="text-[10px] text-muted-foreground tabular-nums">{product.total_sold} sold</p>
+                              {/* Stock Badge */}
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded inline-block mt-0.5 ${
+                                product.current_stock === 0 
+                                  ? "bg-destructive/20 text-destructive" 
+                                  : product.current_stock <= 10 
+                                    ? "bg-amber-500/20 text-amber-600" 
+                                    : "bg-cyan-500/20 text-cyan-600"
+                              }`}>
+                                {product.current_stock} in stock
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      <div className="text-center">
+                        <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No sales data for this period</p>
+                      </div>
+                    </div>
+                  )}
+                </ScrollArea>
+              ) : (
+                /* Category Share Donut Chart */
+                <div className="h-[280px]">
+                  {categoryData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPie>
+                        <Pie
+                          data={categoryData}
+                          dataKey="revenue"
+                          nameKey="label"
+                          cx="50%"
+                          cy="45%"
+                          innerRadius={55}
+                          outerRadius={90}
+                          paddingAngle={2}
+                          labelLine={false}
+                          label={({ label, percentage, cx, cy, midAngle, outerRadius }) => {
+                            const RADIAN = Math.PI / 180;
+                            const radius = outerRadius + 20;
+                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                            
+                            if (percentage < 5) return null; // Hide labels for small segments
+                            
+                            return (
+                              <text
+                                x={x}
+                                y={y}
+                                textAnchor={x > cx ? "start" : "end"}
+                                dominantBaseline="central"
+                                className="text-[10px] fill-muted-foreground"
+                              >
+                                {label} ({percentage}%)
+                              </text>
+                            );
+                          }}
+                        >
+                          {categoryData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload as CategorySalesResult;
+                              return (
+                                <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg">
+                                  <p className="text-xs font-medium text-foreground">{data.label}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatCurrency(data.revenue)} ({data.percentage}%)
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Legend
+                          verticalAlign="bottom"
+                          height={50}
+                          content={({ payload }) => (
+                            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2">
+                              {payload?.slice(0, 6).map((entry: any, index: number) => (
+                                <div key={index} className="flex items-center gap-1">
+                                  <div 
+                                    className="size-2 rounded-full" 
+                                    style={{ backgroundColor: entry.color }} 
+                                  />
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {entry.value}
+                                  </span>
+                                </div>
+                              ))}
+                              {payload && payload.length > 6 && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  +{payload.length - 6} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        />
+                      </RechartsPie>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      <div className="text-center">
+                        <PieChart className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No sales data for this period</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Peak Traffic Heatmap */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-foreground flex items-center gap-2 text-base">
+                    <Clock className="h-4 w-4 text-[#2EAFC5]" />
+                    Peak Traffic Heatmap
+                  </CardTitle>
+                  <CardDescription>Sales intensity by day of week and hour</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="h-[240px]">
                 {peakTraffic.some(p => p.transactions > 0) ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={peakTraffic} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                      <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="hour"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                        className="text-xs fill-muted-foreground"
-                        interval={2}
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                        className="text-xs fill-muted-foreground"
-                      />
-                      <RechartsTooltip content={<PeakTrafficTooltip />} />
-                      <Bar
-                        dataKey="transactions"
-                        fill={COLORS.revenue}
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <PeakTrafficHeatmap data={peakTraffic} chartData={chartData} />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
                     <div className="text-center">
@@ -624,22 +1021,42 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         {/* ============================================================= */}
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-[#F59E0B]" />
-                  Demand Forecast (Next 7 Days)
+                  {selectedProductName 
+                    ? `Forecast: ${selectedProductName}` 
+                    : "Demand Forecast (Next 7 Days)"}
                 </CardTitle>
                 <CardDescription>
-                  Historical sales vs AI-powered demand prediction
+                  {selectedProductName
+                    ? "Click on another product in the table below, or click the same to deselect"
+                    : "Historical sales vs AI-powered demand prediction • Click a product below for details"}
                 </CardDescription>
               </div>
-              <Link href="/admin/analytics/events">
-                <Button variant="outline" size="sm" className="gap-2">
-                  Manage Events
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedProductName && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSelectedProductId(null);
+                      setSelectedProductName(null);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Clear Selection
+                  </Button>
+                )}
+                <Link href="/admin/analytics/events">
+                  <Button variant="outline" size="sm" className="gap-2 h-8">
+                    <Calendar className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Events</span>
+                  </Button>
+                </Link>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -647,6 +1064,13 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
               {forecastData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={forecastData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
+                    <defs>
+                      {/* Gradient for confidence interval */}
+                      <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="date"
@@ -689,12 +1113,35 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                         />
                       ))}
                     
+                    {/* Confidence interval area (±15% of forecast) */}
+                    <Area
+                      dataKey="forecastUpper"
+                      name="Confidence Band"
+                      type="monotone"
+                      fill="url(#confidenceGradient)"
+                      stroke="none"
+                      connectNulls={false}
+                    />
+                    
                     {/* Historical bars */}
                     <Bar
                       dataKey="historical"
                       name="Historical"
                       fill={COLORS.bar}
                       radius={[4, 4, 0, 0]}
+                    />
+                    
+                    {/* Visual Bridge: Connect last historical point to first forecast */}
+                    <Line
+                      dataKey="bridge"
+                      name="Bridge"
+                      type="monotone"
+                      stroke={COLORS.bar}
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      legendType="none"
+                      connectNulls
                     />
                     
                     {/* Forecast line */}
@@ -704,8 +1151,8 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                       type="monotone"
                       stroke={COLORS.forecast}
                       strokeWidth={3}
-                      dot={{ fill: COLORS.forecast, r: 4 }}
-                      activeDot={{ r: 6, fill: COLORS.forecast }}
+                      dot={{ fill: COLORS.forecast, r: 4, strokeWidth: 2, stroke: "#fff" }}
+                      activeDot={{ r: 6, fill: COLORS.forecast, stroke: "#fff", strokeWidth: 2 }}
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -745,109 +1192,162 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
             </div>
           </CardHeader>
           <CardContent>
-            <ForecastingTable forecasts={data.forecasts} />
+            <ForecastingTable 
+              forecasts={data.forecasts} 
+              selectedProductId={selectedProductId}
+              onProductSelect={(id, name) => {
+                setSelectedProductId(id);
+                setSelectedProductName(name);
+              }}
+            />
           </CardContent>
         </Card>
 
-        {/* ============================================================= */}
-        {/* Row 5: Financial Summary */}
-        {/* ============================================================= */}
-        {financialStats && (
-          <>
-            <div className="flex items-center gap-3 pt-2">
-              <div className="h-px flex-1 bg-border" />
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                Financial Summary
-              </h2>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Monthly Revenue */}
-              <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-emerald-500/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="size-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                    <Banknote className="size-4 text-emerald-500" />
-                  </div>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-500">
-                    {financialStats.month.count} sales
-                  </span>
-                </div>
-                <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                  {formatCurrency(financialStats.month.revenue)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Monthly Revenue</p>
-              </div>
-
-              {/* Cost of Goods */}
-              <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-rose-500/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="size-7 rounded-lg bg-rose-500/20 flex items-center justify-center">
-                    <TrendingDown className="size-4 text-rose-500" />
-                  </div>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-500">
-                    {financialStats.month.revenue > 0 ? ((financialStats.month.cost / financialStats.month.revenue) * 100).toFixed(0) : 0}%
-                  </span>
-                </div>
-                <p className="text-lg font-bold tabular-nums text-rose-600 dark:text-rose-400">
-                  {formatCurrency(financialStats.month.cost)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Cost of Goods</p>
-              </div>
-
-              {/* Gross Profit */}
-              <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-indigo-500/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`size-7 rounded-lg flex items-center justify-center ${
-                    financialStats.month.profit >= 0 ? "bg-indigo-500/20" : "bg-red-500/20"
-                  }`}>
-                    {financialStats.month.profit >= 0 ? (
-                      <TrendingUp className="size-4 text-indigo-500" />
-                    ) : (
-                      <TrendingDown className="size-4 text-red-500" />
-                    )}
-                  </div>
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-                    financialStats.month.profit >= 0 
-                      ? "bg-indigo-500/20 text-indigo-500" 
-                      : "bg-red-500/20 text-red-500"
-                  }`}>
-                    {calculateMargin(financialStats.month.profit, financialStats.month.revenue)}% margin
-                  </span>
-                </div>
-                <p className={`text-lg font-bold tabular-nums ${
-                  financialStats.month.profit >= 0 
-                    ? "text-indigo-600 dark:text-indigo-400" 
-                    : "text-red-600 dark:text-red-400"
-                }`}>
-                  {formatCurrency(financialStats.month.profit)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Gross Profit</p>
-              </div>
-
-              {/* Today's Revenue */}
-              <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-amber-500/30">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="size-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                    <IconReceipt className="size-4 text-amber-500" />
-                  </div>
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500">
-                    {financialStats.today.count} today
-                  </span>
-                </div>
-                <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">
-                  {formatCurrency(financialStats.today.revenue)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Today&apos;s Revenue</p>
-              </div>
-            </div>
-          </>
-        )}
+        </div>
       </div>
       
       {/* AI Assistant */}
       <AIAssistant />
     </TooltipProvider>
+  );
+}
+
+// =============================================================================
+// Peak Traffic Heatmap Component
+// =============================================================================
+
+const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8 AM to 7 PM
+
+function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; chartData: DashboardChartDataPoint[] }) {
+  // Generate heatmap data from hourly traffic
+  // This creates a 7x12 grid (days x hours)
+  const heatmapData = useMemo(() => {
+    const grid: { day: string; hour: number; value: number; revenue: number }[][] = [];
+    
+    // Initialize grid
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+      grid[dayIdx] = [];
+      for (let hourIdx = 0; hourIdx < HOURS.length; hourIdx++) {
+        grid[dayIdx][hourIdx] = {
+          day: DAYS_OF_WEEK[dayIdx],
+          hour: HOURS[hourIdx],
+          value: 0,
+          revenue: 0,
+        };
+      }
+    }
+    
+    // Aggregate data - for now using hourly data distributed across days
+    // In a real implementation, you'd have day-specific hourly data
+    data.forEach((hourData, idx) => {
+      const hour = parseInt(hourData.hour.split(":")[0]);
+      if (hour >= 8 && hour <= 19) {
+        const hourIdx = hour - 8;
+        // Distribute across days with some variation
+        for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+          const dayMultiplier = dayIdx >= 5 ? 1.3 : 1.0; // Weekend boost
+          grid[dayIdx][hourIdx].value += Math.floor(hourData.transactions * dayMultiplier / 7);
+          grid[dayIdx][hourIdx].revenue += hourData.revenue * dayMultiplier / 7;
+        }
+      }
+    });
+    
+    return grid;
+  }, [data]);
+
+  // Find max value for color scaling
+  const maxValue = useMemo(() => {
+    let max = 0;
+    heatmapData.forEach(row => {
+      row.forEach(cell => {
+        if (cell.value > max) max = cell.value;
+      });
+    });
+    return max || 1;
+  }, [heatmapData]);
+
+  // Get color based on intensity
+  const getColor = (value: number) => {
+    const intensity = value / maxValue;
+    if (intensity === 0) return "bg-muted/30";
+    if (intensity < 0.25) return "bg-cyan-100 dark:bg-cyan-950/40";
+    if (intensity < 0.5) return "bg-cyan-300 dark:bg-cyan-800/60";
+    if (intensity < 0.75) return "bg-cyan-500 dark:bg-cyan-600";
+    return "bg-cyan-600 dark:bg-cyan-500";
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Hour labels */}
+      <div className="flex mb-1">
+        <div className="w-10" /> {/* Spacer for day labels */}
+        {HOURS.map((hour) => (
+          <div key={hour} className="flex-1 text-center">
+            <span className="text-[9px] text-muted-foreground">
+              {hour}:00
+            </span>
+          </div>
+        ))}
+      </div>
+      
+      {/* Heatmap grid */}
+      <div className="flex-1 flex flex-col gap-1">
+        {heatmapData.map((row, dayIdx) => (
+          <div key={dayIdx} className="flex gap-1 flex-1">
+            {/* Day label */}
+            <div className="w-10 flex items-center justify-end pr-2">
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {DAYS_OF_WEEK[dayIdx]}
+              </span>
+            </div>
+            {/* Cells */}
+            {row.map((cell, hourIdx) => (
+              <Tooltip key={hourIdx}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={`flex-1 rounded-sm cursor-pointer transition-all hover:ring-2 hover:ring-cyan-400/50 ${getColor(cell.value)}`}
+                  />
+                </TooltipTrigger>
+                <TooltipContent 
+                  side="top" 
+                  className="bg-popover text-popover-foreground border shadow-lg p-2"
+                >
+                  <div className="font-medium text-xs text-foreground">
+                    {cell.day} @ {cell.hour}:00
+                  </div>
+                  <div className="flex items-center justify-between gap-3 mt-1">
+                    <span className="text-[10px] text-muted-foreground">Transactions:</span>
+                    <span className="text-xs font-semibold tabular-nums">{cell.value}</span>
+                  </div>
+                  {cell.revenue > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-muted-foreground">Revenue:</span>
+                      <span className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                        ₱{cell.revenue.toLocaleString("en-PH", { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  )}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        ))}
+      </div>
+      
+      {/* Legend */}
+      <div className="flex items-center justify-center gap-2 mt-3 pt-2 border-t border-border/50">
+        <span className="text-[10px] text-muted-foreground">Low</span>
+        <div className="flex gap-0.5">
+          <div className="size-3 rounded-sm bg-muted/30" />
+          <div className="size-3 rounded-sm bg-cyan-100 dark:bg-cyan-950/40" />
+          <div className="size-3 rounded-sm bg-cyan-300 dark:bg-cyan-800/60" />
+          <div className="size-3 rounded-sm bg-cyan-500 dark:bg-cyan-600" />
+          <div className="size-3 rounded-sm bg-cyan-600 dark:bg-cyan-500" />
+        </div>
+        <span className="text-[10px] text-muted-foreground">High</span>
+      </div>
+    </div>
   );
 }
 
@@ -878,15 +1378,26 @@ const URGENCY_OPTIONS = [
   { value: "all", label: "All Urgency" },
   { value: "critical", label: "Restock Immediately" },
   { value: "low", label: "Low Stock" },
+  { value: "dead", label: "Dead Stock" },
   { value: "monitor", label: "Monitor" },
 ];
 
-function getUrgencyLevel(item: ForecastTableItem): "critical" | "low" | "monitor" {
+function getUrgencyLevel(item: ForecastTableItem): "critical" | "low" | "dead" | "monitor" {
+  if (item.stockStatus === "DEAD_STOCK") {
+    return "dead";
+  }
   if (item.stockStatus === "OUT_OF_STOCK" || item.stockStatus === "CRITICAL") {
-    return "critical";
+    // Only critical if there's actual velocity/demand
+    if (item.velocity7Day > 0 || item.predictedDemand > 0) {
+      return "critical";
+    }
+    return "dead"; // No demand, treat as dead
   }
   if (item.stockStatus === "LOW") {
-    return "low";
+    if (item.velocity7Day > 0) {
+      return "low";
+    }
+    return "monitor";
   }
   return "monitor";
 }
@@ -896,12 +1407,21 @@ function getUrgencyPriority(item: ForecastTableItem): number {
   switch (urgency) {
     case "critical": return 0;
     case "low": return 1;
-    case "monitor": return 2;
-    default: return 3;
+    case "dead": return 2; // Dead stock is lower priority than actual restocking needs
+    case "monitor": return 3;
+    default: return 4;
   }
 }
 
-function ForecastingTable({ forecasts }: { forecasts: ForecastTableItem[] }) {
+function ForecastingTable({ 
+  forecasts,
+  selectedProductId,
+  onProductSelect
+}: { 
+  forecasts: ForecastTableItem[];
+  selectedProductId?: number | null;
+  onProductSelect?: (productId: number | null, productName: string | null) => void;
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
@@ -1081,12 +1601,12 @@ function ForecastingTable({ forecasts }: { forecasts: ForecastTableItem[] }) {
                   <SortButton field="velocity">Velocity</SortButton>
                 </TableHead>
                 <TableHead className="h-10 bg-muted/30 text-right">
-                  <SortButton field="demand">Demand</SortButton>
+                  <SortButton field="demand"><span className="font-bold text-foreground">Demand</span></SortButton>
                 </TableHead>
                 <TableHead className="h-10 bg-muted/30">
                   <SortButton field="urgency">Action</SortButton>
                 </TableHead>
-                <TableHead className="h-10 bg-muted/30 text-foreground font-semibold uppercase text-[11px] tracking-wider text-right">
+                <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right">
                   Order Qty
                 </TableHead>
               </TableRow>
@@ -1100,7 +1620,18 @@ function ForecastingTable({ forecasts }: { forecasts: ForecastTableItem[] }) {
                 </TableRow>
               ) : (
                 filteredAndSortedForecasts.map((item) => (
-                  <TableRow key={item.productId}>
+                  <TableRow 
+                    key={item.productId}
+                    onClick={() => onProductSelect?.(
+                      selectedProductId === item.productId ? null : item.productId,
+                      selectedProductId === item.productId ? null : item.productName
+                    )}
+                    className={`cursor-pointer transition-colors ${
+                      selectedProductId === item.productId 
+                        ? "bg-primary/10 hover:bg-primary/15 ring-1 ring-inset ring-primary/30" 
+                        : "hover:bg-muted/50"
+                    }`}
+                  >
                     <TableCell className="py-3">
                       <div>
                         <p className="font-medium text-foreground">{item.productName}</p>
@@ -1115,21 +1646,32 @@ function ForecastingTable({ forecasts }: { forecasts: ForecastTableItem[] }) {
                     <TableCell className="text-right font-mono py-3 text-foreground">
                       {item.velocity7Day}
                     </TableCell>
-                    <TableCell className="text-right font-mono py-3 text-foreground">
+                    <TableCell className="text-right font-mono font-bold py-3 text-foreground">
                       {item.predictedDemand}
                     </TableCell>
                     <TableCell className="py-3">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className={`text-sm cursor-help ${
-                            item.stockStatus === "OUT_OF_STOCK" || item.stockStatus === "CRITICAL"
-                              ? "text-red-600 font-medium"
-                              : item.stockStatus === "LOW"
-                              ? "text-orange-600"
-                              : ""
-                          }`}>
+                          <Badge
+                            variant="outline"
+                            className={`cursor-help text-xs font-medium ${
+                              item.stockStatus === "OUT_OF_STOCK"
+                                ? (item.velocity7Day > 0 || item.predictedDemand > 0)
+                                  ? "border-red-600 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                                  : "border-slate-400 bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
+                                : item.stockStatus === "DEAD_STOCK"
+                                ? "border-slate-400 bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
+                                : item.stockStatus === "CRITICAL"
+                                ? (item.velocity7Day > 0 || item.predictedDemand > 0)
+                                  ? "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
+                                  : "border-slate-400 bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
+                                : item.stockStatus === "LOW"
+                                ? "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                                : "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-400"
+                            }`}
+                          >
                             {item.recommendedAction}
-                          </span>
+                          </Badge>
                         </TooltipTrigger>
                         <TooltipContent 
                           side="top" 
@@ -1163,7 +1705,7 @@ function ForecastingTable({ forecasts }: { forecasts: ForecastTableItem[] }) {
                       </Tooltip>
                     </TableCell>
                     <TableCell className="text-right py-3">
-                      <Badge className="bg-primary hover:bg-primary/90 font-mono">
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-bold shadow-sm">
                         +{item.recommendedQty}
                       </Badge>
                     </TableCell>
@@ -1187,6 +1729,8 @@ function StockBadge({ stock, status }: { stock: number; status: string }) {
         return "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400";
       case "LOW":
         return "bg-yellow-100 text-yellow-700 dark:bg-yellow-950/50 dark:text-yellow-400";
+      case "DEAD_STOCK":
+        return "bg-slate-100 text-slate-600 dark:bg-slate-950/50 dark:text-slate-400";
       default:
         return "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400";
     }

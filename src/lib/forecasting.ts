@@ -63,7 +63,7 @@ export interface ForecastResult {
   currentStock: number;
   reorderLevel: number;
   daysOfStock: number;
-  stockStatus: "HEALTHY" | "LOW" | "CRITICAL" | "OUT_OF_STOCK";
+  stockStatus: "HEALTHY" | "LOW" | "CRITICAL" | "OUT_OF_STOCK" | "DEAD_STOCK";
 }
 
 export interface ActiveEvent {
@@ -227,17 +227,24 @@ function determineConfidence(
 
 /**
  * Calculate stock status and days remaining
+ * DEAD_STOCK: Items with 0 velocity that are sitting on shelves (not selling)
  */
 function calculateStockStatus(
   currentStock: number, 
   reorderLevel: number, 
   dailyVelocity: number
-): { status: "HEALTHY" | "LOW" | "CRITICAL" | "OUT_OF_STOCK"; daysOfStock: number } {
+): { status: "HEALTHY" | "LOW" | "CRITICAL" | "OUT_OF_STOCK" | "DEAD_STOCK"; daysOfStock: number } {
   if (currentStock <= 0) {
     return { status: "OUT_OF_STOCK", daysOfStock: 0 };
   }
   
   const daysOfStock = dailyVelocity > 0 ? Math.floor(currentStock / dailyVelocity) : 999;
+  
+  // CRITICAL FIX: If velocity is 0 (no one is buying), mark as DEAD_STOCK
+  // Don't recommend restocking dead stock - recommend discounting to clear it
+  if (dailyVelocity < 0.1 && currentStock > 0) {
+    return { status: "DEAD_STOCK", daysOfStock };
+  }
   
   if (currentStock <= reorderLevel * 0.5) {
     return { status: "CRITICAL", daysOfStock };
@@ -547,7 +554,19 @@ export async function getForecast(input: ForecastInput): Promise<ForecastResult>
   const currentStock = product.inventory?.current_stock ?? 0;
   
   const targetStock = (forecastedDailyUnits * targetDays) + reorderLevel;
-  const suggestedReorderQty = Math.max(0, targetStock - currentStock);
+  let suggestedReorderQty = Math.max(0, targetStock - currentStock);
+  
+  // CRITICAL FIX: Cap reorder quantity to realistic limits for a minimart
+  // Rule 1: Never exceed 14 days supply based on actual velocity
+  const maxByVelocity = Math.ceil(forecastedDailyUnits * 14);
+  // Rule 2: Hard cap at 200 units for any single product (minimart scale)
+  const HARD_CAP = 200;
+  // Rule 3: If velocity is 0, don't suggest reordering at all
+  if (forecastedDailyUnits < 0.1) {
+    suggestedReorderQty = 0;
+  } else {
+    suggestedReorderQty = Math.min(suggestedReorderQty, maxByVelocity, HARD_CAP);
+  }
   
   // Determine confidence level
   const hasYoYData = yoyData !== null;
@@ -638,14 +657,22 @@ export async function getReorderAlerts(
 ): Promise<ForecastResult[]> {
   const forecasts = await getAllProductForecasts(options);
   
+  // Only include items that actually need restocking (have velocity > 0)
+  // DEAD_STOCK items are excluded since they have no demand
   return forecasts.filter(f => 
-    f.stockStatus === "LOW" || 
+    (f.stockStatus === "LOW" || 
     f.stockStatus === "CRITICAL" || 
-    f.stockStatus === "OUT_OF_STOCK"
+    f.stockStatus === "OUT_OF_STOCK")
   ).sort((a, b) => {
     // Sort by urgency: OUT_OF_STOCK > CRITICAL > LOW
-    const priority = { OUT_OF_STOCK: 3, CRITICAL: 2, LOW: 1, HEALTHY: 0 };
-    return priority[b.stockStatus] - priority[a.stockStatus];
+    const priority: Record<string, number> = { 
+      OUT_OF_STOCK: 3, 
+      CRITICAL: 2, 
+      LOW: 1, 
+      HEALTHY: 0,
+      DEAD_STOCK: -1  // Lowest priority - should discount, not restock
+    };
+    return (priority[b.stockStatus] ?? 0) - (priority[a.stockStatus] ?? 0);
   });
 }
 

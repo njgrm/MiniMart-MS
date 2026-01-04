@@ -32,7 +32,7 @@ interface ReceiptTemplateProps {
 
 /**
  * ReceiptTemplate - Exact format for Christian Minimart thermal receipt
- * Uses monospace font, 80mm width for thermal printers
+ * Uses monospace font, 58mm width for thermal printers
  * 
  * VAT Calculation Rules:
  * - Total Due (Gross Sales): Sum of all items (Price x Qty) after discount
@@ -89,27 +89,30 @@ export const ReceiptTemplate = forwardRef<HTMLDivElement, ReceiptTemplateProps>(
         style={{
           width: "48mm",
           maxWidth: "48mm",
-          fontSize: "9pt",
+          fontSize: "14pt",
           lineHeight: "1.15",
           fontFamily: '"Lucida Console", Consolas, "Courier New", monospace',
           fontWeight: "normal",
           WebkitFontSmoothing: "none",
           padding: "0",
-          margin: "0",
+          margin: "0 auto",
           overflow: "hidden",
           wordWrap: "break-word",
         }}
       >
+        <style>{`
+        
+        `}</style>
         {/* Store Header - Exact Match */}
         <div className="text-center" style={{ marginBottom: "2mm" }}>
           <div className="flex justify-center mb-1">
             <img 
               src="/christian_minimart_logo.png" 
               alt="Logo" 
-              style={{ width: "40mm", height: "auto", filter: "grayscale(100%)" }} 
+              style={{ width: "58mm", height: "auto", filter: "grayscale(100%)" }} 
             />
           </div>
-          <p style={{ fontWeight: "bold", fontSize: "11pt" }}>CHRISTIAN MINIMART</p>
+          <p style={{ fontWeight: "bold", fontSize: "12pt" }}>CHRISTIAN MINIMART</p>
           <p className="item-name" style={{ fontSize: "8pt" }}>Cor. Fleurdeliz & Concordia Sts.</p>
           <p className="item-name" style={{ fontSize: "8pt" }}>Prk. Paghidaet Mansilingan Bacolod City</p>
           
