@@ -21,6 +21,12 @@ import {
   PieChart,
   Clock,
   Zap,
+  FileDown,
+  Flame,
+  CheckSquare,
+  Square,
+  Tag,
+  Snowflake,
 } from "lucide-react";
 import {
   IconTrendingUp,
@@ -95,13 +101,17 @@ import {
   getForecastData,
   getSmartInsights,
   getCategorySalesShare,
+  getDemandForecastData,
   type TopMoverResult,
   type HourlyTrafficResult,
   type ForecastDataPoint,
   type CategorySalesResult,
+  type DemandForecastDataPoint,
+  type ProductDemandInfo,
 } from "./actions";
 import type { AnalyticsData, ForecastTableItem, DashboardChartDataPoint } from "./actions";
 import Link from "next/link";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 
 // Chart colors - matching design system
@@ -166,8 +176,8 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
   const [forecastData, setForecastData] = useState<ForecastDataPoint[]>([]);
   const [insights, setInsights] = useState<Insight[]>([]);
   
-  // Tab state for Top Movers / Category Share
-  const [productInsightsTab, setProductInsightsTab] = useState<"movers" | "category">("movers");
+  // Tab state for Top Movers / Category Share / Dead Stock
+  const [productInsightsTab, setProductInsightsTab] = useState<"movers" | "category" | "deadstock">("movers");
   
   // Financial chart granularity state
   const [chartGranularity, setChartGranularity] = useState<ChartGranularity>("daily");
@@ -175,6 +185,11 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
   // Selected product for context-aware forecast
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [selectedProductName, setSelectedProductName] = useState<string | null>(null);
+  const [selectedProductInfo, setSelectedProductInfo] = useState<ProductDemandInfo | null>(null);
+  
+  // Demand forecast data (quantity-based)
+  const [demandForecastData, setDemandForecastData] = useState<DemandForecastDataPoint[]>([]);
+  const [totalStoreDemand, setTotalStoreDemand] = useState<number>(0);
   
   // Auto-set granularity based on date range
   useEffect(() => {
@@ -250,6 +265,49 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
     setDateRange(preset.getRange());
   };
 
+  // Fetch demand forecast when product selection changes
+  useEffect(() => {
+    startTransition(async () => {
+      const { data, product, totalStoreDemand } = await getDemandForecastData(selectedProductId);
+      setDemandForecastData(data);
+      setSelectedProductInfo(product);
+      setTotalStoreDemand(totalStoreDemand);
+    });
+  }, [selectedProductId]);
+
+  // Calculate reactive financial summary from chartData (Task 1)
+  const financialSummary = useMemo(() => {
+    const totalRevenue = chartData.reduce((sum, d) => sum + d.revenue, 0);
+    const totalCost = chartData.reduce((sum, d) => sum + d.cost, 0);
+    const totalProfit = chartData.reduce((sum, d) => sum + d.profit, 0);
+    const totalTransactions = chartData.length; // Approximate, each day = 1 data point
+    
+    return {
+      revenue: totalRevenue,
+      cost: totalCost,
+      profit: totalProfit,
+      count: totalTransactions,
+    };
+  }, [chartData]);
+
+  // Calculate previous period financial summary for comparison
+  const previousFinancialSummary = useMemo(() => {
+    const totalRevenue = previousChartData.reduce((sum, d) => sum + d.revenue, 0);
+    const totalCost = previousChartData.reduce((sum, d) => sum + d.cost, 0);
+    const totalProfit = previousChartData.reduce((sum, d) => sum + d.profit, 0);
+    
+    return { revenue: totalRevenue, cost: totalCost, profit: totalProfit };
+  }, [previousChartData]);
+
+  // Calculate comparison period label (Task 2)
+  const comparisonPeriodLabel = useMemo(() => {
+    if (!dateRange?.from || !dateRange?.to) return "";
+    const periodLength = dateRange.to.getTime() - dateRange.from.getTime();
+    const prevEnd = new Date(dateRange.from.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - periodLength);
+    return `${format(prevStart, "MMM d, yyyy")} - ${format(prevEnd, "MMM d, yyyy")}`;
+  }, [dateRange]);
+
   // Merge current and previous data for comparison chart
   const comparisonChartData = useMemo(() => {
     if (!showComparison) return chartData;
@@ -323,7 +381,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
     { name: "COGS", value: financialStats.month.cost, color: COLORS.cost },
   ] : [];
 
-  // Custom tooltip for financial chart
+  // Custom tooltip for financial chart (Task 2: Explicit comparison labels)
   const FinancialTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const current = payload.find((p: any) => p.dataKey === activeMetric);
@@ -342,17 +400,20 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[activeMetric] }} />
-              <span className="text-sm font-medium tabular-nums">{formatCurrency(currentValue)}</span>
+              <span className="text-sm font-medium tabular-nums">Current: {formatCurrency(currentValue)}</span>
             </div>
-            {showComparison && previous && percentChange && (
+            {showComparison && previous && (
               <>
-                <div className="flex items-center gap-2 opacity-60">
+                <div className="flex items-center gap-2 opacity-70">
                   <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[activeMetric] }} />
-                  <span className="text-sm tabular-nums">vs {formatCurrency(previousValue)}</span>
+                  <span className="text-sm tabular-nums">Previous: {formatCurrency(previousValue)}</span>
+                  <span className="text-[10px] text-muted-foreground">({comparisonPeriodLabel})</span>
                 </div>
-                <div className={`text-xs font-medium ${isPositive ? "text-emerald-500" : "text-rose-500"}`}>
-                  {isPositive ? "↑" : "↓"} {percentChange}%
-                </div>
+                {percentChange && (
+                  <div className={`text-xs font-medium ${isPositive ? "text-emerald-500" : "text-rose-500"}`}>
+                    Delta: {isPositive ? "⬆️" : "⬇️"} {Math.abs(parseFloat(percentChange))}%
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -442,7 +503,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
   return (
     <TooltipProvider>
       {/* Full-height container that breaks out of parent padding for sticky header */}
-      <div className="flex flex-col h-full -m-4 md:-m-6">
+      <div className="flex flex-col h-full -m-6 md:-mt-6 ">
         {/* ============================================================= */}
         {/* Sticky Control Bar - Flush to top, outside padding */}
         {/* ============================================================= */}
@@ -457,8 +518,8 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   setSelectedPreset("");
                 }}
               />
-              <div className="hidden sm:flex items-center gap-1">
-                {datePresets.slice(0, 3).map((preset) => (
+              <div className="hidden sm:flex items-center gap-1 flex-wrap">
+                {datePresets.map((preset) => (
                   <button
                     key={preset.label}
                     className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium ${
@@ -500,22 +561,26 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         {/* Scrollable Content Area - Restored padding */}
         {/* ============================================================= */}
         <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Left: Financial Performance Chart (3 columns) */}
-          <Card className="shadow-sm lg:col-span-3">
-            <CardHeader className="pb-2">
+        
+        {/* ============================================================= */}
+        {/* Row 1: Financial Hub (Merged Cards + Chart) + Intelligence Feed */}
+        {/* ============================================================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 ">
+          {/* Financial Hub - Combined Summary + Chart (3 columns) */}
+          <Card className="shadow-sm lg:col-span-3 max-h-[99%]">
+            <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-foreground flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 text-[#2EAFC5]" />
-                    Financial Performance
+                    Financial Hub
                   </CardTitle>
                   <CardDescription>
-                    {selectedPreset || "Custom date range"} • {groupedChartData.length} data points ({chartGranularity})
+                    {selectedPreset || "Custom date range"} • Click a metric to view trends
                   </CardDescription>
                 </div>
                 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   {/* Granularity Toggle */}
                   <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
                     {(["daily", "weekly", "monthly"] as const).map((granularity) => (
@@ -529,30 +594,6 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                         }`}
                       >
                         {granularity.charAt(0).toUpperCase() + granularity.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                  
-                  {/* Metric Toggles */}
-                  <div className="flex items-center gap-1">
-                    {(["revenue", "profit", "cost"] as const).map((metric) => (
-                      <button
-                        key={metric}
-                        onClick={() => setActiveMetric(metric)}
-                        className={`text-[10px] px-3 py-1.5 rounded-full border transition-colors font-medium flex items-center gap-1.5 ${
-                          activeMetric === metric
-                            ? `text-white border-transparent`
-                            : "bg-card hover:bg-muted text-muted-foreground hover:text-foreground"
-                        }`}
-                        style={{
-                          backgroundColor: activeMetric === metric ? COLORS[metric] : undefined,
-                        }}
-                      >
-                        <div 
-                          className="size-2 rounded-full" 
-                          style={{ backgroundColor: activeMetric === metric ? "white" : COLORS[metric] }} 
-                        />
-                        {metric.charAt(0).toUpperCase() + metric.slice(1)}
                       </button>
                     ))}
                   </div>
@@ -571,8 +612,90 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
-              <div className="h-[320px]">
+            <CardContent className="pt-0">
+              {/* Metric Cards as Radio Buttons - Now reactive to dateRange */}
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {/* Revenue Card */}
+                <button
+                  onClick={() => setActiveMetric("revenue")}
+                  className={`relative p-3 rounded-xl border-2 text-left transition-all ${
+                    activeMetric === "revenue"
+                      ? "border-[#2EAFC5] bg-[#2EAFC5]/5 shadow-md"
+                      : "border-border/50 bg-card hover:border-border hover:bg-muted/30 opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
+                      activeMetric === "revenue" ? "bg-[#2EAFC5]/20" : "bg-muted"
+                    }`}>
+                      <Banknote className={`size-3.5 ${activeMetric === "revenue" ? "text-[#2EAFC5]" : "text-muted-foreground"}`} />
+                    </div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Revenue</span>
+                  </div>
+                  <p className={`text-xl font-bold tabular-nums ${activeMetric === "revenue" ? "text-[#2EAFC5]" : "text-foreground"}`}>
+                    {formatCurrency(financialSummary.revenue)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{financialSummary.count} days</p>
+                  {activeMetric === "revenue" && (
+                    <div className="absolute top-2 right-2 size-2 rounded-full bg-[#2EAFC5]" />
+                  )}
+                </button>
+
+                {/* Profit Card */}
+                <button
+                  onClick={() => setActiveMetric("profit")}
+                  className={`relative p-3 rounded-xl border-2 text-left transition-all ${
+                    activeMetric === "profit"
+                      ? "border-[#10B981] bg-[#10B981]/5 shadow-md"
+                      : "border-border/50 bg-card hover:border-border hover:bg-muted/30 opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
+                      activeMetric === "profit" ? "bg-[#10B981]/20" : "bg-muted"
+                    }`}>
+                      <TrendingUp className={`size-3.5 ${activeMetric === "profit" ? "text-[#10B981]" : "text-muted-foreground"}`} />
+                    </div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Profit</span>
+                  </div>
+                  <p className={`text-xl font-bold tabular-nums ${activeMetric === "profit" ? "text-[#10B981]" : "text-foreground"}`}>
+                    {formatCurrency(financialSummary.profit)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{calculateMargin(financialSummary.profit, financialSummary.revenue)}% margin</p>
+                  {activeMetric === "profit" && (
+                    <div className="absolute top-2 right-2 size-2 rounded-full bg-[#10B981]" />
+                  )}
+                </button>
+
+                {/* Cost Card */}
+                <button
+                  onClick={() => setActiveMetric("cost")}
+                  className={`relative p-3 rounded-xl border-2 text-left transition-all ${
+                    activeMetric === "cost"
+                      ? "border-[#F1782F] bg-[#F1782F]/5 shadow-md"
+                      : "border-border/50 bg-card hover:border-border hover:bg-muted/30 opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`size-7 rounded-lg flex items-center justify-center transition-colors ${
+                      activeMetric === "cost" ? "bg-[#F1782F]/20" : "bg-muted"
+                    }`}>
+                      <Receipt className={`size-3.5 ${activeMetric === "cost" ? "text-[#F1782F]" : "text-muted-foreground"}`} />
+                    </div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Cost (COGS)</span>
+                  </div>
+                  <p className={`text-xl font-bold tabular-nums ${activeMetric === "cost" ? "text-[#F1782F]" : "text-foreground"}`}>
+                    {formatCurrency(financialSummary.cost)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{(100 - parseFloat(calculateMargin(financialSummary.profit, financialSummary.revenue))).toFixed(1)}% of revenue</p>
+                  {activeMetric === "cost" && (
+                    <div className="absolute top-2 right-2 size-2 rounded-full bg-[#F1782F]" />
+                  )}
+                </button>
+              </div>
+              
+              {/* Chart */}
+              <div className="h-[260px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={groupedChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                     <defs>
@@ -629,147 +752,15 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
           <IntelligenceFeed 
             insights={insights} 
             className="lg:col-span-1" 
-            maxHeight="h-[465px]"
+            maxHeight="h-[510px]"
           />
         </div>
-        {financialStats && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Revenue Sparkline Card */}
-            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-emerald-500/30 group">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="size-8 rounded-lg bg-emerald-500/15 flex items-center justify-center group-hover:bg-emerald-500/25 transition-colors">
-                    <Banknote className="size-4 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Revenue</p>
-                    <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(financialStats.month.revenue)}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30">
-                  <TrendingUp className="size-3 mr-1" />
-                  {financialStats.month.count}
-                </Badge>
-              </div>
-              {/* Mini Sparkline Area */}
-              <div className="h-8 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData.slice(-7)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="sparkRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={1.5} fill="url(#sparkRevenue)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Profit Sparkline Card */}
-            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-indigo-500/30 group">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="size-8 rounded-lg bg-indigo-500/15 flex items-center justify-center group-hover:bg-indigo-500/25 transition-colors">
-                    <TrendingUp className="size-4 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Profit</p>
-                    <p className="text-lg font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
-                      {formatCurrency(financialStats.month.profit)}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[10px] border-indigo-500/30 text-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30">
-                  {calculateMargin(financialStats.month.profit, financialStats.month.revenue)}%
-                </Badge>
-              </div>
-              <div className="h-8 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData.slice(-7)} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="sparkProfit" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="profit" stroke="#6366f1" strokeWidth={1.5} fill="url(#sparkProfit)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Margin Card */}
-            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-amber-500/30 group">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="size-8 rounded-lg bg-amber-500/15 flex items-center justify-center group-hover:bg-amber-500/25 transition-colors">
-                    <PieChart className="size-4 text-amber-600 dark:text-amber-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Margin</p>
-                    <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">
-                      {calculateMargin(financialStats.month.profit, financialStats.month.revenue)}%
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 dark:bg-amber-950/30">
-                  Gross
-                </Badge>
-              </div>
-              {/* Mini Pie representation */}
-              <div className="h-8 flex items-center gap-2">
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all" 
-                    style={{ width: `${calculateMargin(financialStats.month.profit, financialStats.month.revenue)}%` }}
-                  />
-                </div>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  ₱{formatCurrency(financialStats.month.cost).replace('₱', '')} COGS
-                </span>
-              </div>
-            </div>
-
-            {/* Transactions Card */}
-            <div className="bg-card rounded-xl border px-4 py-3 hover:shadow-md transition-all hover:border-cyan-500/30 group">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="size-8 rounded-lg bg-cyan-500/15 flex items-center justify-center group-hover:bg-cyan-500/25 transition-colors">
-                    <Receipt className="size-4 text-cyan-600 dark:text-cyan-400" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Transactions</p>
-                    <p className="text-lg font-bold tabular-nums text-cyan-600 dark:text-cyan-400">
-                      {financialStats.month.count.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-[10px] border-cyan-500/30 text-cyan-600 bg-cyan-50/50 dark:bg-cyan-950/30">
-                  +{financialStats.today.count} today
-                </Badge>
-              </div>
-              <div className="h-8 flex items-center">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs text-muted-foreground">Avg:</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {formatCurrency(financialStats.month.count > 0 ? financialStats.month.revenue / financialStats.month.count : 0)}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">/sale</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ============================================================= */}
         {/* Row 3: Product Insights (Tabbed) + Peak Traffic */}
         {/* ============================================================= */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Product Insights - Tabbed Card (Top Movers + Category Share) */}
+          {/* Product Insights - Tabbed Card (Top Movers + Dead Stock + Category Share) */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -777,9 +768,18 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   <CardTitle className="text-foreground flex items-center gap-2 text-base">
                     <Zap className="h-4 w-4 text-[#F59E0B]" />
                     Product Insights
+                    {dateRange?.from && dateRange?.to && (
+                      <span className="text-xs font-normal text-muted-foreground ml-1">
+                        ({format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")})
+                      </span>
+                    )}
                   </CardTitle>
                   <CardDescription>
-                    {productInsightsTab === "movers" ? "Top products by sales velocity" : "Revenue distribution by category"}
+                    {productInsightsTab === "movers" 
+                      ? "Top products by sales velocity" 
+                      : productInsightsTab === "deadstock"
+                      ? "Non-moving inventory tying up cash"
+                      : "Revenue distribution by category"}
                   </CardDescription>
                 </div>
                 {/* Tab Toggles */}
@@ -793,6 +793,16 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                     }`}
                   >
                     Top Movers
+                  </button>
+                  <button
+                    onClick={() => setProductInsightsTab("deadstock")}
+                    className={`text-[10px] px-2.5 py-1.5 rounded-md transition-colors font-medium ${
+                      productInsightsTab === "deadstock"
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Dead Stock
                   </button>
                   <button
                     onClick={() => setProductInsightsTab("category")}
@@ -889,6 +899,81 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                       </div>
                     </div>
                   )}
+                </ScrollArea>
+              ) : productInsightsTab === "deadstock" ? (
+                /* Dead Stock List - Items with Stock > 5 AND Velocity = 0 */
+                <ScrollArea className="h-[280px]">
+                  {(() => {
+                    // Filter dead stock items from forecasts
+                    const deadStockItems = data.forecasts.filter(
+                      item => item.currentStock > 5 && item.velocity7Day === 0
+                    );
+                    const totalFrozenCash = deadStockItems.reduce(
+                      (sum, item) => sum + (item.currentStock * item.costPrice), 0
+                    );
+                    
+                    return deadStockItems.length > 0 ? (
+                      <div className="space-y-2 pr-2">
+                        {/* Frozen Cash Summary */}
+                        <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center gap-2">
+                            <Snowflake className="h-4 w-4 text-blue-500" />
+                            <span className="text-xs font-medium text-muted-foreground">Total Frozen Cash</span>
+                          </div>
+                          <p className="text-xl font-bold text-foreground tabular-nums mt-1">
+                            {formatCurrency(totalFrozenCash)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{deadStockItems.length} products with no movement</p>
+                        </div>
+                        
+                        {deadStockItems.slice(0, 8).map((item, index) => (
+                          <div 
+                            key={item.productId}
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            {/* Index */}
+                            <div className="size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 bg-slate-400">
+                              {index + 1}
+                            </div>
+                            
+                            {/* Product Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium truncate text-foreground">{item.productName}</p>
+                              <p className="text-[10px] text-muted-foreground capitalize">{item.category.toLowerCase().replace(/_/g, " ")}</p>
+                            </div>
+                            
+                            {/* Stats */}
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-bold tabular-nums text-slate-600 dark:text-slate-400">{item.currentStock} units</p>
+                              <p className="text-[10px] text-muted-foreground tabular-nums">₱{(item.currentStock * item.costPrice).toLocaleString()}</p>
+                            </div>
+                            
+                            {/* Action */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[10px] gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                console.log("Create discount for:", item.productName);
+                              }}
+                            >
+                              <Tag className="h-3 w-3" />
+                              Discount
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        <div className="text-center">
+                          <Snowflake className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No dead stock detected</p>
+                          <p className="text-xs">All products have recent sales activity</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </ScrollArea>
               ) : (
                 /* Category Share Donut Chart */
@@ -988,19 +1073,24 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
 
           {/* Peak Traffic Heatmap */}
           <Card className="shadow-sm">
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-0">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
                   <CardTitle className="text-foreground flex items-center gap-2 text-base">
                     <Clock className="h-4 w-4 text-[#2EAFC5]" />
                     Peak Traffic Heatmap
+                    {dateRange?.from && dateRange?.to && (
+                      <span className="text-xs font-normal text-muted-foreground ml-1">
+                        ({format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")})
+                      </span>
+                    )}
                   </CardTitle>
                   <CardDescription>Sales intensity by day of week and hour</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="h-[240px]">
+              <div className="h-[130%]">
                 {peakTraffic.some(p => p.transactions > 0) ? (
                   <PeakTrafficHeatmap data={peakTraffic} chartData={chartData} />
                 ) : (
@@ -1017,192 +1107,251 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         </div>
 
         {/* ============================================================= */}
-        {/* Row 3: Demand Forecast */}
+        {/* Row 3: Master-Detail Restock Section (Side-by-Side) */}
         {/* ============================================================= */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-[#F59E0B]" />
-                  {selectedProductName 
-                    ? `Forecast: ${selectedProductName}` 
-                    : "Demand Forecast (Next 7 Days)"}
-                </CardTitle>
-                <CardDescription>
-                  {selectedProductName
-                    ? "Click on another product in the table below, or click the same to deselect"
-                    : "Historical sales vs AI-powered demand prediction • Click a product below for details"}
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {selectedProductName && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setSelectedProductId(null);
-                      setSelectedProductName(null);
-                    }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Clear Selection
-                  </Button>
-                )}
-                <Link href="/admin/analytics/events">
-                  <Button variant="outline" size="sm" className="gap-2 h-8">
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Events</span>
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[280px]">
-              {forecastData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={forecastData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                    <defs>
-                      {/* Gradient for confidence interval */}
-                      <linearGradient id="confidenceGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      className="text-xs fill-muted-foreground"
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={8}
-                      className="text-xs fill-muted-foreground"
-                      tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
-                    />
-                    <RechartsTooltip content={<ForecastTooltip />} />
-                    <Legend
-                      verticalAlign="top"
-                      height={36}
-                      formatter={(value) => (
-                        <span className="text-xs text-muted-foreground capitalize">{value}</span>
-                      )}
-                    />
-                    
-                    {/* Event reference lines */}
-                    {forecastData
-                      .filter((d) => d.isEvent)
-                      .map((d, i) => (
-                        <ReferenceLine
-                          key={i}
-                          x={d.date}
-                          stroke={COLORS.event}
-                          strokeWidth={2}
-                          strokeDasharray="4 4"
-                          label={{
-                            value: "📅",
-                            position: "top",
-                            fontSize: 14,
-                          }}
-                        />
-                      ))}
-                    
-                    {/* Confidence interval area (±15% of forecast) */}
-                    <Area
-                      dataKey="forecastUpper"
-                      name="Confidence Band"
-                      type="monotone"
-                      fill="url(#confidenceGradient)"
-                      stroke="none"
-                      connectNulls={false}
-                    />
-                    
-                    {/* Historical bars */}
-                    <Bar
-                      dataKey="historical"
-                      name="Historical"
-                      fill={COLORS.bar}
-                      radius={[4, 4, 0, 0]}
-                    />
-                    
-                    {/* Visual Bridge: Connect last historical point to first forecast */}
-                    <Line
-                      dataKey="bridge"
-                      name="Bridge"
-                      type="monotone"
-                      stroke={COLORS.bar}
-                      strokeWidth={2}
-                      strokeDasharray="4 4"
-                      dot={false}
-                      legendType="none"
-                      connectNulls
-                    />
-                    
-                    {/* Forecast line */}
-                    <Line
-                      dataKey="forecast"
-                      name="Forecast"
-                      type="monotone"
-                      stroke={COLORS.forecast}
-                      strokeWidth={3}
-                      dot={{ fill: COLORS.forecast, r: 4, strokeWidth: 2, stroke: "#fff" }}
-                      activeDot={{ r: 6, fill: COLORS.forecast, stroke: "#fff", strokeWidth: 2 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
-                  <div className="text-center">
-                    <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">Loading forecast data...</p>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+          {/* Left Column: Restock Recommendations Table */}
+          <div className="xl:col-span-8">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle className="text-foreground flex items-center gap-2 text-base">
+                      <Package className="h-4 w-4 text-primary" />
+                      Restock Recommendations
+                    </CardTitle>
+                    <CardDescription className="text-muted-foreground text-xs">
+                      Click a row to view demand forecast
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-2 h-8"
+                      onClick={() => {
+                        // Export will be handled by ForecastingTable's internal selection
+                        console.log("Exporting PO...");
+                      }}
+                    >
+                      <FileDown className="h-3.5 w-3.5" />
+                      Export PO
+                    </Button>
+                    <Link href="/admin/inventory">
+                      <Button variant="outline" size="sm" className="gap-2 h-8">
+                        View Inventory
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
                   </div>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              </CardHeader>
+              <CardContent>
+                <ForecastingTable 
+                  forecasts={data.forecasts} 
+                  selectedProductId={selectedProductId}
+                  onProductSelect={(id, name) => {
+                    setSelectedProductId(id);
+                    setSelectedProductName(name);
+                  }}
+                  onExportPO={(selectedItems) => {
+                    console.log("Exporting PO for items:", selectedItems.map(i => i.productName));
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* ============================================================= */}
-        {/* Row 4: Forecasting Table */}
-        {/* ============================================================= */}
-        <Card className="shadow-sm">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-foreground flex items-center gap-2">
-                  <Package className="h-5 w-5 text-primary" />
-                  Restock Recommendations
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  AI-powered restocking suggestions based on demand forecasting
-                </CardDescription>
-              </div>
-              <Link href="/admin/inventory">
-                <Button variant="outline" size="sm" className="gap-2">
-                  View Inventory
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+          {/* Right Column: Context-Aware Demand Forecast (sticky) */}
+          <div className="xl:col-span-4">
+            <div className="xl:sticky xl:top-20 h-fit">
+              <Card className="shadow-sm">
+                <CardHeader className="pb-2">
+                  {/* Product Header when selected */}
+                  {selectedProductInfo ? (
+                    <div className="flex items-center gap-2 mb-2 overflow-hidden">
+                      <Avatar className="h-10 w-10 shrink-0 border-2 border-primary/20">
+                        <AvatarImage src={selectedProductInfo.productImage || undefined} alt={selectedProductInfo.productName} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                          {selectedProductInfo.productName.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <h3 className="font-bold text-foreground text-sm truncate" title={selectedProductInfo.productName}>{selectedProductInfo.productName}</h3>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>Stock: <span className={`font-medium ${selectedProductInfo.currentStock < 10 ? "text-orange-500" : "text-emerald-500"}`}>{selectedProductInfo.currentStock}</span></span>
+                          <span>•</span>
+                          <span className="capitalize truncate">{selectedProductInfo.category.toLowerCase().replace(/_/g, " ")}</span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() => {
+                          setSelectedProductId(null);
+                          setSelectedProductName(null);
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <CardTitle className="text-foreground flex items-center gap-2 text-base">
+                        <Sparkles className="h-4 w-4 text-[#F59E0B]" />
+                        Demand Forecast
+                      </CardTitle>
+                      <CardDescription className="text-sm">
+                        Total Store Demand • {totalStoreDemand} units/week
+                      </CardDescription>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="h-[280px]">
+                    {demandForecastData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={demandForecastData} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+                          <defs>
+                            <linearGradient id="demandConfidenceGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.05} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="date"
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={8}
+                            className="text-[10px] fill-muted-foreground"
+                          />
+                          <YAxis
+                            tickLine={false}
+                            axisLine={false}
+                            tickMargin={4}
+                            className="text-[10px] fill-muted-foreground"
+                            tickFormatter={(value) => `${value}`}
+                          />
+                          <RechartsTooltip 
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0]?.payload;
+                                return (
+                                  <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg">
+                                    <p className="text-xs font-medium text-foreground">{data?.date}</p>
+                                    {data?.isEvent && (
+                                      <Badge variant="outline" className="text-[10px] mt-1 border-pink-500 text-pink-500">
+                                        {data?.eventName || "Event Day"}
+                                      </Badge>
+                                    )}
+                                    <div className="mt-1 space-y-1">
+                                      {data?.historical !== null && (
+                                        <div className="flex items-center gap-2">
+                                          <div className="size-2 rounded-full bg-[#8B5CF6]" />
+                                          <span className="text-xs">Sold: <span className="font-medium">{data.historical} units</span></span>
+                                        </div>
+                                      )}
+                                      {data?.forecast !== null && (
+                                        <div className="flex items-center gap-2">
+                                          <div className="size-2 rounded-full bg-[#F59E0B]" />
+                                          <span className="text-xs">Forecast: <span className="font-medium">{data.forecast} units</span></span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          
+                          {/* Event reference lines */}
+                          {demandForecastData
+                            .filter((d) => d.isEvent)
+                            .map((d, i) => (
+                              <ReferenceLine
+                                key={i}
+                                x={d.date}
+                                stroke={COLORS.event}
+                                strokeWidth={2}
+                                strokeDasharray="4 4"
+                                label={{ value: "📅", position: "top", fontSize: 12 }}
+                              />
+                            ))}
+                          
+                          {/* Confidence interval */}
+                          <Area
+                            dataKey="forecastUpper"
+                            type="monotone"
+                            fill="url(#demandConfidenceGradient)"
+                            stroke="none"
+                            connectNulls={false}
+                          />
+                          
+                          {/* Historical bars (units) */}
+                          <Bar
+                            dataKey="historical"
+                            name="Historical"
+                            fill={COLORS.bar}
+                            radius={[3, 3, 0, 0]}
+                          />
+                          
+                          {/* Bridge */}
+                          <Line
+                            dataKey="bridge"
+                            type="monotone"
+                            stroke={COLORS.bar}
+                            strokeWidth={2}
+                            strokeDasharray="4 4"
+                            dot={false}
+                            legendType="none"
+                            connectNulls
+                          />
+                          
+                          {/* Forecast line */}
+                          <Line
+                            dataKey="forecast"
+                            name="Forecast"
+                            type="monotone"
+                            stroke={COLORS.forecast}
+                            strokeWidth={2.5}
+                            dot={{ fill: COLORS.forecast, r: 3, strokeWidth: 2, stroke: "#fff" }}
+                            activeDot={{ r: 5, fill: COLORS.forecast, stroke: "#fff", strokeWidth: 2 }}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        <div className="text-center">
+                          <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Loading forecast...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Summary Stats */}
+                  <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-3">
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">7-Day Forecast</p>
+                      <p className="text-lg font-bold text-foreground tabular-nums">
+                        {demandForecastData.filter(d => d.forecast !== null).reduce((sum, d) => sum + (d.forecast || 0), 0)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                      </p>
+                    </div>
+                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">7-Day Historical</p>
+                      <p className="text-lg font-bold text-foreground tabular-nums">
+                        {demandForecastData.filter(d => d.historical !== null).reduce((sum, d) => sum + (d.historical || 0), 0)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </CardHeader>
-          <CardContent>
-            <ForecastingTable 
-              forecasts={data.forecasts} 
-              selectedProductId={selectedProductId}
-              onProductSelect={(id, name) => {
-                setSelectedProductId(id);
-                setSelectedProductName(name);
-              }}
-            />
-          </CardContent>
-        </Card>
-
+          </div>
+        </div>
         </div>
       </div>
       
@@ -1267,6 +1416,45 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
     return max || 1;
   }, [heatmapData]);
 
+  // Calculate smart insight - peak day and hour range
+  const smartInsight = useMemo(() => {
+    // Find peak day (highest total sales)
+    let peakDay = { idx: 0, total: 0 };
+    heatmapData.forEach((row, dayIdx) => {
+      const dayTotal = row.reduce((sum, cell) => sum + cell.value, 0);
+      if (dayTotal > peakDay.total) {
+        peakDay = { idx: dayIdx, total: dayTotal };
+      }
+    });
+
+    // Find peak hour range (2-hour window with highest density)
+    let peakHourRange = { startHour: 8, endHour: 10, total: 0 };
+    for (let hourIdx = 0; hourIdx < HOURS.length - 1; hourIdx++) {
+      let rangeTotal = 0;
+      heatmapData.forEach(row => {
+        rangeTotal += row[hourIdx].value + row[hourIdx + 1].value;
+      });
+      if (rangeTotal > peakHourRange.total) {
+        peakHourRange = { startHour: HOURS[hourIdx], endHour: HOURS[hourIdx + 1] + 1, total: rangeTotal };
+      }
+    }
+
+    // Format hour to 12-hour format
+    const formatHour = (hour: number) => {
+      if (hour === 12) return "12:00 PM";
+      if (hour > 12) return `${hour - 12}:00 PM`;
+      return `${hour}:00 AM`;
+    };
+
+    return {
+      peakDayName: DAYS_OF_WEEK[peakDay.idx] + (peakDay.idx >= 4 ? "s" : "s"), // e.g., "Fridays"
+      peakDayNameFull: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][peakDay.idx] + "s",
+      peakHourStart: formatHour(peakHourRange.startHour),
+      peakHourEnd: formatHour(peakHourRange.endHour),
+      hasData: peakDay.total > 0,
+    };
+  }, [heatmapData]);
+
   // Get color based on intensity
   const getColor = (value: number) => {
     const intensity = value / maxValue;
@@ -1279,6 +1467,18 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
 
   return (
     <div className="h-full flex flex-col">
+
+       {/* Smart Insight */}
+      {smartInsight.hasData && (
+        <div className="mt-0 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+          <div className="flex items-start gap-2">
+            <Flame className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              <span className="font-semibold">Insight:</span> Your peak traffic is on <span className="font-semibold">{smartInsight.peakDayNameFull}</span> between <span className="font-semibold">{smartInsight.peakHourStart} - {smartInsight.peakHourEnd}</span>.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Hour labels */}
       <div className="flex mb-1">
         <div className="w-10" /> {/* Spacer for day labels */}
@@ -1347,6 +1547,8 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
         </div>
         <span className="text-[10px] text-muted-foreground">High</span>
       </div>
+      
+     
     </div>
   );
 }
@@ -1416,17 +1618,22 @@ function getUrgencyPriority(item: ForecastTableItem): number {
 function ForecastingTable({ 
   forecasts,
   selectedProductId,
-  onProductSelect
+  onProductSelect,
+  onExportPO
 }: { 
   forecasts: ForecastTableItem[];
   selectedProductId?: number | null;
   onProductSelect?: (productId: number | null, productName: string | null) => void;
+  onExportPO?: (selectedItems: ForecastTableItem[]) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [sortField, setSortField] = useState<SortField>("urgency");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  
+  // Selection state for PO workflow
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
   const hasActiveFilters = searchQuery || categoryFilter !== "all" || urgencyFilter !== "all";
 
@@ -1442,6 +1649,26 @@ function ForecastingTable({
     } else {
       setSortField(field);
       setSortOrder(field === "urgency" ? "asc" : "desc");
+    }
+  };
+  
+  // Toggle selection for a single item
+  const toggleItemSelection = (productId: number) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(productId)) {
+      newSelected.delete(productId);
+    } else {
+      newSelected.add(productId);
+    }
+    setSelectedItems(newSelected);
+  };
+  
+  // Toggle all items selection
+  const toggleAllSelection = () => {
+    if (selectedItems.size === filteredAndSortedForecasts.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(filteredAndSortedForecasts.map(item => item.productId)));
     }
   };
 
@@ -1519,23 +1746,23 @@ function ForecastingTable({
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Toolbar */}
+    <div className="flex flex-col gap-2">
+      {/* Toolbar - Compact */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="relative flex-1 min-w-[150px] max-w-[250px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search products..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-10 w-full"
+            className="pl-8 h-8 text-sm w-full"
           />
         </div>
 
         {/* Category Filter */}
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="h-10 w-[160px]">
+          <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
@@ -1549,7 +1776,7 @@ function ForecastingTable({
 
         {/* Urgency Filter */}
         <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-          <SelectTrigger className="h-10 w-[160px]">
+          <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="Urgency" />
           </SelectTrigger>
           <SelectContent>
@@ -1566,55 +1793,68 @@ function ForecastingTable({
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10"
+            className="h-8 w-8"
             onClick={resetFilters}
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
             <span className="sr-only">Reset filters</span>
           </Button>
         )}
 
-        {/* Separator */}
-        <div className="h-8 w-px bg-border mx-1" />
-
         {/* Results Count */}
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-muted/30 border border-border/40">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">{filteredAndSortedForecasts.length}</span>
-          <span className="text-xs text-muted-foreground">of {forecasts.length}</span>
+        <div className="flex items-center gap-1.5 h-8 px-2 rounded-md bg-muted/30 border border-border/40 ml-auto">
+          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-foreground">{filteredAndSortedForecasts.length}</span>
+          <span className="text-[10px] text-muted-foreground">/ {forecasts.length}</span>
         </div>
       </div>
 
       {/* Table with Scroll */}
       <div className="rounded-xl border border-border overflow-hidden">
-        <ScrollArea className="h-[500px]">
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-card">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="h-10 bg-muted/30">
-                  <SortButton field="product">Product</SortButton>
-                </TableHead>
-                <TableHead className="h-10 bg-muted/30 text-right">
-                  <SortButton field="stock">Stock</SortButton>
-                </TableHead>
-                <TableHead className="h-10 bg-muted/30 text-right">
-                  <SortButton field="velocity">Velocity</SortButton>
-                </TableHead>
-                <TableHead className="h-10 bg-muted/30 text-right">
-                  <SortButton field="demand"><span className="font-bold text-foreground">Demand</span></SortButton>
-                </TableHead>
-                <TableHead className="h-10 bg-muted/30">
-                  <SortButton field="urgency">Action</SortButton>
-                </TableHead>
-                <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right">
-                  Order Qty
-                </TableHead>
-              </TableRow>
-            </TableHeader>
+        <ScrollArea className="h-[400px]">
+          <div className="min-w-[750px]">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-10 bg-muted/30 w-[40px]">
+                    <button
+                      onClick={toggleAllSelection}
+                      className="flex items-center justify-center w-full"
+                    >
+                      {selectedItems.size === filteredAndSortedForecasts.length && filteredAndSortedForecasts.length > 0 ? (
+                        <CheckSquare className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Square className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </button>
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 min-w-[160px]">
+                    <SortButton field="product">Product</SortButton>
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[60px]">
+                    <SortButton field="stock">Stock</SortButton>
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[70px]">
+                    <SortButton field="velocity">Velocity</SortButton>
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[70px]">
+                    <SortButton field="demand"><span className="font-bold text-foreground">Demand</span></SortButton>
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 w-[90px]">
+                    <SortButton field="urgency">Action</SortButton>
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[70px]">
+                    Order
+                  </TableHead>
+                  <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[90px]">
+                    Est. Cost
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {filteredAndSortedForecasts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center">
+                  <TableCell colSpan={8} className="h-24 text-center">
                     <p className="text-muted-foreground">No results found.</p>
                   </TableCell>
                 </TableRow>
@@ -1626,35 +1866,47 @@ function ForecastingTable({
                       selectedProductId === item.productId ? null : item.productId,
                       selectedProductId === item.productId ? null : item.productName
                     )}
-                    className={`cursor-pointer transition-colors ${
+                    className={`cursor-pointer transition-all ${
                       selectedProductId === item.productId 
-                        ? "bg-primary/10 hover:bg-primary/15 ring-1 ring-inset ring-primary/30" 
-                        : "hover:bg-muted/50"
+                        ? "bg-primary/10 hover:bg-primary/15 border-l-4 border-l-primary" 
+                        : "hover:bg-muted/50 border-l-4 border-l-transparent"
                     }`}
                   >
-                    <TableCell className="py-3">
-                      <div>
-                        <p className="font-medium text-foreground">{item.productName}</p>
-                        <p className="text-xs text-muted-foreground capitalize">
+                    <TableCell className="py-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => toggleItemSelection(item.productId)}
+                        className="flex items-center justify-center w-full"
+                      >
+                        {selectedItems.has(item.productId) ? (
+                          <CheckSquare className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Square className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                        )}
+                      </button>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <div className="max-w-[160px]">
+                        <p className="font-medium text-foreground text-sm truncate" title={item.productName}>{item.productName}</p>
+                        <p className="text-[10px] text-muted-foreground capitalize">
                           {item.category.toLowerCase().replace(/_/g, " ")}
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right py-3">
+                    <TableCell className="text-right py-2">
                       <StockBadge stock={item.currentStock} status={item.stockStatus} />
                     </TableCell>
-                    <TableCell className="text-right font-mono py-3 text-foreground">
+                    <TableCell className="text-right font-mono py-2 text-foreground text-sm">
                       {item.velocity7Day}
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold py-3 text-foreground">
+                    <TableCell className="text-right font-mono font-bold py-2 text-foreground text-sm">
                       {item.predictedDemand}
                     </TableCell>
-                    <TableCell className="py-3">
+                    <TableCell className="py-2">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Badge
                             variant="outline"
-                            className={`cursor-help text-xs font-medium ${
+                            className={`cursor-help text-[10px] font-medium ${
                               item.stockStatus === "OUT_OF_STOCK"
                                 ? (item.velocity7Day > 0 || item.predictedDemand > 0)
                                   ? "border-red-600 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
@@ -1704,17 +1956,40 @@ function ForecastingTable({
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className="text-right py-3">
-                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-bold shadow-sm">
+                    <TableCell className="text-right py-2">
+                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold shadow-sm px-2">
                         +{item.recommendedQty}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right py-2 font-mono text-xs text-muted-foreground">
+                      ₱{(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}
                     </TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </ScrollArea>
+        
+        {/* Total Order Value Footer - Dynamic based on selection */}
+        {filteredAndSortedForecasts.length > 0 && (
+          <div className="sticky bottom-0 bg-muted/50 border-t border-border px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              {selectedItems.size > 0 
+                ? `Total Value (${selectedItems.size} items):`
+                : "Total Recommended Order Value:"}
+            </span>
+            <span className="text-lg font-bold text-primary tabular-nums">
+              ₱{(selectedItems.size > 0
+                ? filteredAndSortedForecasts
+                    .filter(item => selectedItems.has(item.productId))
+                    .reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0)
+                : filteredAndSortedForecasts.reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0)
+              ).toLocaleString("en-PH", { maximumFractionDigits: 0 })}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

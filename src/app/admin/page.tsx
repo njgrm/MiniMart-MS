@@ -1,26 +1,42 @@
 import { getProducts } from "@/actions/product";
 import { getSalesStats, getSalesHistory, getTopProducts } from "@/actions/sales";
 import { getIncomingOrders, getRecentCompletedOrders } from "@/actions/orders";
+import { getCashRegisterData, getInventoryHealthData, getTodaySalesStats } from "@/actions/dashboard";
 import { DashboardClient } from "./dashboard-client";
 
 /**
- * Admin Dashboard - Real-Time Business Intelligence Hub
+ * Admin Dashboard - Operational Command Center
+ * 
+ * Purpose: Answer "What needs my attention RIGHT NOW?"
+ * 
  * Layout:
- * - Stock Alerts: Compact banner for out-of-stock/low-stock
- * - Top Row: 4 Key Metric Cards with trend indicators
- * - Middle Row: Charts (Revenue/Profit Trend + Bar Chart)
- * - Order List: Active and recently completed orders
- * - Bottom Row: Recent Activity, Top Products & Quick Actions
+ * - Top Row: Key Metric Cards (Today's stats by default)
+ * - Middle Row: Sales Chart + Active Orders Queue
+ * - Bottom Row: Cash Register + Inventory Health Alerts
+ * - Quick Actions Row
  */
 export default async function AdminDashboard() {
   // Fetch all data server-side
-  const [products, stats, recentSales, topProducts, incomingOrders, recentCompletedOrders] = await Promise.all([
+  const [
+    products,
+    stats,
+    recentSales,
+    topProducts,
+    incomingOrders,
+    recentCompletedOrders,
+    cashRegisterData,
+    inventoryHealthData,
+    todayStats,
+  ] = await Promise.all([
     getProducts(),
     getSalesStats(),
-    getSalesHistory("month", 1, 50), // Get more transactions for chart data
+    getSalesHistory("month", 1, 50),
     getTopProducts(5),
     getIncomingOrders(),
-    getRecentCompletedOrders(10), // Get last 10 completed orders
+    getRecentCompletedOrders(10),
+    getCashRegisterData(),
+    getInventoryHealthData(),
+    getTodaySalesStats(),
   ]);
 
   // Calculate inventory metrics
@@ -52,6 +68,9 @@ export default async function AdminDashboard() {
       incomingOrders={incomingOrders}
       recentCompletedOrders={recentCompletedOrders}
       activeOrdersCount={activeOrdersCount}
+      cashRegisterData={cashRegisterData}
+      inventoryHealthData={inventoryHealthData}
+      todayStats={todayStats}
     />
   );
 }

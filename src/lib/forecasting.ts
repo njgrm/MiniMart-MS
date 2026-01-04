@@ -38,6 +38,7 @@ export interface ForecastResult {
   productName: string;
   barcode: string | null;
   category: string;
+  costPrice: number; // Supply cost for budgeting
   
   // Forecast values
   forecastedDailyUnits: number;
@@ -582,11 +583,15 @@ export async function getForecast(input: ForecastInput): Promise<ForecastResult>
   // Calculate velocity trend
   const velocityTrend = calculateTrend(cleanQuantities);
   
+  // Get cost price for budgeting
+  const costPrice = product.cost_price ? new Decimal(product.cost_price.toString()).toNumber() : 0;
+  
   return {
     productId,
     productName: product.product_name,
     barcode: product.barcode,
     category: product.category,
+    costPrice,
     
     forecastedDailyUnits,
     forecastedWeeklyUnits,

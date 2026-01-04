@@ -53,6 +53,7 @@ export interface ForecastTableItem {
   recommendedQty: number;
   stockStatus: string;
   confidence: string;
+  costPrice: number; // Supply cost for budgeting
 }
 
 // =============================================================================
@@ -95,6 +96,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
         recommendedQty: f.suggestedReorderQty,
         stockStatus: f.stockStatus,
         confidence: f.confidence,
+        costPrice: f.costPrice,
       }));
     
     return {
@@ -1192,6 +1194,194 @@ export async function getForecastData(): Promise<ForecastDataPoint[]> {
   } catch (error) {
     console.error("[Analytics] Error fetching forecast data:", error);
     return [];
+  }
+}
+
+// =============================================================================
+// Product-Specific Demand Forecast (Quantity-based)
+// =============================================================================
+
+export interface DemandForecastDataPoint {
+  date: string;
+  historical: number | null;  // Units sold
+  forecast: number | null;    // Predicted units
+  forecastUpper: number | null;
+  forecastLower: number | null;
+  bridge: number | null;
+  isEvent: boolean;
+  eventName?: string;
+}
+
+export interface ProductDemandInfo {
+  productId: number;
+  productName: string;
+  productImage: string | null;
+  currentStock: number;
+  category: string;
+}
+
+/**
+ * Get demand forecast data in UNITS (quantity), not revenue.
+ * If productId is provided, returns product-specific data.
+ * Otherwise returns total store demand.
+ */
+export async function getDemandForecastData(productId?: number | null): Promise<{
+  data: DemandForecastDataPoint[];
+  product: ProductDemandInfo | null;
+  totalStoreDemand: number;
+}> {
+  try {
+    const today = startOfDay(new Date());
+    const past7Days = subDays(today, 7);
+    const next7Days = new Date(today);
+    next7Days.setDate(next7Days.getDate() + 7);
+    
+    let product: ProductDemandInfo | null = null;
+    
+    // If productId provided, fetch product info
+    if (productId) {
+      const productData = await prisma.product.findUnique({
+        where: { product_id: productId },
+        include: {
+          inventory: { select: { current_stock: true } },
+        },
+      });
+      
+      if (productData) {
+        product = {
+          productId: productData.product_id,
+          productName: productData.product_name,
+          productImage: productData.image_url,
+          currentStock: productData.inventory?.current_stock ?? 0,
+          category: productData.category,
+        };
+      }
+    }
+    
+    // Get historical sales data (quantity)
+    const transactionItems = await prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          created_at: { gte: past7Days, lt: today },
+          status: "COMPLETED",
+        },
+        ...(productId ? { product_id: productId } : {}),
+      },
+      select: {
+        quantity: true,
+        transaction: { select: { created_at: true } },
+      },
+    });
+    
+    // Aggregate historical by day (quantities)
+    const historicalMap = new Map<string, number>();
+    for (const item of transactionItems) {
+      const dateKey = format(item.transaction.created_at, "yyyy-MM-dd");
+      historicalMap.set(dateKey, (historicalMap.get(dateKey) ?? 0) + item.quantity);
+    }
+    
+    // Get active events for next 7 days
+    const events = await prisma.eventLog.findMany({
+      where: {
+        start_date: { lte: next7Days },
+        end_date: { gte: today },
+        is_active: true,
+      },
+    });
+    
+    // Calculate average daily quantity
+    const historicalValues = Array.from(historicalMap.values());
+    const avgDailyQty = historicalValues.length > 0
+      ? historicalValues.reduce((a, b) => a + b, 0) / historicalValues.length
+      : 0;
+    
+    // Calculate total store demand (sum of all forecast days)
+    const totalStoreDemand = Math.round(avgDailyQty * 7);
+    
+    // Build the data points
+    const result: DemandForecastDataPoint[] = [];
+    let lastHistoricalValue = 0;
+    let firstForecastValue = 0;
+    
+    // Past 7 days (historical)
+    for (let i = 6; i >= 0; i--) {
+      const date = subDays(today, i + 1);
+      const dateKey = format(date, "yyyy-MM-dd");
+      const dateLabel = format(date, "MMM d");
+      const historicalValue = historicalMap.get(dateKey) ?? 0;
+      
+      if (i === 0) {
+        lastHistoricalValue = historicalValue;
+      }
+      
+      result.push({
+        date: dateLabel,
+        historical: historicalValue,
+        forecast: null,
+        forecastUpper: null,
+        forecastLower: null,
+        bridge: null,
+        isEvent: false,
+      });
+    }
+    
+    // Today + Next 7 days (forecast)
+    for (let i = 0; i <= 7; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() + i);
+      const dateLabel = format(date, "MMM d");
+      
+      // Check for events
+      const activeEvent = events.find(e => {
+        const eventStart = startOfDay(e.start_date);
+        const eventEnd = endOfDay(e.end_date);
+        return date >= eventStart && date <= eventEnd;
+      });
+      
+      // Simple forecast with event multiplier
+      let forecastValue = avgDailyQty;
+      if (activeEvent && activeEvent.multiplier) {
+        forecastValue *= Number(activeEvent.multiplier);
+      }
+      
+      // Add some variance
+      forecastValue *= (0.9 + Math.random() * 0.2);
+      forecastValue = Math.round(forecastValue);
+      
+      if (i === 0) {
+        firstForecastValue = forecastValue;
+      }
+      
+      // Confidence interval (±20%)
+      const confidenceMargin = 0.2;
+      const upper = Math.round(forecastValue * (1 + confidenceMargin));
+      const lower = Math.round(forecastValue * (1 - confidenceMargin));
+      
+      result.push({
+        date: dateLabel,
+        historical: null,
+        forecast: forecastValue,
+        forecastUpper: upper,
+        forecastLower: lower,
+        bridge: null,
+        isEvent: !!activeEvent,
+        eventName: activeEvent?.name,
+      });
+    }
+    
+    // Add bridge data
+    const lastHistoricalIdx = result.findIndex(r => r.forecast !== null) - 1;
+    const firstForecastIdx = lastHistoricalIdx + 1;
+    
+    if (lastHistoricalIdx >= 0 && firstForecastIdx < result.length) {
+      result[lastHistoricalIdx].bridge = lastHistoricalValue;
+      result[firstForecastIdx].bridge = firstForecastValue;
+    }
+    
+    return { data: result, product, totalStoreDemand };
+  } catch (error) {
+    console.error("[Analytics] Error fetching demand forecast:", error);
+    return { data: [], product: null, totalStoreDemand: 0 };
   }
 }
 
