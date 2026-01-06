@@ -34,6 +34,7 @@ interface ParsedRow {
   reorder_level?: string;
   supplier_name?: string;
   reference?: string;
+  expiry_date?: string;
 }
 
 interface ValidationError {
@@ -155,6 +156,22 @@ export function CSVImportDialog({
 
       const reorderLevel = row.reorder_level ? parseInt(row.reorder_level) : 10;
 
+      // Parse expiry date if provided (YYYY-MM-DD format)
+      let expiryDate: Date | null = null;
+      if (row.expiry_date?.trim()) {
+        const dateStr = row.expiry_date.trim();
+        const parsedDate = new Date(dateStr);
+        if (isNaN(parsedDate.getTime())) {
+          errors.push({
+            row: rowNum,
+            field: "expiry_date",
+            message: `Invalid date format "${dateStr}". Use YYYY-MM-DD format.`,
+          });
+          return;
+        }
+        expiryDate = parsedDate;
+      }
+
       valid.push({
         name: row.name.trim(),
         category: row.category.trim(),
@@ -167,6 +184,7 @@ export function CSVImportDialog({
         reorder_level: isNaN(reorderLevel) ? 10 : reorderLevel,
         supplier_name: row.supplier_name?.trim() || null,
         reference: row.reference?.trim() || null,
+        expiry_date: expiryDate,
       });
     });
 
@@ -356,7 +374,8 @@ export function CSVImportDialog({
               <code className="bg-background px-1 rounded border border-border">image_url</code>,{" "}
               <code className="bg-background px-1 rounded border border-border">reorder_level</code>,{" "}
               <code className="bg-background px-1 rounded border border-border">supplier_name</code>,{" "}
-              <code className="bg-background px-1 rounded border border-border">reference</code>
+              <code className="bg-background px-1 rounded border border-border">reference</code>,{" "}
+              <code className="bg-background px-1 rounded border border-border">expiry_date</code> (YYYY-MM-DD)
             </p>
             <p className="text-secondary text-xs mt-1">
               💡 Tip: Use <code className="bg-background px-1 rounded border border-border">0</code> for prices if product is N/A or not priced.

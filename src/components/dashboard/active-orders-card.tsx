@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { differenceInMinutes } from "date-fns";
+import { differenceInMinutes, formatDistanceToNow } from "date-fns";
 import {
   IconPackage,
   IconEye,
   IconPrinter,
   IconClock,
   IconAlertTriangle,
+  IconUser,
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -42,7 +43,16 @@ const statusConfig = {
   },
 };
 
-const LATE_THRESHOLD_MINUTES = 15;
+const LATE_THRESHOLD_MINUTES = 20;
+
+// Format currency
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
 
 function OrderRow({ order, onView, onPrint }: { 
   order: IncomingOrder; 
@@ -50,91 +60,121 @@ function OrderRow({ order, onView, onPrint }: {
   onPrint: () => void;
 }) {
   const [isHovered, setIsHovered] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const config = statusConfig[order.status as keyof typeof statusConfig];
   
-  const minutesElapsed = differenceInMinutes(new Date(), new Date(order.order_date));
+  const orderDate = new Date(order.order_date);
+  const minutesElapsed = differenceInMinutes(new Date(), orderDate);
   const isLate = minutesElapsed >= LATE_THRESHOLD_MINUTES;
-  const timeDisplay = minutesElapsed < 1 ? "Just now" : `${minutesElapsed}m`;
   
-  // Get items summary
-  const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const firstItem = order.items[0];
-  const itemPreview = firstItem 
-    ? `${totalItems}x ${firstItem.product.product_name.slice(0, 10)}${firstItem.product.product_name.length > 10 ? '...' : ''}`
-    : `${totalItems} items`;
+  // Use formatDistanceToNow for human-readable time
+  const timeDisplay = formatDistanceToNow(orderDate, { addSuffix: true });
+  
+  // Calculate total
+  const totalAmount = order.items.reduce(
+    (sum, item) => sum + (item.price * item.quantity),
+    0
+  );
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors group border-b border-border/50 last:border-b-0 cursor-pointer"
+      className={cn(
+        "flex flex-col gap-1.5 px-3 py-2 hover:bg-muted/50 transition-colors group border-b border-border/50 last:border-b-0 cursor-pointer",
+        isLate && "bg-red-50/50 dark:bg-red-950/10"
+      )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={onView}
     >
-      {/* Order ID */}
-      <div className="font-mono text-xs font-medium text-foreground w-8 shrink-0">
-        #{order.order_id}
+      {/* Top Row: ID, Customer, Status, Time */}
+      <div className="flex items-center gap-2">
+        {/* Order ID */}
+        <div className="font-mono text-xs font-bold text-[#AC0F16] w-10 shrink-0">
+          #{order.order_id}
+        </div>
+        
+        {/* Customer Name + Avatar */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <div className="size-5 rounded-full bg-muted flex items-center justify-center shrink-0">
+            <IconUser className="size-3 text-muted-foreground" />
+          </div>
+          <span className="text-xs font-medium truncate">{order.customer.name}</span>
+        </div>
+        
+        {/* Status Badge */}
+        <Badge 
+          variant="outline" 
+          className={cn("text-[9px] px-1.5 py-0 h-5 shrink-0", config?.className)}
+        >
+          {config?.label}
+        </Badge>
+        
+        {/* Time Elapsed */}
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className={cn(
+                "flex items-center gap-0.5 text-[10px] font-medium shrink-0",
+                isLate ? "text-destructive" : "text-muted-foreground"
+              )}>
+                {isLate && <IconAlertTriangle className="size-3" />}
+                <IconClock className="size-3" />
+                <span className="max-w-[60px] truncate">{timeDisplay}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {orderDate.toLocaleString()}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        
+        {/* Actions - Show on Hover */}
+        <div className={cn(
+          "flex items-center gap-0.5 transition-opacity shrink-0",
+          isHovered ? "opacity-100" : "opacity-0"
+        )}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0"
+            onClick={(e) => { e.stopPropagation(); onView(); }}
+          >
+            <IconEye className="size-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0"
+            onClick={(e) => { e.stopPropagation(); onPrint(); }}
+          >
+            <IconPrinter className="size-3" />
+          </Button>
+        </div>
       </div>
       
-      {/* Customer + Items - flexible width */}
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex-1 min-w-0 truncate text-xs text-muted-foreground">
-              {itemPreview}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="max-w-[200px]">
-            <p className="text-xs font-medium mb-1">{order.customer.name}</p>
-            <div className="space-y-0.5">
-              {order.items.map((item) => (
-                <div key={item.order_item_id} className="text-[10px]">
-                  {item.quantity}x {item.product.product_name}
-                </div>
-              ))}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      
-      {/* Status Badge */}
-      <Badge 
-        variant="outline" 
-        className={cn("text-[9px] px-1.5 py-0 h-5 shrink-0", config?.className)}
-      >
-        {config?.label}
-      </Badge>
-      
-      {/* Time Elapsed */}
-      <div className={cn(
-        "flex items-center gap-0.5 text-[10px] font-medium tabular-nums shrink-0",
-        isLate ? "text-destructive" : "text-muted-foreground"
-      )}>
-        {isLate && <IconAlertTriangle className="size-3" />}
-        <IconClock className="size-3" />
-        {timeDisplay}
-      </div>
-      
-      {/* Actions - Show on Hover */}
-      <div className={cn(
-        "flex items-center gap-0.5 transition-opacity shrink-0",
-        isHovered ? "opacity-100" : "opacity-0"
-      )}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-5 w-5 p-0"
-          onClick={(e) => { e.stopPropagation(); onView(); }}
+      {/* Bottom Row: Item Pills (Horizontal Scroll) + Total */}
+      <div className="flex items-center gap-2">
+        {/* Horizontal Scrollable Item Pills */}
+        <div 
+          ref={scrollRef}
+          className="flex-1 overflow-x-auto scrollbar-hide flex items-center gap-1"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          <IconEye className="size-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-5 w-5 p-0"
-          onClick={(e) => { e.stopPropagation(); onPrint(); }}
-        >
-          <IconPrinter className="size-3" />
-        </Button>
+          {order.items.map((item) => (
+            <Badge
+              key={item.order_item_id}
+              variant="secondary"
+              className="text-[9px] px-1.5 py-0.5 h-auto whitespace-nowrap bg-muted/80 text-muted-foreground shrink-0"
+            >
+              {item.product.product_name.slice(0, 12)}{item.product.product_name.length > 12 ? '…' : ''} x{item.quantity}
+            </Badge>
+          ))}
+        </div>
+        
+        {/* Total Amount */}
+        <div className="font-mono text-xs font-bold text-foreground shrink-0">
+          {formatCurrency(totalAmount)}
+        </div>
       </div>
     </div>
   );
@@ -201,13 +241,11 @@ export function ActiveOrdersCard({ incomingOrders, className }: ActiveOrdersCard
         </div>
       </div>
       
-      {/* Table Header - Simplified */}
+      {/* Table Header - Rich Layout */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-b text-[10px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-        <div className="w-8">ID</div>
-        <div className="flex-1">CUSTOMER · ITEMS</div>
-        <div className="w-16 text-center">STATUS</div>
-        <div className="w-12 text-center">TIME</div>
-        <div className="w-12 text-center">ACTIONS</div>
+        <div className="w-10">ID</div>
+        <div className="flex-1">ORDER DETAILS</div>
+        <div className="w-14 text-right">TOTAL</div>
       </div>
       
       {/* Orders List */}

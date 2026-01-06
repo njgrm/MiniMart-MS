@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
-import { PackagePlus, Truck, DollarSign, Hash, FileText, Upload, X, ImageIcon } from "lucide-react";
+import { PackagePlus, Truck, DollarSign, Hash, FileText, Upload, X, ImageIcon, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,6 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +34,7 @@ interface RestockDialogProps {
     product_name: string;
     current_stock: number;
     cost_price?: number;
+    nearest_expiry_date?: Date | string | null;
   } | null;
   onSuccess?: (newStock: number) => void;
 }
@@ -49,6 +57,7 @@ export function RestockDialog({
   const [reason, setReason] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [newExpiryDate, setNewExpiryDate] = useState<Date | undefined>(undefined);
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -60,6 +69,7 @@ export function RestockDialog({
       setReason("");
       setReceiptFile(null);
       setReceiptPreview(null);
+      setNewExpiryDate(undefined);
       setError(null);
     }
   }, [open, product]);
@@ -118,6 +128,7 @@ export function RestockDialog({
         costPrice: costPrice ? parseFloat(costPrice) : undefined,
         reason: reason.trim() || undefined,
         receiptImageUrl,
+        newExpiryDate: newExpiryDate || undefined,
       });
 
       if (result.success) {
@@ -224,6 +235,40 @@ export function RestockDialog({
               </div>
               <p className="text-xs text-muted-foreground">
                 This will update the product&apos;s cost price for future profit calculations
+              </p>
+            </div>
+
+            {/* New Expiry Date - Optional */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <CalendarIcon className="h-3.5 w-3.5" />
+                Batch Expiry Date
+              </Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !newExpiryDate && "text-muted-foreground"
+                    )}
+                    type="button"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newExpiryDate ? format(newExpiryDate, "PPP") : "Select expiry date for this batch"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newExpiryDate}
+                    onSelect={setNewExpiryDate}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                This creates a new batch. Stock is auto-deducted from oldest-expiring batches first (FEFO).
               </p>
             </div>
 

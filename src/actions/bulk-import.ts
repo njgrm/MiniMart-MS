@@ -19,6 +19,7 @@ export interface BulkProductInput {
   reorder_level?: number;
   supplier_name?: string | null;
   reference?: string | null;
+  expiry_date?: Date | null;
 }
 
 export interface BulkImportResult {
@@ -200,6 +201,7 @@ export async function bulkCreateProducts(
             cost_price: new Decimal(product.cost_price ?? 0),
             barcode: product.barcode || null,
             image_url: finalImageUrl,
+            nearest_expiry_date: product.expiry_date || null,
           },
         });
 

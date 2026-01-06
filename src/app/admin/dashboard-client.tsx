@@ -275,7 +275,7 @@ export function DashboardClient({
 
   return (
     <div className="flex flex-col gap-4 pb-6 relative">
-      {/* Combined Header Row: Date Picker + Presets + Period Label */}
+      {/* Combined Header Row: Date Picker + Presets + Quick Actions */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Date Range Picker */}
         <DateRangePicker 
@@ -303,24 +303,53 @@ export function DashboardClient({
           ))}
         </div>
         
-        {/* Separator */}
-        <div className="h-6 w-px bg-border hidden lg:block" />
+        {/* Spacer to push actions to right */}
+        <div className="flex-1" />
         
-        {/* Period Label */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{displayStats.periodLabel}</span>
-          {customStats && (
-            <span className="text-xs text-muted-foreground">
-              ({displayStats.periodDays} days • vs prev {displayStats.periodDays} days)
-            </span>
-          )}
+        {/* Quick Actions - Command Bar (moved from bottom) */}
+        <div className="flex items-center gap-1.5">
+          <Button 
+            size="sm"
+            className="h-8 px-3 gap-1.5 bg-[#AC0F16] hover:bg-[#AC0F16]/90 text-white"
+            onClick={() => router.push("/admin/pos")}
+          >
+            <IconReceipt className="size-3.5" />
+            <span className="hidden sm:inline text-xs">New Sale</span>
+          </Button>
+          <Button 
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 gap-1.5"
+            onClick={() => router.push("/admin/inventory")}
+          >
+            <IconPackage className="size-3.5 text-[#F1782F]" />
+            <span className="hidden sm:inline text-xs">Inventory</span>
+          </Button>
+          <Button 
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 gap-1.5"
+            onClick={() => router.push("/admin/orders")}
+          >
+            <IconClock className="size-3.5 text-[#2EAFC5]" />
+            <span className="hidden sm:inline text-xs">Orders</span>
+          </Button>
+          <Button 
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 gap-1.5"
+            onClick={() => router.push("/admin/sales/financial")}
+          >
+            <IconChartBar className="size-3.5 text-[#AC0F16]" />
+            <span className="hidden lg:inline text-xs">Reports</span>
+          </Button>
         </div>
         
         {/* Loading indicator */}
         {isPending && (
-          <div className="flex items-center gap-1.5 text-muted-foreground ml-auto">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
             <IconRefresh className="size-3.5 animate-spin" />
-            <span className="text-xs">Loading...</span>
+            <span className="text-xs hidden sm:inline">Loading...</span>
           </div>
         )}
       </div>
@@ -564,8 +593,11 @@ export function DashboardClient({
                         <p className="text-xs font-medium truncate text-foreground">Sale #{tx.receipt_no.slice(-4)}</p>
                         <span className="text-[10px] ml-2 text-muted-foreground">{formatTime(tx.created_at)}</span>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">{tx.itemsCount} items • {formatCurrency(tx.total_amount)}</p>
+                      <p className="text-[10px] text-muted-foreground">{tx.itemsCount} items</p>
                     </div>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      +{formatCurrency(tx.total_amount)}
+                    </span>
                     <IconArrowRight className="size-3.5 text-muted-foreground" />
                   </button>
                 ))}
@@ -576,42 +608,6 @@ export function DashboardClient({
             <p className="text-[10px] text-muted-foreground">{formatDateLong(new Date())}</p>
           </div>
         </div>
-      </div>
-
-      {/* Quick Actions Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Button 
-          variant="outline" 
-          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#AC0F16]/50"
-          onClick={() => router.push("/admin/pos")}
-        >
-          <IconReceipt className="size-4 text-[#AC0F16]" />
-          <span>New Sale</span>
-        </Button>
-        <Button 
-          variant="outline" 
-          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#F1782F]/50"
-          onClick={() => router.push("/admin/inventory")}
-        >
-          <IconPackage className="size-4 text-[#F1782F]" />
-          <span>Inventory</span>
-        </Button>
-        <Button 
-          variant="outline" 
-          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#2EAFC5]/50"
-          onClick={() => router.push("/admin/orders")}
-        >
-          <IconClock className="size-4 text-[#2EAFC5]" />
-          <span>Orders</span>
-        </Button>
-        <Button 
-          variant="outline" 
-          className="h-auto py-3 flex items-center justify-center gap-2 text-xs bg-card hover:bg-muted border-2 hover:border-[#AC0F16]/50"
-          onClick={() => router.push("/admin/sales/financial")}
-        >
-          <IconChartBar className="size-4 text-[#AC0F16]" />
-          <span>Reports</span>
-        </Button>
       </div>
     </div>
   );

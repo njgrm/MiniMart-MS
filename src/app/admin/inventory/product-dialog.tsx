@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { Camera, X, Wand2, Truck, FileText, ImageIcon } from "lucide-react";
+import { Camera, X, Wand2, Truck, FileText, ImageIcon, CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,12 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Separator } from "@/components/ui/separator";
 import { createProduct, updateProduct } from "@/actions/product";
 import { uploadImage, uploadImageRaw } from "@/actions/upload";
 import { PRODUCT_CATEGORIES } from "@/lib/validations/product";
 import { BarcodeScanner } from "@/components/barcode-scanner";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { cn } from "@/lib/utils";
 import type { ProductData } from "./inventory-client";
 
 interface ProductDialogProps {
@@ -63,6 +71,7 @@ export function ProductDialog({
   const [reference, setReference] = useState("");
   const [receiptImageFile, setReceiptImageFile] = useState<File | null>(null);
   const [receiptImagePreview, setReceiptImagePreview] = useState<string | null>(null);
+  const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
 
   // Reset form when dialog opens/closes or product changes
   useEffect(() => {
@@ -98,6 +107,7 @@ export function ProductDialog({
         setReference("");
         setReceiptImageFile(null);
         setReceiptImagePreview(null);
+        setExpiryDate(undefined);
       }
       setError(null);
     }
@@ -191,11 +201,15 @@ export function ProductDialog({
             category,
             retail_price: parseFloat(retailPrice),
             wholesale_price: parseFloat(wholesalePrice),
+            cost_price: parseFloat(costPrice || "0"),
             current_stock: stockNum,
             reorder_level: reorderNum,
+            auto_reorder: true, // Default value for existing products
+            lead_time_days: 7,  // Default value
             barcode: barcode || null,
             image_url: imagePath,
             status: stockNum <= reorderNum ? "LOW_STOCK" : "IN_STOCK",
+            nearest_expiry_date: product.nearest_expiry_date || null,
           });
           onOpenChange(false);
         } else {
@@ -217,6 +231,8 @@ export function ProductDialog({
           supplier_name: supplierName || null,
           reference: reference || null,
           receipt_image_url: receiptImagePath,
+          // Expiry date for initial stock
+          expiry_date: expiryDate || null,
         });
 
         if (result.success && result.data) {
@@ -229,11 +245,15 @@ export function ProductDialog({
             category,
             retail_price: parseFloat(retailPrice),
             wholesale_price: parseFloat(wholesalePrice),
+            cost_price: parseFloat(costPrice || "0"),
             current_stock: stockNum,
             reorder_level: reorderNum,
+            auto_reorder: true, // Default for new products
+            lead_time_days: 7,  // Default value
             barcode: barcode || null,
             image_url: imagePath,
             status: stockNum <= reorderNum ? "LOW_STOCK" : "IN_STOCK",
+            nearest_expiry_date: expiryDate || null,
           });
           onOpenChange(false);
         } else {
@@ -455,6 +475,42 @@ export function ProductDialog({
                     />
                   </div>
                 </div>
+
+                {/* Expiry Date - Only shown when creating new product */}
+                {!isEditing && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label>Expiry Date (Initial Stock)</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !expiryDate && "text-muted-foreground"
+                            )}
+                            disabled={isPending}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {expiryDate ? format(expiryDate, "PPP") : "Select date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={expiryDate}
+                            onSelect={setExpiryDate}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-xs text-muted-foreground">
+                        Optional: Track expiry for perishable goods
+                      </p>
+                    </div>
+                    <div></div>
+                  </div>
+                )}
 
                 {/* Stock Movement Tracking - Shown when creating new product */}
                 {!isEditing && (

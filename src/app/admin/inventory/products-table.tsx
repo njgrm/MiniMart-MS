@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useTransition } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { format, differenceInDays, isAfter, isBefore, startOfDay } from "date-fns";
 import {
   useReactTable,
   getCoreRowModel,
@@ -34,6 +36,9 @@ import {
   Wand2,
   TrendingUp,
   TrendingDown,
+  CalendarClock,
+  Layers,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -291,9 +296,25 @@ export function ProductsTable({
         cell: ({ row }) => {
           const stock = row.getValue("current_stock") as number;
           const reorderLevel = row.original.reorder_level;
+          const autoReorder = row.original.auto_reorder;
           return (
-            <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= reorderLevel ? "text-secondary" : ""}`}>
-              {stock}
+            <div className="flex flex-col gap-0.5">
+              <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= reorderLevel ? "text-secondary" : ""}`}>
+                {stock}
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span>ROP: {reorderLevel}</span>
+                {autoReorder && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-amber-500 cursor-help">⚡Auto</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs max-w-[180px]">
+                      <p>Dynamic Reorder Point based on sales velocity</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
             </div>
           );
         },
@@ -359,6 +380,62 @@ export function ProductsTable({
           return getPriority(stockA, statusA) - getPriority(stockB, statusB);
         },
       },
+      // Expiry Date Column
+      {
+        accessorKey: "nearest_expiry_date",
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
+          >
+            <CalendarClock className="mr-1.5 h-3 w-3" />
+            Expiry
+            <ArrowUpDown className="ml-2 h-3 w-3" />
+          </Button>
+        ),
+        cell: ({ row }) => {
+          const expiryDate = row.original.nearest_expiry_date;
+          
+          if (!expiryDate) {
+            return <span className="text-xs text-muted-foreground">—</span>;
+          }
+
+          const expiry = new Date(expiryDate);
+          const today = startOfDay(new Date());
+          const daysUntilExpiry = differenceInDays(expiry, today);
+
+          // Already expired
+          if (isBefore(expiry, today)) {
+            return (
+              <Badge variant="destructive" className="text-xs font-mono">
+                Expired
+              </Badge>
+            );
+          }
+
+          // Expiring within 7 days
+          if (daysUntilExpiry <= 7) {
+            return (
+              <Badge variant="secondary" className="text-xs font-mono">
+                {daysUntilExpiry === 0 ? "Today" : daysUntilExpiry === 1 ? "Tomorrow" : `${daysUntilExpiry}d`}
+              </Badge>
+            );
+          }
+
+          // Normal expiry date (more than 7 days)
+          return (
+            <span className="text-xs text-muted-foreground font-mono">
+              {format(expiry, "MMM d, yyyy")}
+            </span>
+          );
+        },
+        sortingFn: (rowA, rowB) => {
+          const dateA = rowA.original.nearest_expiry_date ? new Date(rowA.original.nearest_expiry_date).getTime() : Infinity;
+          const dateB = rowB.original.nearest_expiry_date ? new Date(rowB.original.nearest_expiry_date).getTime() : Infinity;
+          return dateA - dateB;
+        },
+      },
       // Smart Recommendation Column (AI-Powered)
       {
         id: "recommendation",
@@ -386,9 +463,23 @@ export function ProductsTable({
             ? Math.ceil(reorderLevel * 1.5 - stock) 
             : 0;
           
+          // FIXED: Show "Optimal" state for healthy items instead of empty dash
           if (recommendedQty <= 0) {
             return (
-              <span className="text-xs text-[#6c5e5d]">—</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 text-xs text-[#2EAFC5] cursor-help">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Optimal</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent 
+                  side="left" 
+                  className="max-w-[200px] p-3 bg-popover text-popover-foreground border shadow-md"
+                >
+                  <p className="text-xs">Stock levels are healthy. No restock needed at this time.</p>
+                </TooltipContent>
+              </Tooltip>
             );
           }
           
@@ -428,7 +519,10 @@ export function ProductsTable({
                   +{recommendedQty}
                 </Badge>
               </TooltipTrigger>
-              <TooltipContent side="left" className="max-w-[250px] p-3">
+              <TooltipContent 
+                side="left" 
+                className="max-w-[250px] p-3 bg-popover text-popover-foreground border shadow-md"
+              >
                 <div className="space-y-2">
                   <p className="font-medium text-sm">Restock Recommendation</p>
                   <p className="text-xs text-muted-foreground">{getReason()}</p>
@@ -467,6 +561,12 @@ export function ProductsTable({
                 <DropdownMenuItem onClick={() => onViewHistory?.(product)}>
                   <History className="mr-2 h-4 w-4 text-blue-600" />
                   View History
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/admin/inventory/${product.product_id}/batches`}>
+                    <Layers className="mr-2 h-4 w-4 text-purple-600" />
+                    View Batches
+                  </Link>
                 </DropdownMenuItem>
                 
                 <DropdownMenuSeparator />

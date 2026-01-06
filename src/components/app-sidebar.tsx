@@ -12,6 +12,7 @@ import {
   ClipboardList,
   History,
   BarChart3,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,8 +69,13 @@ const navItems: NavItem[] = [
   },
   {
     href: "/admin/reports",
-    label: "Reports",
+    label: "Report",
     icon: BarChart3,
+  },
+  {
+    href: "/admin/audit-logs",
+    label: "Audit Logs",
+    icon: FileText,
   },
 ];
 

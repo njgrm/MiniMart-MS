@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { Decimal } from "@prisma/client/runtime/library";
 import { revalidatePath } from "next/cache";
+import { deductStockFEFO, syncProductFromBatches } from "./inventory";
 
 type PaymentMethod = "CASH" | "GCASH";
 type CustomerType = "walkin" | "vendor";
@@ -72,21 +73,55 @@ export async function createTransaction(input: CreateTransactionInput) {
         products.map((p) => [p.product_id, { cost_price: Number(p.cost_price), retail_price: Number(p.retail_price) }])
       );
 
-      // Update inventory and validate stock
+      // =========================================================================
+      // FEFO Batch Deduction: Deduct from oldest-expiring batches first
+      // This ensures we sell stock that expires soonest to minimize spoilage
+      // =========================================================================
+      
+      // Track expired items for potential warning (but still allow sale)
+      const expiredItemsSold: { productId: number; qty: number }[] = [];
+      
       for (const item of items) {
-        const inventory = await tx.inventory.findUnique({
-          where: { product_id: item.product_id },
-          select: { current_stock: true },
+        // Check if product has any batches (new system)
+        const batchCount = await tx.inventoryBatch.count({
+          where: { product_id: item.product_id, quantity: { gt: 0 } },
         });
 
-        if (!inventory || inventory.current_stock < item.quantity) {
-          throw new Error("Insufficient stock for one or more items.");
+        if (batchCount > 0) {
+          // Use FEFO deduction from batches
+          const deductResult = await deductStockFEFO(tx, item.product_id, item.quantity);
+          
+          if (!deductResult.success) {
+            throw new Error(`Insufficient stock for product ID ${item.product_id}. ${deductResult.error}`);
+          }
+
+          // Track if any expired stock was sold
+          const expiredQty = deductResult.batchesUsed
+            .filter(b => b.wasExpired)
+            .reduce((sum, b) => sum + b.quantityUsed, 0);
+          
+          if (expiredQty > 0) {
+            expiredItemsSold.push({ productId: item.product_id, qty: expiredQty });
+          }
+
+          // Sync the inventory.current_stock and product.nearest_expiry_date
+          await syncProductFromBatches(tx, item.product_id);
+        } else {
+          // Fallback: Legacy products without batches - use old inventory decrement
+          const inventory = await tx.inventory.findUnique({
+            where: { product_id: item.product_id },
+            select: { current_stock: true },
+          });
+
+          if (!inventory || inventory.current_stock < item.quantity) {
+            throw new Error("Insufficient stock for one or more items.");
+          }
+
+          await tx.inventory.update({
+            where: { product_id: item.product_id },
+            data: { current_stock: { decrement: item.quantity } },
+          });
         }
-
-        await tx.inventory.update({
-          where: { product_id: item.product_id },
-          data: { current_stock: { decrement: item.quantity } },
-        });
       }
 
       // Calculate subtotal from items

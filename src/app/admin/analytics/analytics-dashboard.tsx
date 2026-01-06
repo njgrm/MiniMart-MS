@@ -1834,8 +1834,8 @@ function ForecastingTable({
                   <TableHead className="h-10 bg-muted/30 text-right w-[60px]">
                     <SortButton field="stock">Stock</SortButton>
                   </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[70px]">
-                    <SortButton field="velocity">Velocity</SortButton>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[80px]">
+                    <SortButton field="velocity">Velocity (30d)</SortButton>
                   </TableHead>
                   <TableHead className="h-10 bg-muted/30 text-right w-[70px]">
                     <SortButton field="demand"><span className="font-bold text-foreground">Demand</span></SortButton>

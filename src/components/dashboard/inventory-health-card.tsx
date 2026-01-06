@@ -257,7 +257,7 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
         </TabsList>
 
         <TabsContent value="low-stock" className="flex-1 mt-0 px-2">
-          <ScrollArea className="h-[280px]">
+          <ScrollArea className="h-[57vh]">
             {data.lowStockItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
                 <IconPackage className="size-8 mb-2 opacity-30" />
@@ -280,7 +280,7 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
         </TabsContent>
 
         <TabsContent value="expiring" className="flex-1 mt-0 px-2">
-          <ScrollArea className="h-[280px]">
+          <ScrollArea className="h-[400px]">
             {data.expiringItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
                 <IconClock className="size-8 mb-2 opacity-30" />

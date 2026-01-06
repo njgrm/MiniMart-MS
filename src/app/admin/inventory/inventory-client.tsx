@@ -22,9 +22,12 @@ export interface ProductData {
   cost_price: number;
   current_stock: number;
   reorder_level: number;
+  auto_reorder: boolean;
+  lead_time_days: number;
   barcode: string | null;
   image_url: string | null;
   status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+  nearest_expiry_date: Date | string | null;
 }
 
 interface InventoryClientProps {

@@ -572,7 +572,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
 
   return (
     <div
-      className="w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground bg-background"
+      className="w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground bg-card/70 dark:bg-dark-foreground"
       onClick={handleMainAreaClick}
     >
       {/* Left Panel - Transaction Table (75%) */}
@@ -622,7 +622,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                   }
                 }}
                 placeholder={isSearchMode ? "Type product name..." : "Type barcode or search product name(F2)"}
-                className="h-11 w-full pl-10 text-lg font-mono bg-background border-2 border-primary/20 focus:border-primary"
+                className="h-11 w-full pl-10 text-lg font-mono bg-card/70 border-2 border-primary/20 focus:border-primary"
                 autoComplete="off"
               />
             </div>

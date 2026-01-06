@@ -505,13 +505,32 @@ export async function getForecast(input: ForecastInput): Promise<ForecastResult>
   const allQuantities = salesHistory.map(d => d.quantity);
   const cleanQuantities = cleanDays.map(d => d.quantity);
   
-  const avgDailyVelocity = allQuantities.length > 0
-    ? allQuantities.reduce((a, b) => a + b, 0) / allQuantities.length
+  // ==========================================================================
+  // ROLLING 30-DAY VELOCITY (Critical Fix)
+  // ==========================================================================
+  // Problem: Dividing by # of data points inflates velocity when sales are sparse.
+  // Solution: Always divide by calendar days (30), not by data point count.
+  //
+  // Example: 100 units sold over 60 days with 15 transaction days
+  //   OLD (Wrong): 100/15 = 6.67/day (inflated!)
+  //   NEW (Correct): Sum of last 30 days' sales / 30 = actual velocity
+  // ==========================================================================
+  
+  const totalSalesIn30Days = allQuantities.reduce((a, b) => a + b, 0);
+  const totalCleanSalesIn30Days = cleanQuantities.reduce((a, b) => a + b, 0);
+  
+  // Calculate actual calendar days in our lookback window
+  const actualCalendarDays = Math.min(lookbackDays, 30);
+  
+  // Rolling 30-day velocity = total sales / 30 (or actual days if < 30)
+  const avgDailyVelocity = actualCalendarDays > 0
+    ? totalSalesIn30Days / actualCalendarDays
     : 0;
   
-  const cleanAvgDailyVelocity = cleanQuantities.length > 0
-    ? cleanQuantities.reduce((a, b) => a + b, 0) / cleanQuantities.length
-    : avgDailyVelocity; // Fallback to all data if no clean days
+  // Clean velocity (organic sales only, same divisor)
+  const cleanAvgDailyVelocity = actualCalendarDays > 0
+    ? totalCleanSalesIn30Days / actualCalendarDays
+    : avgDailyVelocity;
   
   // Calculate WMA on clean data
   const wmaBaseline = cleanQuantities.length > 0
@@ -881,3 +900,161 @@ export async function analyzeProduct(
     activeEvents: forecast.activeEvents,
   };
 }
+
+// =============================================================================
+// Dynamic Reorder Point (ROP) Calculation
+// =============================================================================
+
+export interface DynamicROPResult {
+  productId: number;
+  reorderPoint: number;
+  isAutoCalculated: boolean;
+  formula: string;
+  breakdown: {
+    dailyVelocity: number;
+    leadTimeDays: number;
+    safetyBuffer: number;
+    manualLevel: number;
+  };
+}
+
+/**
+ * Calculate Dynamic Reorder Point
+ * 
+ * Formula (when auto_reorder = true AND 30+ days of sales history):
+ *   ROP = (Daily_Velocity_30_Day_Avg * lead_time_days) + (Daily_Velocity * 3)
+ *   - Covers the lead time until restock arrives
+ *   - Plus a 3-day safety buffer for demand variability
+ * 
+ * Falls back to manual reorder_level when:
+ *   - auto_reorder is FALSE
+ *   - Less than 30 days of sales history
+ */
+export async function getDynamicReorderPoint(productId: number): Promise<DynamicROPResult> {
+  const product = await prisma.product.findUnique({
+    where: { product_id: productId },
+    include: { inventory: true },
+  });
+
+  if (!product || !product.inventory) {
+    return {
+      productId,
+      reorderPoint: 10, // Default fallback
+      isAutoCalculated: false,
+      formula: "Default (no inventory data)",
+      breakdown: {
+        dailyVelocity: 0,
+        leadTimeDays: 7,
+        safetyBuffer: 0,
+        manualLevel: 10,
+      },
+    };
+  }
+
+  const { inventory } = product;
+  const manualLevel = inventory.reorder_level;
+  const autoReorder = inventory.auto_reorder;
+  const leadTimeDays = inventory.lead_time_days;
+
+  // If auto_reorder is disabled, use manual level
+  if (!autoReorder) {
+    return {
+      productId,
+      reorderPoint: manualLevel,
+      isAutoCalculated: false,
+      formula: "Manual (auto_reorder disabled)",
+      breakdown: {
+        dailyVelocity: 0,
+        leadTimeDays,
+        safetyBuffer: 0,
+        manualLevel,
+      },
+    };
+  }
+
+  // Check sales history length (need 30+ days for reliable velocity)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const salesHistory = await prisma.transactionItem.findMany({
+    where: {
+      product_id: productId,
+      transaction: {
+        created_at: { gte: thirtyDaysAgo },
+        status: "COMPLETED",
+      },
+    },
+    include: {
+      transaction: { select: { created_at: true } },
+    },
+  });
+
+  // Calculate days of sales history
+  const uniqueDates = new Set(
+    salesHistory.map((item) =>
+      item.transaction.created_at.toISOString().split("T")[0]
+    )
+  );
+  const salesHistoryLength = uniqueDates.size;
+
+  // If less than 30 days of history, fall back to manual
+  if (salesHistoryLength < 30) {
+    return {
+      productId,
+      reorderPoint: manualLevel,
+      isAutoCalculated: false,
+      formula: `Manual (only ${salesHistoryLength} days of history, need 30+)`,
+      breakdown: {
+        dailyVelocity: 0,
+        leadTimeDays,
+        safetyBuffer: 0,
+        manualLevel,
+      },
+    };
+  }
+
+  // Calculate 30-day average daily velocity
+  const totalQuantitySold = salesHistory.reduce((sum, item) => sum + item.quantity, 0);
+  const dailyVelocity = totalQuantitySold / 30;
+
+  // Dynamic ROP Formula:
+  // ROP = (Daily_Velocity * lead_time_days) + (Daily_Velocity * 3)
+  // The 3-day safety buffer accounts for demand variability
+  const safetyBuffer = dailyVelocity * 3;
+  const dynamicROP = Math.ceil((dailyVelocity * leadTimeDays) + safetyBuffer);
+
+  return {
+    productId,
+    reorderPoint: dynamicROP,
+    isAutoCalculated: true,
+    formula: `(${dailyVelocity.toFixed(1)}/day × ${leadTimeDays} days) + (${dailyVelocity.toFixed(1)} × 3 safety)`,
+    breakdown: {
+      dailyVelocity: Math.round(dailyVelocity * 10) / 10,
+      leadTimeDays,
+      safetyBuffer: Math.round(safetyBuffer),
+      manualLevel,
+    },
+  };
+}
+
+/**
+ * Batch calculate dynamic reorder points for all products
+ * Useful for inventory reports and bulk analysis
+ */
+export async function getAllDynamicReorderPoints(): Promise<Map<number, DynamicROPResult>> {
+  const products = await prisma.product.findMany({
+    where: { is_archived: false },
+    include: { inventory: true },
+    orderBy: { product_name: "asc" },
+  });
+
+  const results = new Map<number, DynamicROPResult>();
+
+  for (const product of products) {
+    const rop = await getDynamicReorderPoint(product.product_id);
+    results.set(product.product_id, rop);
+  }
+
+  return results;
+}
+

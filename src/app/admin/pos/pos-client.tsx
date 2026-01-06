@@ -209,14 +209,14 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
               ))}
             </div>
 
-            <div className="relative flex-1 bg-background border-border rounded-lg mt-0 mb-0">
+            <div className="relative flex-1 bg-card/70 border-border rounded-lg mt-0 mb-0">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground" />
               <Input
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search or scan barcode..."
-                className="h-9.25 rounded-lg pl-8 pr-10 text-sm bg-background"
+                className="h-9.25 rounded-lg pl-8 pr-10 text-sm bg-card/70 focus:ring-0 w-full"
               />
               <Button
                 type="button"
@@ -305,7 +305,7 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto px-4 ml-3 py-1 bg-background">
+        <div className="flex-1 overflow-y-auto px-4 ml-0 py-1 bg-card/70">
           <div className="flex items-center justify-between mb-3">
             
           </div>

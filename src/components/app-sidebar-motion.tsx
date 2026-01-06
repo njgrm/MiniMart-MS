@@ -16,6 +16,7 @@ import {
   IconSun,
   IconMoon,
   IconBrain,
+  IconFileText,
 } from "@tabler/icons-react";
 import {
   MotionSidebar,
@@ -74,6 +75,11 @@ const navItems: NavItem[] = [
     href: "/admin/reports",
     label: "Reports",
     icon: IconChartBar,
+  },
+  {
+    href: "/admin/audit-logs",
+    label: "Audit Logs",
+    icon: IconFileText,
   },
 ];
 

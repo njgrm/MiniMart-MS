@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Decimal } from "@prisma/client/runtime/library";
+import { logOrderCancel } from "@/lib/logger";
 
 /**
  * Order Status Types
@@ -228,13 +229,19 @@ export async function updateOrderStatus(
  * Revalidates both admin and vendor paths so both see the update
  */
 export async function cancelOrder(
-  orderId: number
+  orderId: number,
+  reason?: string
 ): Promise<{ success: boolean; error?: string; customerId?: number }> {
   try {
-    // First get the order with items to release allocated stock
+    // First get the order with items and customer to release allocated stock
     const order = await prisma.order.findUnique({
       where: { order_id: orderId },
       include: {
+        customer: {
+          select: {
+            name: true,
+          },
+        },
         items: {
           select: {
             product_id: true,
@@ -276,6 +283,15 @@ export async function cancelOrder(
     revalidatePath("/admin");
     revalidatePath("/vendor/history");
     revalidatePath("/vendor");
+    
+    // Audit log: Order cancelled
+    await logOrderCancel(
+      "Admin", // TODO: Get from session
+      orderId,
+      Number(order.total_amount),
+      order.customer?.name,
+      reason
+    );
     
     return { success: true, customerId: order.customer_id };
   } catch (error) {

@@ -9,6 +9,7 @@ import {
   type UpdateProductInput,
 } from "@/lib/validations/product";
 import { Decimal } from "@prisma/client/runtime/library";
+import { logActivity, logProductCreate, logProductUpdate, logProductDelete } from "@/lib/logger";
 
 export type ActionResult = {
   success: boolean;
@@ -40,9 +41,12 @@ export async function getProducts(includeArchived: boolean = false) {
     cost_price: Number(product.cost_price),
     current_stock: product.inventory?.current_stock ?? 0,
     reorder_level: product.inventory?.reorder_level ?? 10,
+    auto_reorder: product.inventory?.auto_reorder ?? true,
+    lead_time_days: product.inventory?.lead_time_days ?? 7,
     barcode: product.barcode,
     image_url: product.image_url,
     is_archived: product.is_archived,
+    nearest_expiry_date: product.nearest_expiry_date,
     status: (
       (product.inventory?.current_stock ?? 0) <= (product.inventory?.reorder_level ?? 10)
         ? "LOW_STOCK"
@@ -104,6 +108,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
     supplier_name,
     reference,
     receipt_image_url,
+    expiry_date,
   } = parsed.data;
 
   try {
@@ -140,6 +145,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
           cost_price: new Decimal(cost_price),
           barcode: barcode || null,
           image_url: typeof image_url === 'string' ? image_url : null,
+          nearest_expiry_date: expiry_date || null,
         },
       });
 
@@ -175,6 +181,24 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
     });
 
     revalidatePath("/admin/inventory");
+    
+    // Audit log: Product created (using centralized logger)
+    await logProductCreate(
+      "Admin", // TODO: Get from session
+      product.product_id,
+      product.product_name,
+      `Created product "${product.product_name}" in category "${category}" with initial stock of ${initial_stock} units.${barcode ? ` Barcode: ${barcode}.` : ""}`,
+      {
+        category,
+        retail_price,
+        wholesale_price,
+        cost_price,
+        initial_stock,
+        barcode: barcode || null,
+        expiry_date: expiry_date?.toISOString() || null,
+      }
+    );
+    
     // Serialize data to avoid Decimal serialization issues
     return { 
       success: true, 
@@ -218,14 +242,27 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
   } = parsed.data;
 
   try {
-    // Check if product exists
+    // Check if product exists - also get inventory for audit trail
     const existingProduct = await prisma.product.findUnique({
       where: { product_id },
+      include: { inventory: true },
     });
 
     if (!existingProduct) {
       return { success: false, error: "Product not found" };
     }
+
+    // Capture old values for audit diff
+    const oldData = {
+      product_name: existingProduct.product_name,
+      category: existingProduct.category,
+      retail_price: Number(existingProduct.retail_price),
+      wholesale_price: Number(existingProduct.wholesale_price),
+      cost_price: Number(existingProduct.cost_price),
+      current_stock: existingProduct.inventory?.current_stock ?? 0,
+      reorder_level: existingProduct.inventory?.reorder_level ?? 10,
+      barcode: existingProduct.barcode || null,
+    };
 
     // Check if new name conflicts with another product
     const nameConflict = await prisma.product.findFirst({
@@ -286,6 +323,27 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
     });
 
     revalidatePath("/admin/inventory");
+    
+    // Audit log: Product updated (using centralized logger with diff)
+    const newData = {
+      product_name,
+      category,
+      retail_price,
+      wholesale_price,
+      cost_price: cost_price || 0,
+      current_stock,
+      reorder_level,
+      barcode: barcode || null,
+    };
+    
+    await logProductUpdate(
+      "Admin", // TODO: Get from session
+      product_id,
+      product_name,
+      oldData,
+      newData
+    );
+    
     return { success: true };
   } catch (error) {
     console.error("Update product error:", error);
@@ -361,6 +419,23 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
     });
 
     revalidatePath("/admin/inventory");
+    
+    // Audit log: Bulk delete/archive (using centralized logger)
+    if (idsToArchive.length > 0 || idsToDelete.length > 0) {
+      await logActivity({
+        username: "Admin", // TODO: Get from session
+        action: idsToArchive.length > 0 ? "ARCHIVE" : "DELETE",
+        entity: "Product",
+        entityName: `${productIds.length} products`,
+        details: `Bulk operation: ${idsToDelete.length} products permanently deleted, ${idsToArchive.length} products archived (had sales history).`,
+        metadata: {
+          deleted_ids: idsToDelete,
+          archived_ids: idsToArchive,
+          total_affected: productIds.length,
+        },
+      });
+    }
+    
     return { 
       success: true, 
       data: { 
@@ -403,6 +478,17 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
       });
 
       revalidatePath("/admin/inventory");
+      
+      // Audit log: Product archived
+      await logActivity({
+        username: "Admin", // TODO: Get from session
+        action: "ARCHIVE",
+        entity: "Product",
+        entityId: productId,
+        entityName: existingProduct.product_name,
+        details: `Archived product "${existingProduct.product_name}" (has sales history, cannot be permanently deleted).`,
+      });
+      
       return { 
         success: true, 
         data: { archived: true },
@@ -441,6 +527,14 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
     });
 
     revalidatePath("/admin/inventory");
+    
+    // Audit log: Product deleted
+    await logProductDelete(
+      "Admin", // TODO: Get from session
+      productId,
+      existingProduct.product_name
+    );
+    
     return { success: true, data: { archived: false } };
   } catch (error) {
     console.error("Delete product error:", error);
@@ -471,6 +565,17 @@ export async function restoreProduct(productId: number): Promise<ActionResult> {
     });
 
     revalidatePath("/admin/inventory");
+    
+    // Audit log: Product restored
+    await logActivity({
+      username: "Admin", // TODO: Get from session
+      action: "RESTORE",
+      entity: "Product",
+      entityId: productId,
+      entityName: product.product_name,
+      details: `Restored archived product "${product.product_name}" back to active inventory.`,
+    });
+    
     return { success: true };
   } catch (error) {
     console.error("Restore product error:", error);

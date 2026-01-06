@@ -98,6 +98,11 @@ export const createProductSchema = z.object({
     .max(500, "Receipt image path must be less than 500 characters")
     .optional()
     .nullable(),
+  // Optional: Expiry date for initial stock batch
+  expiry_date: z
+    .date()
+    .optional()
+    .nullable(),
 });
 
 /**
