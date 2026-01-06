@@ -191,6 +191,9 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
   const [demandForecastData, setDemandForecastData] = useState<DemandForecastDataPoint[]>([]);
   const [totalStoreDemand, setTotalStoreDemand] = useState<number>(0);
   
+  // Demand forecast time range: 7, 30, or 90 days of history
+  const [demandHistoryDays, setDemandHistoryDays] = useState<7 | 30 | 90>(7);
+  
   // Auto-set granularity based on date range
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
@@ -265,15 +268,15 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
     setDateRange(preset.getRange());
   };
 
-  // Fetch demand forecast when product selection changes
+  // Fetch demand forecast when product selection or history range changes
   useEffect(() => {
     startTransition(async () => {
-      const { data, product, totalStoreDemand } = await getDemandForecastData(selectedProductId);
+      const { data, product, totalStoreDemand } = await getDemandForecastData(selectedProductId, demandHistoryDays);
       setDemandForecastData(data);
       setSelectedProductInfo(product);
       setTotalStoreDemand(totalStoreDemand);
     });
-  }, [selectedProductId]);
+  }, [selectedProductId, demandHistoryDays]);
 
   // Calculate reactive financial summary from chartData (Task 1)
   const financialSummary = useMemo(() => {
@@ -1197,14 +1200,59 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                       </Button>
                     </div>
                   ) : (
-                    <div>
-                      <CardTitle className="text-foreground flex items-center gap-2 text-base">
-                        <Sparkles className="h-4 w-4 text-[#F59E0B]" />
-                        Demand Forecast
-                      </CardTitle>
-                      <CardDescription className="text-sm">
-                        Total Store Demand • {totalStoreDemand} units/week
-                      </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-foreground flex items-center gap-2 text-base">
+                          <Sparkles className="h-4 w-4 text-[#F59E0B]" />
+                          Demand Forecast
+                        </CardTitle>
+                        <CardDescription className="text-sm">
+                          {demandHistoryDays}-Day History vs {demandHistoryDays === 7 ? 7 : demandHistoryDays === 30 ? 14 : 30}-Day Forecast
+                        </CardDescription>
+                      </div>
+                      {/* Time Range Toggle */}
+                      <div className="flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
+                        {([7, 30, 90] as const).map((days) => (
+                          <Button
+                            key={days}
+                            variant="ghost"
+                            size="sm"
+                            className={`h-7 px-2.5 text-xs font-medium ${
+                              demandHistoryDays === days
+                                ? "bg-background shadow-sm text-foreground"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                            onClick={() => setDemandHistoryDays(days)}
+                          >
+                            {days}d
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Time Range Toggle (when product selected) */}
+                  {selectedProductInfo && (
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        {demandHistoryDays}d History → {demandHistoryDays === 7 ? 7 : demandHistoryDays === 30 ? 14 : 30}d Forecast
+                      </span>
+                      <div className="flex items-center rounded-lg border border-border bg-muted/30 p-0.5">
+                        {([7, 30, 90] as const).map((days) => (
+                          <Button
+                            key={days}
+                            variant="ghost"
+                            size="sm"
+                            className={`h-6 px-2 text-[10px] font-medium ${
+                              demandHistoryDays === days
+                                ? "bg-background shadow-sm text-foreground"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                            onClick={() => setDemandHistoryDays(days)}
+                          >
+                            {days}d
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </CardHeader>
@@ -1335,13 +1383,15 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   {/* Summary Stats */}
                   <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-3">
                     <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">7-Day Forecast</p>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {demandHistoryDays === 7 ? "7" : demandHistoryDays === 30 ? "14" : "30"}-Day Forecast
+                      </p>
                       <p className="text-lg font-bold text-foreground tabular-nums">
                         {demandForecastData.filter(d => d.forecast !== null).reduce((sum, d) => sum + (d.forecast || 0), 0)} <span className="text-xs font-normal text-muted-foreground">units</span>
                       </p>
                     </div>
                     <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">7-Day Historical</p>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{demandHistoryDays}-Day Historical</p>
                       <p className="text-lg font-bold text-foreground tabular-nums">
                         {demandForecastData.filter(d => d.historical !== null).reduce((sum, d) => sum + (d.historical || 0), 0)} <span className="text-xs font-normal text-muted-foreground">units</span>
                       </p>
@@ -1580,28 +1630,38 @@ const URGENCY_OPTIONS = [
   { value: "all", label: "All Urgency" },
   { value: "critical", label: "Restock Immediately" },
   { value: "low", label: "Low Stock" },
+  { value: "good", label: "Good Stock" },
   { value: "dead", label: "Dead Stock" },
-  { value: "monitor", label: "Monitor" },
 ];
 
-function getUrgencyLevel(item: ForecastTableItem): "critical" | "low" | "dead" | "monitor" {
+function getUrgencyLevel(item: ForecastTableItem): "critical" | "low" | "dead" | "good" {
+  // Coverage-based urgency: Status already reflects days of supply
+  // CRITICAL = ≤2 days, LOW = 2-7 days, HEALTHY = >7 days
+  
   if (item.stockStatus === "DEAD_STOCK") {
     return "dead";
   }
-  if (item.stockStatus === "OUT_OF_STOCK" || item.stockStatus === "CRITICAL") {
+  
+  if (item.stockStatus === "OUT_OF_STOCK") {
     // Only critical if there's actual velocity/demand
     if (item.velocity7Day > 0 || item.predictedDemand > 0) {
       return "critical";
     }
     return "dead"; // No demand, treat as dead
   }
-  if (item.stockStatus === "LOW") {
-    if (item.velocity7Day > 0) {
-      return "low";
-    }
-    return "monitor";
+  
+  // CRITICAL status now means ≤2 days of supply - always urgent
+  if (item.stockStatus === "CRITICAL") {
+    return "critical";
   }
-  return "monitor";
+  
+  // LOW status now means 2-7 days of supply
+  if (item.stockStatus === "LOW") {
+    return "low";
+  }
+  
+  // HEALTHY = >7 days of supply (good stock levels)
+  return "good";
 }
 
 function getUrgencyPriority(item: ForecastTableItem): number {
@@ -1610,7 +1670,7 @@ function getUrgencyPriority(item: ForecastTableItem): number {
     case "critical": return 0;
     case "low": return 1;
     case "dead": return 2; // Dead stock is lower priority than actual restocking needs
-    case "monitor": return 3;
+    case "good": return 3;
     default: return 4;
   }
 }
@@ -1907,19 +1967,23 @@ function ForecastingTable({
                           <Badge
                             variant="outline"
                             className={`cursor-help text-[10px] font-medium ${
+                              // Coverage-based color logic:
+                              // OUT_OF_STOCK + demand = RED (Critical)
+                              // CRITICAL (≤2 days) = RED (Critical Restock)
+                              // LOW (2-7 days) = ORANGE (Restock Needed)
+                              // DEAD_STOCK = GREY (Dead Stock)
+                              // HEALTHY (>7 days) = GREEN (Maintain Stock)
                               item.stockStatus === "OUT_OF_STOCK"
                                 ? (item.velocity7Day > 0 || item.predictedDemand > 0)
-                                  ? "border-red-600 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
-                                  : "border-slate-400 bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
-                                : item.stockStatus === "DEAD_STOCK"
-                                ? "border-slate-400 bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
+                                  ? "border-red-600 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                                  : "border-slate-400 bg-slate-100 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
                                 : item.stockStatus === "CRITICAL"
-                                ? (item.velocity7Day > 0 || item.predictedDemand > 0)
-                                  ? "border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
-                                  : "border-slate-400 bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
+                                ? "border-red-600 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400"
                                 : item.stockStatus === "LOW"
-                                ? "border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                                : "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/30 dark:text-teal-400"
+                                ? "border-orange-500 bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"
+                                : item.stockStatus === "DEAD_STOCK"
+                                ? "border-slate-400 bg-slate-100 text-slate-600 dark:bg-slate-950/30 dark:text-slate-400"
+                                : "border-teal-500 bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
                             }`}
                           >
                             {item.recommendedAction}

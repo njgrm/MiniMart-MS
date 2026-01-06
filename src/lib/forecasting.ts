@@ -227,35 +227,48 @@ function determineConfidence(
 }
 
 /**
- * Calculate stock status and days remaining
- * DEAD_STOCK: Items with 0 velocity that are sitting on shelves (not selling)
+ * Calculate stock status based on DAYS OF SUPPLY (coverage days)
+ * 
+ * CRITICAL FIX: Status must reflect actual runway, not static reorder levels.
+ * Example: 173 stock / 160 daily velocity = 1.08 days = CRITICAL (not "healthy")
+ * 
+ * Coverage Thresholds:
+ * - ≤2 days: CRITICAL (Red) - Will run out within 48 hours
+ * - 2-7 days: LOW (Orange) - Needs attention within a week  
+ * - >7 days: HEALTHY (Green) - Safe for now
+ * - 0 velocity with stock: DEAD_STOCK (Grey) - Not selling, don't restock
  */
 function calculateStockStatus(
   currentStock: number, 
   reorderLevel: number, 
   dailyVelocity: number
 ): { status: "HEALTHY" | "LOW" | "CRITICAL" | "OUT_OF_STOCK" | "DEAD_STOCK"; daysOfStock: number } {
+  // Case 1: No stock at all
   if (currentStock <= 0) {
     return { status: "OUT_OF_STOCK", daysOfStock: 0 };
   }
   
-  const daysOfStock = dailyVelocity > 0 ? Math.floor(currentStock / dailyVelocity) : 999;
-  
-  // CRITICAL FIX: If velocity is 0 (no one is buying), mark as DEAD_STOCK
-  // Don't recommend restocking dead stock - recommend discounting to clear it
-  if (dailyVelocity < 0.1 && currentStock > 0) {
-    return { status: "DEAD_STOCK", daysOfStock };
+  // Case 2: Dead stock - has stock but zero velocity (not selling)
+  // Threshold: Less than 0.1 units/day = effectively dead
+  if (dailyVelocity < 0.1) {
+    return { status: "DEAD_STOCK", daysOfStock: 999 };
   }
   
-  if (currentStock <= reorderLevel * 0.5) {
-    return { status: "CRITICAL", daysOfStock };
+  // Case 3: Calculate coverage days (how long until stockout)
+  const coverageDays = currentStock / dailyVelocity;
+  
+  // CRITICAL: ≤2 days of supply - urgent restock needed
+  if (coverageDays <= 2) {
+    return { status: "CRITICAL", daysOfStock: Math.floor(coverageDays) };
   }
   
-  if (currentStock <= reorderLevel) {
-    return { status: "LOW", daysOfStock };
+  // LOW: 2-7 days of supply - order soon
+  if (coverageDays <= 7) {
+    return { status: "LOW", daysOfStock: Math.floor(coverageDays) };
   }
   
-  return { status: "HEALTHY", daysOfStock };
+  // HEALTHY: >7 days of supply
+  return { status: "HEALTHY", daysOfStock: Math.floor(coverageDays) };
 }
 
 // =============================================================================
@@ -568,24 +581,23 @@ export async function getForecast(input: ForecastInput): Promise<ForecastResult>
   const forecastedWeeklyUnits = forecastedDailyUnits * 7;
   
   // Calculate suggested reorder quantity
-  // Target: 14 days of stock above reorder level
-  const targetDays = 14;
+  // Target: 7 days of stock (1 week restock cycle)
+  const targetDays = 7;
   const reorderLevel = product.inventory?.reorder_level ?? 10;
   const currentStock = product.inventory?.current_stock ?? 0;
   
   const targetStock = (forecastedDailyUnits * targetDays) + reorderLevel;
   let suggestedReorderQty = Math.max(0, targetStock - currentStock);
   
-  // CRITICAL FIX: Cap reorder quantity to realistic limits for a minimart
-  // Rule 1: Never exceed 14 days supply based on actual velocity
-  const maxByVelocity = Math.ceil(forecastedDailyUnits * 14);
-  // Rule 2: Hard cap at 200 units for any single product (minimart scale)
-  const HARD_CAP = 200;
-  // Rule 3: If velocity is 0, don't suggest reordering at all
+  // UPDATED LOGIC: Trust high-velocity data, no arbitrary hard caps
+  // Rule 1: If velocity is 0 (dead stock), don't suggest reordering
+  // Rule 2: Cap at 14 days supply to avoid over-ordering
   if (forecastedDailyUnits < 0.1) {
     suggestedReorderQty = 0;
   } else {
-    suggestedReorderQty = Math.min(suggestedReorderQty, maxByVelocity, HARD_CAP);
+    // Only cap to prevent extreme over-ordering (14 days max supply)
+    const maxByVelocity = Math.ceil(forecastedDailyUnits * 14);
+    suggestedReorderQty = Math.min(suggestedReorderQty, maxByVelocity);
   }
   
   // Determine confidence level

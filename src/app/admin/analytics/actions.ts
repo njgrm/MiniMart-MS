@@ -80,10 +80,24 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     // Get historical sales data for chart (last 30 days)
     const chartData = await getChartData();
     
-    // Transform forecasts to table format - show ALL products needing restock
+    // Transform forecasts to table format - show ALL products (healthy, low, critical, dead)
+    // UI filtering will handle visibility based on urgency selection
     const forecastTable: ForecastTableItem[] = forecasts
-      .filter(f => f.suggestedReorderQty > 0)
-      .sort((a, b) => b.suggestedReorderQty - a.suggestedReorderQty)
+      .sort((a, b) => {
+        // Priority: CRITICAL > LOW > DEAD_STOCK > HEALTHY
+        const statusPriority: Record<string, number> = {
+          "OUT_OF_STOCK": 0,
+          "CRITICAL": 1,
+          "LOW": 2,
+          "DEAD_STOCK": 3,
+          "HEALTHY": 4,
+        };
+        const aPriority = statusPriority[a.stockStatus] ?? 5;
+        const bPriority = statusPriority[b.stockStatus] ?? 5;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        // Secondary sort by reorder qty (descending)
+        return b.suggestedReorderQty - a.suggestedReorderQty;
+      })
       .map(f => ({
         productId: f.productId,
         productName: f.productName,
@@ -546,43 +560,44 @@ export async function getStatsByDateRange(startDate: Date, endDate: Date) {
 }
 
 function getRecommendedAction(forecast: ForecastResult): string {
-  // CRITICAL FIX: Handle DEAD_STOCK - items with 0 velocity should NOT be restocked
+  // COVERAGE-BASED STATUS LOGIC
+  // Status is now determined by Days of Supply (coverageDays = stock / velocity)
+  
+  // Dead Stock: 0 velocity = not selling, don't restock
   if (forecast.stockStatus === "DEAD_STOCK") {
-    return "Dead Stock: Discount to clear";
+    return "Dead Stock";
   }
   
+  // Out of Stock: Zero inventory
   if (forecast.stockStatus === "OUT_OF_STOCK") {
-    // Only urgent if there's actual demand
     if (forecast.avgDailyVelocity >= 0.1) {
-      return "Urgent: Restock immediately";
+      return "Critical Restock";
     }
-    return "Out of Stock (No demand)";
+    return "Out (No demand)";
   }
   
+  // CRITICAL: ≤2 days of supply left
   if (forecast.stockStatus === "CRITICAL") {
-    // Only critical if there's actual demand
-    if (forecast.avgDailyVelocity >= 0.1) {
-      return "Critical: Order within 24h";
-    }
-    return "Low Stock (No recent sales)";
+    const daysLeft = forecast.daysOfStock;
+    return `Critical (${daysLeft}d left)`;
   }
   
+  // LOW: 2-7 days of supply left
   if (forecast.stockStatus === "LOW") {
-    if (forecast.avgDailyVelocity >= 0.1) {
-      return "Order soon";
-    }
-    return "Monitor: Low velocity";
+    const daysLeft = forecast.daysOfStock;
+    return `Restock (${daysLeft}d left)`;
   }
   
+  // HEALTHY: >7 days of supply
   if (forecast.velocityTrend === "INCREASING" && forecast.suggestedReorderQty > 0) {
-    return "Trending up - Consider larger order";
+    return "Maintain Stock";
   }
   
   if (forecast.activeEvents.length > 0) {
-    return `Event active: ${forecast.activeEvents[0].name}`;
+    return `Event: ${forecast.activeEvents[0].name.slice(0, 15)}`;
   }
   
-  return "Maintain stock levels";
+  return "Maintain Stock";
 }
 
 // =============================================================================
@@ -1224,17 +1239,27 @@ export interface ProductDemandInfo {
  * Get demand forecast data in UNITS (quantity), not revenue.
  * If productId is provided, returns product-specific data.
  * Otherwise returns total store demand.
+ * 
+ * @param productId - Optional product ID for product-specific forecast
+ * @param historyDays - Number of historical days to show (7, 30, or 90)
  */
-export async function getDemandForecastData(productId?: number | null): Promise<{
+export async function getDemandForecastData(
+  productId?: number | null,
+  historyDays: 7 | 30 | 90 = 7
+): Promise<{
   data: DemandForecastDataPoint[];
   product: ProductDemandInfo | null;
   totalStoreDemand: number;
 }> {
   try {
     const today = startOfDay(new Date());
-    const past7Days = subDays(today, 7);
-    const next7Days = new Date(today);
-    next7Days.setDate(next7Days.getDate() + 7);
+    const historyStart = subDays(today, historyDays);
+    
+    // Calculate forecast end date based on proportional forecasting
+    // 7d history → 7d forecast, 30d → 14d, 90d → 30d
+    const forecastDays = historyDays === 7 ? 7 : historyDays === 30 ? 14 : 30;
+    const forecastEnd = new Date(today);
+    forecastEnd.setDate(forecastEnd.getDate() + forecastDays);
     
     let product: ProductDemandInfo | null = null;
     
@@ -1262,7 +1287,7 @@ export async function getDemandForecastData(productId?: number | null): Promise<
     const transactionItems = await prisma.transactionItem.findMany({
       where: {
         transaction: {
-          created_at: { gte: past7Days, lt: today },
+          created_at: { gte: historyStart, lt: today },
           status: "COMPLETED",
         },
         ...(productId ? { product_id: productId } : {}),
@@ -1280,19 +1305,19 @@ export async function getDemandForecastData(productId?: number | null): Promise<
       historicalMap.set(dateKey, (historicalMap.get(dateKey) ?? 0) + item.quantity);
     }
     
-    // Get active events for next 7 days
+    // Get active events for the forecast period
     const events = await prisma.eventLog.findMany({
       where: {
-        start_date: { lte: next7Days },
+        start_date: { lte: forecastEnd },
         end_date: { gte: today },
         is_active: true,
       },
     });
     
-    // Calculate average daily quantity
+    // Calculate average daily quantity from history
     const historicalValues = Array.from(historicalMap.values());
     const avgDailyQty = historicalValues.length > 0
-      ? historicalValues.reduce((a, b) => a + b, 0) / historicalValues.length
+      ? historicalValues.reduce((a, b) => a + b, 0) / Math.max(historicalValues.length, 1)
       : 0;
     
     // Calculate total store demand (sum of all forecast days)
@@ -1303,70 +1328,178 @@ export async function getDemandForecastData(productId?: number | null): Promise<
     let lastHistoricalValue = 0;
     let firstForecastValue = 0;
     
-    // Past 7 days (historical)
-    for (let i = 6; i >= 0; i--) {
-      const date = subDays(today, i + 1);
-      const dateKey = format(date, "yyyy-MM-dd");
-      const dateLabel = format(date, "MMM d");
-      const historicalValue = historicalMap.get(dateKey) ?? 0;
+    // Determine granularity based on history length
+    // 7 days: daily, 30 days: daily, 90 days: weekly
+    const useWeeklyGranularity = historyDays === 90;
+    
+    if (useWeeklyGranularity) {
+      // Aggregate into weeks for 90-day view
+      const weeklyMap = new Map<number, { sum: number; count: number; label: string }>();
       
-      if (i === 0) {
-        lastHistoricalValue = historicalValue;
+      for (let i = historyDays - 1; i >= 0; i--) {
+        const date = subDays(today, i + 1);
+        const weekNum = Math.floor(i / 7);
+        const dateKey = format(date, "yyyy-MM-dd");
+        const dayValue = historicalMap.get(dateKey) ?? 0;
+        
+        const existing = weeklyMap.get(weekNum) || { sum: 0, count: 0, label: format(date, "MMM d") };
+        existing.sum += dayValue;
+        existing.count++;
+        if (existing.count === 1) {
+          existing.label = format(date, "MMM d");
+        }
+        weeklyMap.set(weekNum, existing);
       }
       
-      result.push({
-        date: dateLabel,
-        historical: historicalValue,
-        forecast: null,
-        forecastUpper: null,
-        forecastLower: null,
-        bridge: null,
-        isEvent: false,
-      });
+      // Sort weeks (most recent last)
+      const sortedWeeks = Array.from(weeklyMap.entries()).sort((a, b) => b[0] - a[0]).reverse();
+      
+      for (const [, week] of sortedWeeks) {
+        result.push({
+          date: week.label,
+          historical: week.sum,
+          forecast: null,
+          forecastUpper: null,
+          forecastLower: null,
+          bridge: null,
+          isEvent: false,
+        });
+        lastHistoricalValue = week.sum;
+      }
+    } else {
+      // Daily granularity for 7 and 30 day views
+      for (let i = historyDays - 1; i >= 0; i--) {
+        const date = subDays(today, i + 1);
+        const dateKey = format(date, "yyyy-MM-dd");
+        const dateLabel = format(date, historyDays <= 7 ? "MMM d" : "M/d");
+        const historicalValue = historicalMap.get(dateKey) ?? 0;
+        
+        if (i === 0) {
+          lastHistoricalValue = historicalValue;
+        }
+        
+        result.push({
+          date: dateLabel,
+          historical: historicalValue,
+          forecast: null,
+          forecastUpper: null,
+          forecastLower: null,
+          bridge: null,
+          isEvent: false,
+        });
+      }
     }
     
-    // Today + Next 7 days (forecast)
-    for (let i = 0; i <= 7; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() + i);
-      const dateLabel = format(date, "MMM d");
+    // PROPORTIONAL FORECASTING:
+    // 7-day history → 7-day forecast (daily bars)
+    // 30-day history → 14-day forecast (daily bars)
+    // 90-day history → 30-day forecast (weekly aggregation)
+    const useForecastWeeklyGranularity = historyDays === 90;
+    
+    if (useForecastWeeklyGranularity) {
+      // Weekly aggregation for 90-day view forecast (30 days = ~4-5 weeks)
+      const weeksToForecast = Math.ceil(forecastDays / 7);
       
-      // Check for events
-      const activeEvent = events.find(e => {
-        const eventStart = startOfDay(e.start_date);
-        const eventEnd = endOfDay(e.end_date);
-        return date >= eventStart && date <= eventEnd;
-      });
-      
-      // Simple forecast with event multiplier
-      let forecastValue = avgDailyQty;
-      if (activeEvent && activeEvent.multiplier) {
-        forecastValue *= Number(activeEvent.multiplier);
+      for (let week = 0; week < weeksToForecast; week++) {
+        const weekStartDay = week * 7;
+        const weekStartDate = new Date(today);
+        weekStartDate.setDate(weekStartDate.getDate() + weekStartDay);
+        const dateLabel = format(weekStartDate, "MMM d");
+        
+        // Calculate weekly forecast (7 days worth)
+        let weeklyForecast = 0;
+        let hasEvent = false;
+        let eventName: string | undefined;
+        
+        for (let d = 0; d < 7 && (weekStartDay + d) < forecastDays; d++) {
+          const dayDate = new Date(today);
+          dayDate.setDate(dayDate.getDate() + weekStartDay + d);
+          
+          // Check for events
+          const activeEvent = events.find(e => {
+            const eventStart = startOfDay(e.start_date);
+            const eventEnd = endOfDay(e.end_date);
+            return dayDate >= eventStart && dayDate <= eventEnd;
+          });
+          
+          let dayForecast = avgDailyQty;
+          if (activeEvent && activeEvent.multiplier) {
+            dayForecast *= Number(activeEvent.multiplier);
+            hasEvent = true;
+            eventName = activeEvent.name;
+          }
+          
+          // Add some variance
+          dayForecast *= (0.9 + Math.random() * 0.2);
+          weeklyForecast += dayForecast;
+        }
+        
+        weeklyForecast = Math.round(weeklyForecast);
+        
+        if (week === 0) {
+          firstForecastValue = weeklyForecast;
+        }
+        
+        // Confidence interval (±20%)
+        const confidenceMargin = 0.2;
+        const upper = Math.round(weeklyForecast * (1 + confidenceMargin));
+        const lower = Math.round(weeklyForecast * (1 - confidenceMargin));
+        
+        result.push({
+          date: dateLabel,
+          historical: null,
+          forecast: weeklyForecast,
+          forecastUpper: upper,
+          forecastLower: lower,
+          bridge: null,
+          isEvent: hasEvent,
+          eventName,
+        });
       }
-      
-      // Add some variance
-      forecastValue *= (0.9 + Math.random() * 0.2);
-      forecastValue = Math.round(forecastValue);
-      
-      if (i === 0) {
-        firstForecastValue = forecastValue;
+    } else {
+      // Daily granularity for 7 and 30 day views
+      for (let i = 0; i < forecastDays; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() + i);
+        const dateLabel = format(date, historyDays <= 7 ? "MMM d" : "M/d");
+        
+        // Check for events
+        const activeEvent = events.find(e => {
+          const eventStart = startOfDay(e.start_date);
+          const eventEnd = endOfDay(e.end_date);
+          return date >= eventStart && date <= eventEnd;
+        });
+        
+        // Simple forecast with event multiplier
+        let forecastValue = avgDailyQty;
+        if (activeEvent && activeEvent.multiplier) {
+          forecastValue *= Number(activeEvent.multiplier);
+        }
+        
+        // Add some variance
+        forecastValue *= (0.9 + Math.random() * 0.2);
+        forecastValue = Math.round(forecastValue);
+        
+        if (i === 0) {
+          firstForecastValue = forecastValue;
+        }
+        
+        // Confidence interval (±20%)
+        const confidenceMargin = 0.2;
+        const upper = Math.round(forecastValue * (1 + confidenceMargin));
+        const lower = Math.round(forecastValue * (1 - confidenceMargin));
+        
+        result.push({
+          date: dateLabel,
+          historical: null,
+          forecast: forecastValue,
+          forecastUpper: upper,
+          forecastLower: lower,
+          bridge: null,
+          isEvent: !!activeEvent,
+          eventName: activeEvent?.name,
+        });
       }
-      
-      // Confidence interval (±20%)
-      const confidenceMargin = 0.2;
-      const upper = Math.round(forecastValue * (1 + confidenceMargin));
-      const lower = Math.round(forecastValue * (1 - confidenceMargin));
-      
-      result.push({
-        date: dateLabel,
-        historical: null,
-        forecast: forecastValue,
-        forecastUpper: upper,
-        forecastLower: lower,
-        bridge: null,
-        isEvent: !!activeEvent,
-        eventName: activeEvent?.name,
-      });
     }
     
     // Add bridge data
