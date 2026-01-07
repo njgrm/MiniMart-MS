@@ -177,6 +177,12 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
     setProducts(products);
   }, [products, setProducts]);
 
+  // Helper: Get available stock (accounts for reserved stock from pending orders)
+  const getAvailableStock = useCallback((product: PosProduct | PosCartItem) => {
+    // If available_stock is provided, use it; otherwise fall back to current_stock
+    return product.available_stock ?? product.current_stock;
+  }, []);
+
   // Calculate totals
   const subtotal = useMemo(() => getCartTotal(cart), [cart]);
   
@@ -240,11 +246,12 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
       setSearchResults(results);
       if (results.length === 1) {
         const product = results[0];
-        // Zero-stock check
-        if (product.current_stock <= 0) {
+        // Zero-stock check - use available_stock to account for reserved stock
+        const availableStock = getAvailableStock(product);
+        if (availableStock <= 0) {
           playErrorBuzz();
           toast.error(`"${product.product_name}" is out of stock!`, {
-            description: "Cannot add items with zero stock.",
+            description: product.allocated_stock ? `${product.current_stock} in stock, ${product.allocated_stock} reserved` : "Cannot add items with zero stock.",
           });
           setBarcodeInput("");
           return;
@@ -268,14 +275,17 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
         (p) => p.barcode && p.barcode.trim() === barcodeInput.trim()
       );
       
-      // Zero-stock check
-      if (productMatch && productMatch.current_stock <= 0) {
-        playErrorBuzz();
-        toast.error(`"${productMatch.product_name}" is out of stock!`, {
-          description: "Cannot add items with zero stock.",
-        });
-        setBarcodeInput("");
-        return;
+      // Zero-stock check - use available_stock to account for reserved stock
+      if (productMatch) {
+        const availableStock = getAvailableStock(productMatch);
+        if (availableStock <= 0) {
+          playErrorBuzz();
+          toast.error(`"${productMatch.product_name}" is out of stock!`, {
+            description: productMatch.allocated_stock ? `${productMatch.current_stock} in stock, ${productMatch.allocated_stock} reserved` : "Cannot add items with zero stock.",
+          });
+          setBarcodeInput("");
+          return;
+        }
       }
 
       const found = addByBarcode(barcodeInput.trim());
@@ -359,10 +369,11 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
       if ((e.key === "+" || e.key === "=") && selectedItemIndex >= 0 && selectedItemIndex < cart.length) {
         e.preventDefault();
         const item = cart[selectedItemIndex];
-        // Strict guardrail: cannot exceed current_stock
-        if (item.quantity >= item.current_stock) {
+        // Strict guardrail: cannot exceed available_stock (accounts for reserved stock)
+        const availableStock = getAvailableStock(item);
+        if (item.quantity >= availableStock) {
           playErrorBuzz();
-          toast.error(`Stock limit reached (${item.current_stock} available)`, {
+          toast.error(`Stock limit reached (${availableStock} available)`, {
             description: `Cannot add more "${item.product_name}"`,
           });
           return;
@@ -515,18 +526,21 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
 
   // Handle camera scan
   const handleCameraScan = useCallback((barcode: string) => {
-    // Check stock first
+    // Check stock first - use available_stock to account for reserved stock
     const productMatch = products.find(
       (p) => p.barcode && p.barcode.trim() === barcode.trim()
     );
     
-    if (productMatch && productMatch.current_stock <= 0) {
-      playErrorBuzz();
-      toast.error(`"${productMatch.product_name}" is out of stock!`, {
-        description: "Cannot add items with zero stock.",
-      });
-      setCameraOpen(false);
-      return;
+    if (productMatch) {
+      const availableStock = getAvailableStock(productMatch);
+      if (availableStock <= 0) {
+        playErrorBuzz();
+        toast.error(`"${productMatch.product_name}" is out of stock!`, {
+          description: productMatch.allocated_stock ? `${productMatch.current_stock} in stock, ${productMatch.allocated_stock} reserved` : "Cannot add items with zero stock.",
+        });
+        setCameraOpen(false);
+        return;
+      }
     }
 
     const found = addByBarcode(barcode);
@@ -541,7 +555,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
       toast.error(`Product not found: ${barcode}`);
     }
     setCameraOpen(false);
-  }, [products, addByBarcode, playSuccessBeep, playErrorBuzz, setLastAddedItemId, showTypingAnimation]);
+  }, [products, addByBarcode, playSuccessBeep, playErrorBuzz, setLastAddedItemId, showTypingAnimation, getAvailableStock]);
 
   // Handle void confirmation
   const handleVoidConfirm = useCallback(() => {
@@ -828,10 +842,10 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                                 type="number"
                                 value={editingQtyValue}
                                 onChange={(e) => setEditingQtyValue(e.target.value)}
-                                onBlur={() => handleQtySubmit(item.product_id, item.current_stock)}
+                                onBlur={() => handleQtySubmit(item.product_id, getAvailableStock(item))}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") {
-                                    handleQtySubmit(item.product_id, item.current_stock);
+                                    handleQtySubmit(item.product_id, getAvailableStock(item));
                                   }
                                   if (e.key === "Escape") {
                                     setEditingQtyIndex(null);
@@ -842,7 +856,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                                 autoFocus
                                 onClick={(e) => e.stopPropagation()}
                                 min={1}
-                                max={item.current_stock}
+                                max={getAvailableStock(item)}
                               />
                             ) : (
                               <button
@@ -859,14 +873,14 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                               </button>
                             )}
                             
-                            {/* Stock indicator */}
+                            {/* Stock indicator - shows available stock with reserved indicator */}
                             <span className={cn(
                               "text-[10px] font-mono",
-                              item.current_stock <= item.reorder_level
+                              getAvailableStock(item) <= item.reorder_level
                                 ? "text-secondary"
                                 : "text-muted-foreground"
                             )}>
-                              /{item.current_stock}
+                              /{getAvailableStock(item)}{item.allocated_stock ? ` (${item.allocated_stock}res)` : ""}
                             </span>
                           </div>
                         </td>

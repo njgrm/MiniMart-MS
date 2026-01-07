@@ -10,11 +10,18 @@ import {
   IconTag,
   IconShoppingCart,
   IconCalendarDue,
+  IconHelpCircle,
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export interface LowStockItem {
@@ -50,9 +57,29 @@ interface InventoryHealthCardProps {
 }
 
 function LowStockRow({ item, onAddToPO, onClick }: { item: LowStockItem; onAddToPO: () => void; onClick: () => void }) {
-  const stockPercentage = Math.round((item.current_stock / item.reorder_level) * 100);
   const isOutOfStock = item.current_stock === 0;
-  const isCritical = item.current_stock <= item.reorder_level * 0.3;
+  
+  // Days of Supply Logic (matching Analytics)
+  // Assume 7-day target, color based on coverage
+  const targetDays = 7;
+  const daysOfSupply = item.reorder_level > 0 
+    ? (item.current_stock / item.reorder_level) * targetDays 
+    : 0;
+  const percent = Math.min((daysOfSupply / targetDays) * 100, 100);
+  
+  // Color logic: Red ≤2 days, Orange ≤5 days, Green >5 days
+  const getBarColor = () => {
+    if (daysOfSupply <= 2) return "bg-red-500";
+    if (daysOfSupply <= 5) return "bg-orange-500";
+    return "bg-emerald-500";
+  };
+  
+  const getTextColor = () => {
+    if (isOutOfStock) return "text-destructive";
+    if (daysOfSupply <= 2) return "text-red-700 dark:text-red-400";
+    if (daysOfSupply <= 5) return "text-orange-700 dark:text-orange-400";
+    return "text-emerald-700 dark:text-emerald-400";
+  };
 
   return (
     <div 
@@ -82,25 +109,27 @@ function LowStockRow({ item, onAddToPO, onClick }: { item: LowStockItem; onAddTo
             "text-[10px] font-medium px-1.5 py-0.5 rounded",
             isOutOfStock 
               ? "bg-destructive/20 text-destructive" 
-              : isCritical
-                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                : "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+              : daysOfSupply <= 2
+                ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                : daysOfSupply <= 5
+                  ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
           )}>
             {isOutOfStock ? "Out of Stock" : `${item.current_stock} left`}
           </span>
           <span className="text-[10px] text-muted-foreground">
-            Reorder: {item.reorder_level}
+            {daysOfSupply.toFixed(1)}d supply
           </span>
         </div>
-        {/* Stock Bar */}
+        {/* Days of Supply Progress Bar (matching Analytics) */}
         {!isOutOfStock && (
-          <div className="w-full h-1 bg-muted rounded-full mt-1.5 overflow-hidden">
+          <div className="w-full h-1.5 bg-muted rounded-full mt-1.5 overflow-hidden">
             <div 
               className={cn(
                 "h-full rounded-full transition-all",
-                isCritical ? "bg-destructive" : "bg-[#F1782F]"
+                getBarColor()
               )}
-              style={{ width: `${Math.min(stockPercentage, 100)}%` }}
+              style={{ width: `${percent}%` }}
             />
           </div>
         )}
@@ -236,24 +265,44 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <TabsList className="grid grid-cols-2 mx-3 mt-2 h-8">
-          <TabsTrigger value="low-stock" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
-            <IconShoppingCart className="size-3 mr-1.5" />
-            Low Stock
-            {data.lowStockCount + data.outOfStockCount > 0 && (
-              <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
-                {data.lowStockCount + data.outOfStockCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="expiring" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
-            <IconClock className="size-3 mr-1.5" />
-            Expiring Soon
-            {data.expiringCount > 0 && (
-              <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
-                {data.expiringCount}
-              </Badge>
-            )}
-          </TabsTrigger>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="low-stock" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
+                  <IconShoppingCart className="size-3 mr-1.5" />
+                  Low Stock
+                  {data.lowStockCount + data.outOfStockCount > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
+                      {data.lowStockCount + data.outOfStockCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                <p className="font-medium">Items below reorder point</p>
+                <p className="text-muted-foreground">Less than 2 days of supply based on sales velocity</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="expiring" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
+                  <IconClock className="size-3 mr-1.5" />
+                  Expiring Soon
+                  {data.expiringCount > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
+                      {data.expiringCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                <p className="font-medium">Items expiring within 7 days</p>
+                <p className="text-muted-foreground">Prioritize selling these items first</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </TabsList>
 
         <TabsContent value="low-stock" className="flex-1 mt-0 px-2">

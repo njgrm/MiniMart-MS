@@ -23,6 +23,8 @@ export interface PosProduct {
   retail_price: number;
   wholesale_price: number;
   current_stock: number;
+  allocated_stock?: number;  // Stock reserved by pending orders
+  available_stock?: number;  // current_stock - allocated_stock (what can actually be sold)
   reorder_level: number;
   image_url?: string | null;
 }

@@ -252,7 +252,7 @@ export function ProductsTable({
           }
           return (
             <div className="text-sm font-normal tracking-wider tabular-nums">
-              ₱{amount.toFixed(2)}
+              ₱{amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           );
         },
@@ -276,7 +276,7 @@ export function ProductsTable({
           }
           return (
             <div className="text-sm font-normal tracking-wider tabular-nums">
-              ₱{amount.toFixed(2)}
+              ₱{amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           );
         },
@@ -300,10 +300,10 @@ export function ProductsTable({
           return (
             <div className="flex flex-col gap-0.5">
               <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= reorderLevel ? "text-secondary" : ""}`}>
-                {stock}
+                {stock.toLocaleString()}
               </div>
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span>ROP: {reorderLevel}</span>
+                <span>Low at: {reorderLevel.toLocaleString()}</span>
                 {autoReorder && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -323,13 +323,15 @@ export function ProductsTable({
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => {
-          const status = row.getValue("status") as string;
           const stock = row.original.current_stock;
+          const reorderLevel = row.original.reorder_level;
           
-          // Override status to OUT_OF_STOCK if stock is 0
-          const effectiveStatus = stock === 0 ? "OUT_OF_STOCK" : status;
+          // Strict Badge Logic:
+          // RED ("Out of Stock"): Stock === 0
+          // ORANGE ("Low Stock"): Stock > 0 AND Stock <= ReorderLevel
+          // GREEN ("In Stock"): Stock > ReorderLevel
           
-          if (effectiveStatus === "OUT_OF_STOCK") {
+          if (stock === 0) {
             return (
               <Badge variant="destructive" className="text-xs">
                 Out of Stock
@@ -337,7 +339,7 @@ export function ProductsTable({
             );
           }
           
-          if (effectiveStatus === "LOW_STOCK") {
+          if (stock <= reorderLevel) {
             return (
               <Badge variant="secondary" className="text-xs">
                 Low Stock
@@ -463,19 +465,18 @@ export function ProductsTable({
             ? Math.ceil(reorderLevel * 1.5 - stock) 
             : 0;
           
-          // FIXED: Show "Optimal" state for healthy items instead of empty dash
+          // FIXED: Hide badge for healthy items - show subtle checkmark only
           if (recommendedQty <= 0) {
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 text-xs text-[#2EAFC5] cursor-help">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Optimal</span>
+                  <div className="flex items-center justify-center cursor-help">
+                    <CheckCircle2 className="h-4 w-4 text-muted-foreground/50" />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent 
                   side="left" 
-                  className="max-w-[200px] p-3 bg-popover text-popover-foreground border shadow-md"
+                  className="max-w-[200px] p-3"
                 >
                   <p className="text-xs">Stock levels are healthy. No restock needed at this time.</p>
                 </TooltipContent>

@@ -52,9 +52,9 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
     <div className={cn("bg-card rounded-xl border flex flex-col", className)}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b">
-        <div className="flex items-center gap-2">
-          <IconCash className="size-4 text-[#2EAFC5]" />
-          <h3 className="font-medium text-sm">Cash Register</h3>
+        <div className="flex items-center gap-2 mb-0.75">
+          <IconCash className="mt-1.5 size-4 text-[#2EAFC5]" />
+          <h3 className="font-medium text-sm mt-1.5">Cash Register</h3>
         </div>
         <Badge 
           variant="outline" 
@@ -79,10 +79,10 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         </Badge>
       </div>
 
-      {/* Cash Breakdown */}
-      <div className="flex-1 p-3 space-y-2">
+      {/* Cash Breakdown - Compact spacing */}
+      <div className="flex-1 p-3 space-y-1">
         {/* Opening Fund */}
-        <div className="flex items-center justify-between py-1.5">
+        <div className="flex items-center justify-between py-1">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <IconWallet className="size-3.5" />
             <span>Opening Fund</span>
@@ -95,12 +95,12 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         {/* Divider with Plus */}
         <div className="flex items-center gap-2 text-muted-foreground/50">
           <div className="flex-1 border-t border-dashed" />
-          <IconPlus className="size-3" />
+          <IconPlus className="size-2.5" />
           <div className="flex-1 border-t border-dashed" />
         </div>
 
         {/* Cash Sales */}
-        <div className="flex items-center justify-between py-1.5">
+        <div className="flex items-center justify-between py-1">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <IconCash className="size-3.5 text-emerald-500" />
             <span>Cash Sales</span>
@@ -114,7 +114,7 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         </div>
 
         {/* GCash Sales (not in drawer but shown for reference) */}
-        <div className="flex items-center justify-between py-1.5 opacity-60">
+        <div className="flex items-center justify-between py-1 opacity-60">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <IconReceipt className="size-3.5 text-blue-500" />
             <span>GCash Sales</span>
@@ -128,12 +128,12 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         {/* Divider with Minus */}
         <div className="flex items-center gap-2 text-muted-foreground/50">
           <div className="flex-1 border-t border-dashed" />
-          <IconMinus className="size-3" />
+          <IconMinus className="size-2.5" />
           <div className="flex-1 border-t border-dashed" />
         </div>
 
         {/* Expenses/Payouts */}
-        <div className="flex items-center justify-between py-1.5">
+        <div className="flex items-center justify-between py-1">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <IconMinus className="size-3.5 text-destructive" />
             <span>Expenses/Payouts</span>
@@ -146,17 +146,17 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         {/* Divider with Equal */}
         <div className="flex items-center gap-2 text-muted-foreground/50">
           <div className="flex-1 border-t border-dashed" />
-          <IconEqual className="size-3" />
+          <IconEqual className="size-2.5" />
           <div className="flex-1 border-t border-dashed" />
         </div>
 
-        {/* Expected Drawer Total */}
-        <div className="flex items-center justify-between py-2 bg-muted/30 rounded-lg px-2 -mx-0.5">
-          <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-            <IconCash className="size-4 text-[#AC0F16]" />
+        {/* Expected Drawer Total - Clear Focal Point */}
+        <div className="flex items-center justify-between py-2.5 bg-[#AC0F16]/10 rounded-lg px-3 -mx-1 mt-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#AC0F16]">
+            <IconCash className="size-4" />
             <span>Expected Drawer</span>
           </div>
-          <span className="text-sm font-bold tabular-nums text-[#AC0F16]">
+          <span className="text-base font-bold tabular-nums text-[#AC0F16]">
             {formatCurrency(calculatedDrawer)}
           </span>
         </div>

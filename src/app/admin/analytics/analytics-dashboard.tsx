@@ -1382,20 +1382,21 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   
                   {/* Summary Stats */}
                   <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-3">
+                  <div className="text-center p-2 rounded-lg bg-muted/30">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{demandHistoryDays}-Day Historical</p>
+                      <p className="text-lg font-bold text-foreground tabular-nums">
+                        {demandForecastData.filter(d => d.historical !== null).reduce((sum, d) => sum + (d.historical || 0), 0).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">units</span>
+                      </p>
+                    </div>
                     <div className="text-center p-2 rounded-lg bg-muted/30">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         {demandHistoryDays === 7 ? "7" : demandHistoryDays === 30 ? "14" : "30"}-Day Forecast
                       </p>
                       <p className="text-lg font-bold text-foreground tabular-nums">
-                        {demandForecastData.filter(d => d.forecast !== null).reduce((sum, d) => sum + (d.forecast || 0), 0)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        {demandForecastData.filter(d => d.forecast !== null).reduce((sum, d) => sum + (d.forecast || 0), 0  ).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">units</span>
                       </p>
                     </div>
-                    <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{demandHistoryDays}-Day Historical</p>
-                      <p className="text-lg font-bold text-foreground tabular-nums">
-                        {demandForecastData.filter(d => d.historical !== null).reduce((sum, d) => sum + (d.historical || 0), 0)} <span className="text-xs font-normal text-muted-foreground">units</span>
-                      </p>
-                    </div>
+                    
                   </div>
                 </CardContent>
               </Card>
@@ -1953,10 +1954,14 @@ function ForecastingTable({
                       </div>
                     </TableCell>
                     <TableCell className="text-right py-2">
-                      <StockBadge stock={item.currentStock} status={item.stockStatus} />
+                      <StockWithSupply 
+                        stock={item.currentStock} 
+                        status={item.stockStatus} 
+                        velocity30d={item.velocity7Day} 
+                      />
                     </TableCell>
                     <TableCell className="text-right font-mono py-2 text-foreground text-sm">
-                      {item.velocity7Day}
+                      <VelocityWithTrend velocity={item.velocity7Day} predicted={item.predictedDemand} />
                     </TableCell>
                     <TableCell className="text-right font-mono font-bold py-2 text-foreground text-sm">
                       {item.predictedDemand}
@@ -2036,24 +2041,45 @@ function ForecastingTable({
           </div>
         </ScrollArea>
         
-        {/* Total Order Value Footer - Dynamic based on selection */}
-        {filteredAndSortedForecasts.length > 0 && (
-          <div className="sticky bottom-0 bg-muted/50 border-t border-border px-4 py-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground">
-              {selectedItems.size > 0 
-                ? `Total Value (${selectedItems.size} items):`
-                : "Total Recommended Order Value:"}
-            </span>
-            <span className="text-lg font-bold text-primary tabular-nums">
-              ₱{(selectedItems.size > 0
-                ? filteredAndSortedForecasts
-                    .filter(item => selectedItems.has(item.productId))
-                    .reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0)
-                : filteredAndSortedForecasts.reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0)
-              ).toLocaleString("en-PH", { maximumFractionDigits: 0 })}
-            </span>
-          </div>
-        )}
+        {/* Total Order Value Footer - Dynamic based on selection with High Value Warning */}
+        {filteredAndSortedForecasts.length > 0 && (() => {
+          const totalValue = selectedItems.size > 0
+            ? filteredAndSortedForecasts
+                .filter(item => selectedItems.has(item.productId))
+                .reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0)
+            : filteredAndSortedForecasts.reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0);
+          const isHighValue = totalValue > 50000;
+          const itemCount = selectedItems.size > 0 ? selectedItems.size : filteredAndSortedForecasts.length;
+          
+          // Hide footer if no items selected and using selection mode
+          if (selectedItems.size === 0 && filteredAndSortedForecasts.some(i => selectedItems.has(i.productId))) {
+            return null;
+          }
+          
+          return (
+            <div className={`sticky bottom-0 border-t border-border px-4 py-3 flex items-center justify-between ${isHighValue ? "bg-amber-50 dark:bg-amber-950/20" : "bg-muted/50"}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {selectedItems.size > 0 
+                    ? `Selected: ${itemCount} items`
+                    : "Total Recommended Order:"}
+                </span>
+                {isHighValue && (
+                  <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-100 dark:bg-amber-950/30 gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    High Value Order
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Est. Cost:</span>
+                <span className={`text-lg font-bold tabular-nums ${isHighValue ? "text-amber-600" : "text-primary"}`}>
+                  ₱{totalValue.toLocaleString("en-PH", { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -2079,5 +2105,94 @@ function StockBadge({ stock, status }: { stock: number; status: string }) {
     <span className={`inline-flex items-center px-2 py-1 rounded-md text-sm font-mono ${getVariant()}`}>
       {stock}
     </span>
+  );
+}
+
+// =============================================================================
+// Days of Supply Progress Bar (Task 3: Stock Progress Bars)
+// =============================================================================
+function StockWithSupply({ stock, status, velocity30d }: { stock: number; status: string; velocity30d: number }) {
+  // Calculate Days of Supply
+  // Formula: dailyRate = velocity_30d / 30; daysLeft = current_stock / dailyRate
+  const dailyRate = velocity30d / 30;
+  const daysLeft = dailyRate > 0 ? stock / dailyRate : (stock > 0 ? 999 : 0);
+  const percent = Math.min((daysLeft / 7) * 100, 100); // Cap at 100% (7 days = full)
+  
+  // Color based on days of supply
+  // Red: <= 2 days, Orange: <= 5 days, Green: > 5 days
+  const getBarColor = () => {
+    if (daysLeft <= 2) return "bg-red-500";
+    if (daysLeft <= 5) return "bg-orange-500";
+    return "bg-emerald-500";
+  };
+  
+  const getStatusColor = () => {
+    switch (status) {
+      case "OUT_OF_STOCK":
+        return "text-red-700 dark:text-red-400";
+      case "CRITICAL":
+        return "text-orange-700 dark:text-orange-400";
+      case "LOW":
+        return "text-yellow-700 dark:text-yellow-400";
+      case "DEAD_STOCK":
+        return "text-slate-600 dark:text-slate-400";
+      default:
+        return "text-green-700 dark:text-green-400";
+    }
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex flex-col items-end gap-1 cursor-help min-w-[60px]">
+          {/* Stock Number */}
+          <span className={`text-sm font-mono font-medium ${getStatusColor()}`}>
+            {stock.toLocaleString()}
+          </span>
+          {/* Days of Supply Progress Bar */}
+          <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all ${getBarColor()}`}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          {/* Small label */}
+          <span className="text-[9px] text-muted-foreground">
+            {stock} left
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="p-3 max-w-[200px]">
+        <p className="font-semibold text-sm">
+          {daysLeft === 999 ? "No velocity data" : `${daysLeft.toFixed(1)} Days of Supply`}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {dailyRate > 0 
+            ? `Based on avg sales of ${dailyRate.toFixed(1)}/day` 
+            : "No recent sales activity"}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// =============================================================================
+// Velocity with Trend Arrow (Task 3B: Velocity Trend)
+// =============================================================================
+function VelocityWithTrend({ velocity, predicted }: { velocity: number; predicted: number }) {
+  // Determine trend: if predicted > velocity, demand is rising; if less, falling
+  const isRising = predicted > velocity;
+  const isFalling = predicted < velocity;
+  const diff = predicted - velocity;
+  
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <span className="tabular-nums">{velocity}</span>
+      {velocity > 0 && (
+        <span className={`text-[10px] ${isRising ? "text-green-600" : isFalling ? "text-orange-500" : "text-muted-foreground"}`}>
+          {isRising ? "↑" : isFalling ? "↓" : "→"}
+        </span>
+      )}
+    </div>
   );
 }

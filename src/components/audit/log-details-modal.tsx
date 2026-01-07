@@ -93,7 +93,7 @@ function formatValue(value: unknown, key?: string): string {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
     if (key?.toLowerCase().includes("price") || key?.toLowerCase().includes("amount") || key?.toLowerCase().includes("cost")) {
-      return `₱${value.toFixed(2)}`;
+      return `₱${value.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     return value.toLocaleString();
   }

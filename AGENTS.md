@@ -23,27 +23,32 @@
 ---
 
 ## 3. Design System (Strict Adherence)
-**Theme:** "Warm & Organic" (Simulating a cozy, physical minimart vibe).
+**Theme:** "Clean & Organic" (A modern, airy, professional retail aesthetic).
+**Crucial:** Do not use dark/muddy beige backgrounds. The interface must be high-contrast and clean.
 
 ### Color Palette
 | Token | Hex | Usage |
 | :--- | :--- | :--- |
-| **Background** | `#EDE5D8` | Main app background (Warm Beige) |
-| **Surface/Card** | `#F9F6F0` | Panels, Modals, Tables (Warm Alabaster) |
-| **Primary Text** | `#2d1b1a` | Headings, Body text (Dark Coffee Brown) - *No pure black* |
-| **Muted Text** | `#6c5e5d` | Subtitles, Hints |
-| **Primary Accent** | `#AC0F16` | Action buttons, Highlights (Deep Red) |
-| **Secondary** | `#F1782F` | Warnings, Low Stock (Warm Orange) |
-| **Success/Stock** | `#2EAFC5` | In Stock badges, Success toasts (Teal) |
-| **Destructive** | `#ef4444` | Out of Stock badges, Delete actions |
+| **Background** | `#FAFAF9` | Main app background (Stone-50 / Warm White). |
+| **Surface/Card** | `#F8F6F1` | Panels, Modals, Tables (Soft Off-White). **NOT** pure white. |
+| **Primary Text** | `#2d1b1a` | Headings, Body text (Dark Coffee Brown) - *No pure black*. |
+| **Muted Text** | `#78716c` | Subtitles, Hints (Stone-500). |
+| **Primary Accent** | `#AC0F16` | Action buttons, Highlights (Deep Red). |
+| **Secondary** | `#F1782F` | Warnings, Low Stock (Warm Orange). |
+| **Success/Stock** | `#2EAFC5` | In Stock badges, Success toasts (Teal). |
+| **Destructive** | `#ef4444` | Out of Stock badges, Delete actions. |
 
 ### Typography
 * **UI Font:** `Geist Sans` (Clean, modern sans-serif).
 * **Numbers/Data:** `Font Mono` (Receipts, Prices, Barcodes).
 
-### Responsive Rules
-* **Mobile-First:** All layouts must work on mobile devices.
-* **Touch Targets:** Buttons and inputs in the POS view must be large (`min-h-[44px]`) for easy tapping.
+### UI Patterns & Reference Implementations
+**Before creating new UI, check these "Golden Standards" for consistency:**
+* **Dashboards:** See `/admin/analytics` (`AnalyticsPage`). Use "Master-Detail" split views (Table on left, Context Chart on right) rather than stacked cards.
+* **Data Tables:** See `/admin/inventory` (`ProductTable`). Use compact rows, actionable columns, and clear badges.
+* **Metric Cards:** See `FinancialHub`. Use reactive summary cards that act as toggles for charts.
+* **Tooltips:** Must be Neutral (`bg-popover`), **never** Primary/Red.
+* **Headers:** Use "Toolbar" style headers with quick actions (e.g., Admin Dashboard) rather than just text.
 
 ---
 
@@ -58,74 +63,51 @@
     * Directories: Kebab-case (`app/admin/sales-history`).
 
 ### Next.js Patterns
-* **RSC First:** Use React Server Components for data fetching. Only use `'use client'` for interactive components (forms, dialogs, dynamic state).
+* **RSC First:** Use React Server Components for data fetching. Only use `'use client'` for interactive components.
 * **Server Actions:** All data mutations (Create, Update, Delete) must live in `lib/actions/*.ts`. **Do not use API routes.**
-* **Dynamic Imports:** Use for heavy components (e.g., charts, complex editors) to optimize bundle size.
+* **Dynamic Imports:** Use for heavy components (charts, map editors).
 
 ### State Management
 * **Server State:** Rely on `revalidatePath` and RSC refresh for server data.
 * **Client State:** Use **Zustand** stores (`lib/store/*.ts`) for:
     * `useCartStore`: Managing the active POS transaction.
-    * `useSettingsStore`: UI preferences (sidebar state, etc.).
+    * `useSettingsStore`: UI preferences.
 
-### Directory Structure
-```text
-/app             # App Router pages and layouts
-/components      # Reusable UI components
-  /ui            # Shadcn primitives (buttons, inputs)
-  /inventory     # Inventory-specific components
-  /pos           # Point of Sale components
-  /sales         # Sales history & analytics components
-/lib
-  /actions       # Server Actions (Mutations)
-  /store         # Zustand stores
-  /utils         # Helper functions
-  /validations   # Zod schemas
-/prisma          # DB Schema and seeders
-/public/uploads  # Local image storage
-````
+---
 
------
-
-## 5\. Module-Specific Context
+## 5. Module-Specific Context
 
 ### A. Inventory Management
-
-  * **Images:** We favor local filesystem storage (`public/uploads`) over cloud storage for offline reliability.
-  * **Stock Levels:** Visual indicators for stock status are critical (Green \> 10, Orange \< 10, Red = 0).
-  * **Cost Price:** Every product MUST have a `cost_price` (Supply Cost) to calculate profit margins later.
+* **Expiry Logic:** We use **"Nearest Expiry"** logic (FIFO). The system tracks the date of the item expiring *soonest*.
+* **Stock Levels:** Visual indicators must be "Days of Supply" based (Progress Bars), not just raw numbers.
+* **Cost Price:** Mandatory field for profit margin calculations.
 
 ### B. Point of Sale (POS)
-
-  * **Experience:** Designed for speed. Barcode scanning (simulated or real) adds items instantly.
-  * **Receipts:** Must follow the standard thermal receipt layout (Width: \~80mm/300px, Monospace font).
-  * **Math:**
-      * **Total Due:** Sum of `(Price * Qty)`.
-      * **VAT (12%):** Calculated as `Total / 1.12 * 0.12` (Inclusive Tax).
-      * **Vatable Sales:** `Total / 1.12`.
+* **Experience:** Designed for speed. Large touch targets.
+* **Receipts:** Standard thermal layout (~80mm).
+* **Math:** Strict VAT (12%) and Vatable Sales calculations.
 
 ### C. Sales History & Analytics
+* **Forecasting:** Use **Proportional Forecasting**.
+    * 7 Days History -> 7 Days Forecast.
+    * 30 Days History -> 14 Days Forecast.
+    * 90 Days History -> 30 Days Forecast.
+* **Restock Logic:**
+    * **Dynamic ROP:** Reorder Points = `(Daily Velocity * Lead Time) + Safety Buffer`.
+    * **Budgeting:** Always show "Total Recommended Order Value" to check cash flow.
 
-  * **Data Models:**
-      * `Transaction`: The receipt header (Total, Date, Payment Method).
-      * `TransactionItem`: The line items. **Crucial:** We snapshot `price_at_sale` and `cost_at_sale` to preserve historical profit data even if product prices change later.
-  * **Features:**
-      * **CSV Import:** Allows backfilling historical data for analytics testing.
-      * **Profit Calc:** `(Retail Price - Cost Price) * Qty`.
+### D. Audit Logs
+* **Scope:** Track **EVERY** Create, Update, Delete action (Inventory, Products, Orders).
+* **Format:** Store structured metadata (`oldValue` vs `newValue`) to allow "Diff View" in the UI.
 
------
+---
 
-## 6\. Development Workflow (Methodology)
+## 6. Development Workflow (Methodology)
 
-1.  **System 2 Thinking:** Before coding, analyze the requirements. Break down the task into "Database", "Server Action", and "UI" components.
+1.  **System 2 Thinking:** Analyze requirements first. Identify the "Reference Implementation" to mimic style.
 2.  **Implementation:**
-      * **Step 1:** Schema/DB changes first (`prisma/schema.prisma`).
-      * **Step 2:** Server Actions & Zod Validations.
-      * **Step 3:** UI Components & Client Logic.
-3.  **Review:** Check against the Design System (Colors, Mobile-First) and Tech Constraints (Server Actions, RSC).
-4.  **Error Handling:** Use Shadcn `toast` for user feedback. Wrap server actions in `try/catch` and return standardized error objects.
-
-<!-- end list -->
-
-```
-```
+    * **Step 1:** Schema/DB changes (`prisma/schema.prisma`).
+    * **Step 2:** Server Actions & Zod Validations (with Audit Logging).
+    * **Step 3:** UI Components (referencing Design System tokens).
+3.  **Review:** Check against the **Reference Implementations** (e.g., "Does this look like the Analytics page?").
+4.  **Error Handling:** Use Shadcn `toast` for user feedback.

@@ -1,19 +1,18 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { differenceInMinutes, formatDistanceToNow } from "date-fns";
+import { differenceInMinutes, formatDistanceToNow, format } from "date-fns";
 import {
   IconPackage,
   IconEye,
-  IconPrinter,
-  IconClock,
   IconAlertTriangle,
-  IconUser,
+  IconRefresh,
+  IconArrowRight,
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -21,7 +20,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { getIncomingOrders } from "@/actions/orders";
 import type { GroupedOrders, IncomingOrder } from "@/actions/orders";
+
+// Auto-refresh interval (5 seconds)
+const AUTO_REFRESH_INTERVAL = 5000;
 
 interface ActiveOrdersCardProps {
   incomingOrders: GroupedOrders;
@@ -43,7 +46,7 @@ const statusConfig = {
   },
 };
 
-const LATE_THRESHOLD_MINUTES = 20;
+const LATE_THRESHOLD_MINUTES = 15;
 
 // Format currency
 const formatCurrency = (amount: number) => {
@@ -54,140 +57,122 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-function OrderRow({ order, onView, onPrint }: { 
+function OrderRow({ order, onView }: { 
   order: IncomingOrder; 
   onView: () => void; 
-  onPrint: () => void;
 }) {
-  const [isHovered, setIsHovered] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const config = statusConfig[order.status as keyof typeof statusConfig];
-  
   const orderDate = new Date(order.order_date);
   const minutesElapsed = differenceInMinutes(new Date(), orderDate);
   const isLate = minutesElapsed >= LATE_THRESHOLD_MINUTES;
   
-  // Use formatDistanceToNow for human-readable time
-  const timeDisplay = formatDistanceToNow(orderDate, { addSuffix: true });
-  
-  // Calculate total
-  const totalAmount = order.items.reduce(
-    (sum, item) => sum + (item.price * item.quantity),
-    0
-  );
+  // Get status config for explicit badge
+  const statusInfo = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.PENDING;
 
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 px-3 py-2 hover:bg-muted/50 transition-colors group border-b border-border/50 last:border-b-0 cursor-pointer",
-        isLate && "bg-red-50/50 dark:bg-red-950/10"
+        "px-3 py-2 hover:bg-muted/30 transition-colors border-b border-border/50 last:border-b-0 cursor-pointer",
+        isLate && "bg-red-50/80 dark:bg-red-950/20"
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={onView}
     >
-      {/* Top Row: ID, Customer, Status, Time */}
+      {/* Ticket Layout: Order ID | Items | Status Badge | Timer | Action */}
       <div className="flex items-center gap-2">
-        {/* Order ID */}
-        <div className="font-mono text-xs font-bold text-[#AC0F16] w-10 shrink-0">
-          #{order.order_id}
+        {/* Left: Order ID - Large & Bold */}
+        <div className="font-mono text-base font-bold text-[#AC0F16] shrink-0 w-12">
+          #{String(order.order_id).padStart(3, '0')}
         </div>
         
-        {/* Customer Name + Avatar */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <div className="size-5 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <IconUser className="size-3 text-muted-foreground" />
+        {/* Middle: Item List - Clean with Bold Quantities */}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+            {order.items.slice(0, 3).map((item, idx) => (
+              <span key={idx} className="text-xs">
+                <span className="font-bold text-[#AC0F16]">{item.quantity}×</span>
+                <span className="text-foreground ml-0.5">{item.product.product_name}</span>
+              </span>
+            ))}
+            {order.items.length > 3 && (
+              <span className="text-[10px] text-muted-foreground">+{order.items.length - 3} more</span>
+            )}
           </div>
-          <span className="text-xs font-medium truncate">{order.customer.name}</span>
         </div>
         
-        {/* Status Badge */}
+        {/* Status Badge - Explicit accessibility */}
         <Badge 
           variant="outline" 
-          className={cn("text-[9px] px-1.5 py-0 h-5 shrink-0", config?.className)}
+          className={cn("text-[9px] px-1.5 py-0 h-4 shrink-0 border", statusInfo.className)}
         >
-          {config?.label}
+          {statusInfo.label}
         </Badge>
         
-        {/* Time Elapsed */}
-        <TooltipProvider delayDuration={200}>
+        {/* Timer with detailed Tooltip */}
+        <TooltipProvider delayDuration={100}>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className={cn(
-                "flex items-center gap-0.5 text-[10px] font-medium shrink-0",
-                isLate ? "text-destructive" : "text-muted-foreground"
+                "flex items-center gap-1 text-xs shrink-0 min-w-[40px] justify-end",
+                isLate ? "text-destructive font-bold" : "text-muted-foreground"
               )}>
                 {isLate && <IconAlertTriangle className="size-3" />}
-                <IconClock className="size-3" />
-                <span className="max-w-[60px] truncate">{timeDisplay}</span>
+                <span>{minutesElapsed}m</span>
               </div>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              {orderDate.toLocaleString()}
+            <TooltipContent side="left" className="text-xs">
+              <p className="font-medium">Order placed at {format(orderDate, "h:mm a")}</p>
+              <p className="text-muted-foreground">({formatDistanceToNow(orderDate, { addSuffix: true })})</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
         
-        {/* Actions - Show on Hover */}
-        <div className={cn(
-          "flex items-center gap-0.5 transition-opacity shrink-0",
-          isHovered ? "opacity-100" : "opacity-0"
-        )}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0"
-            onClick={(e) => { e.stopPropagation(); onView(); }}
-          >
-            <IconEye className="size-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0"
-            onClick={(e) => { e.stopPropagation(); onPrint(); }}
-          >
-            <IconPrinter className="size-3" />
-          </Button>
-        </div>
-      </div>
-      
-      {/* Bottom Row: Item Pills (Horizontal Scroll) + Total */}
-      <div className="flex items-center gap-2">
-        {/* Horizontal Scrollable Item Pills */}
-        <div 
-          ref={scrollRef}
-          className="flex-1 overflow-x-auto scrollbar-hide flex items-center gap-1"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        {/* Far Right: View Button */}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="h-7 w-7 p-0 shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onView();
+          }}
         >
-          {order.items.map((item) => (
-            <Badge
-              key={item.order_item_id}
-              variant="secondary"
-              className="text-[9px] px-1.5 py-0.5 h-auto whitespace-nowrap bg-muted/80 text-muted-foreground shrink-0"
-            >
-              {item.product.product_name.slice(0, 12)}{item.product.product_name.length > 12 ? '…' : ''} x{item.quantity}
-            </Badge>
-          ))}
-        </div>
-        
-        {/* Total Amount */}
-        <div className="font-mono text-xs font-bold text-foreground shrink-0">
-          {formatCurrency(totalAmount)}
-        </div>
+          <IconEye className="size-3.5" />
+        </Button>
       </div>
     </div>
   );
 }
 
-export function ActiveOrdersCard({ incomingOrders, className }: ActiveOrdersCardProps) {
+export function ActiveOrdersCard({ incomingOrders: initialOrders, className }: ActiveOrdersCardProps) {
   const router = useRouter();
+  const [orders, setOrders] = useState<GroupedOrders>(initialOrders);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Auto-refresh to catch incoming orders
+  const refreshOrders = useCallback(async () => {
+    try {
+      const freshOrders = await getIncomingOrders();
+      setOrders(freshOrders);
+    } catch (error) {
+      console.error("[ActiveOrdersCard] Refresh failed:", error);
+    }
+  }, []);
+  
+  // Set up auto-refresh interval
+  useEffect(() => {
+    const interval = setInterval(refreshOrders, AUTO_REFRESH_INTERVAL);
+    return () => clearInterval(interval);
+  }, [refreshOrders]);
+  
+  // Also update when props change (from parent refresh)
+  useEffect(() => {
+    setOrders(initialOrders);
+  }, [initialOrders]);
   
   // Combine all active orders and sort by date (oldest first - FIFO)
   const allOrders = [
-    ...incomingOrders.pending,
-    ...incomingOrders.preparing,
-    ...incomingOrders.ready,
+    ...orders.pending,
+    ...orders.preparing,
+    ...orders.ready,
   ].sort((a, b) => new Date(a.order_date).getTime() - new Date(b.order_date).getTime());
 
   const totalCount = allOrders.length;
@@ -195,12 +180,16 @@ export function ActiveOrdersCard({ incomingOrders, className }: ActiveOrdersCard
     (o) => differenceInMinutes(new Date(), new Date(o.order_date)) >= LATE_THRESHOLD_MINUTES
   ).length;
 
+  // Navigate to orders page with orderId to auto-open the drawer
   const handleView = (orderId: number) => {
     router.push(`/admin/orders?orderId=${orderId}`);
   };
-
-  const handlePrint = (orderId: number) => {
-    router.push(`/admin/orders?orderId=${orderId}&print=true`);
+  
+  // Manual refresh handler
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshOrders();
+    setIsRefreshing(false);
   };
 
   return (
@@ -223,32 +212,29 @@ export function ActiveOrdersCard({ incomingOrders, className }: ActiveOrdersCard
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {totalCount > 0 && (
-            <span className="relative flex size-2">
-              <span className="animate-ping absolute h-full w-full rounded-full bg-[#AC0F16] opacity-75"></span>
-              <span className="relative rounded-full size-2 bg-[#AC0F16]"></span>
-            </span>
-          )}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+          >
+            <IconRefresh className={cn("size-3.5", isRefreshing && "animate-spin")} />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs"
+            className="h-6 text-[10px] px-2 gap-1"
             onClick={() => router.push("/admin/orders")}
           >
             View All
+            <IconArrowRight className="size-3" />
           </Button>
         </div>
       </div>
       
-      {/* Table Header - Rich Layout */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-b text-[10px] font-medium text-muted-foreground uppercase tracking-wide shrink-0">
-        <div className="w-10">ID</div>
-        <div className="flex-1">ORDER DETAILS</div>
-        <div className="w-14 text-right">TOTAL</div>
-      </div>
-      
-      {/* Orders List */}
+      {/* Orders List - Ticket style layout */}
       <ScrollArea className="flex-1 min-h-0">
         {allOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
@@ -263,7 +249,6 @@ export function ActiveOrdersCard({ incomingOrders, className }: ActiveOrdersCard
                 key={order.order_id}
                 order={order}
                 onView={() => handleView(order.order_id)}
-                onPrint={() => handlePrint(order.order_id)}
               />
             ))}
           </div>
@@ -271,22 +256,21 @@ export function ActiveOrdersCard({ incomingOrders, className }: ActiveOrdersCard
       </ScrollArea>
       
       {/* Footer Summary */}
-      <div className="flex items-center justify-between px-3 py-2 border-t bg-muted/20 text-[10px] text-muted-foreground shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-1.5 px-3 py-2 border-t bg-muted/20 text-[10px] text-muted-foreground shrink-0">
+        <div className="flex items-center justify-between">
           <span className="flex items-center gap-1">
             <div className="size-2 rounded-full bg-amber-500" />
-            {incomingOrders.pending.length} pending
+            {orders.pending.length} pending
           </span>
           <span className="flex items-center gap-1">
             <div className="size-2 rounded-full bg-blue-500" />
-            {incomingOrders.preparing.length} preparing
+            {orders.preparing.length} preparing
           </span>
           <span className="flex items-center gap-1">
             <div className="size-2 rounded-full bg-emerald-500" />
-            {incomingOrders.ready.length} ready
+            {orders.ready.length} ready
           </span>
         </div>
-        <span className="font-medium">FIFO Queue</span>
       </div>
     </div>
   );

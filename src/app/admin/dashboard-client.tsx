@@ -18,10 +18,18 @@ import {
   IconCurrencyPeso,
   IconBroadcast,
   IconRefresh,
+  IconPlus,
+  IconHelpCircle,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import {
+  Tooltip as TooltipUI,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   AreaChart,
   Area,
@@ -207,9 +215,15 @@ export function DashboardClient({
     transactions: calcPercentChange(displayStats.primary.count, displayStats.comparison.count),
   }), [displayStats]);
 
-  // Percentage badge component
+  // Percentage badge component - Smart comparison: hide negative % for "Today"
   const PercentBadge = ({ value, inverted = false }: { value: number; inverted?: boolean }) => {
     const isPositive = inverted ? value <= 0 : value >= 0;
+    
+    // Smart Trend Logic: If showing "Today", only show POSITIVE trends
+    // Why: Negative % in the morning just means the day isn't over yet - it's noise
+    const showTrend = selectedPreset !== "Today" || isPositive;
+    if (!showTrend) return null;
+    
     return (
       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
         isPositive 
@@ -310,11 +324,11 @@ export function DashboardClient({
         <div className="flex items-center gap-1.5">
           <Button 
             size="sm"
-            className="h-8 px-3 gap-1.5 bg-[#AC0F16] hover:bg-[#AC0F16]/90 text-white"
+            className="h-8 px-4 gap-1.5 bg-[#AC0F16] hover:bg-[#AC0F16]/90 text-white shadow-md hover:shadow-lg transition-shadow font-medium"
             onClick={() => router.push("/admin/pos")}
           >
-            <IconReceipt className="size-3.5" />
-            <span className="hidden sm:inline text-xs">New Sale</span>
+            <IconPlus className="size-3.5" />
+            <span className="text-xs">New Sale</span>
           </Button>
           <Button 
             variant="outline"
@@ -368,7 +382,20 @@ export function DashboardClient({
             <PercentBadge value={percentages.profit} />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.profit)}</p>
-          <p className="text-[10px] text-muted-foreground">Profit</p>
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-muted-foreground">Profit</p>
+            <TooltipProvider delayDuration={100}>
+              <TooltipUI>
+                <TooltipTrigger asChild>
+                  <IconHelpCircle className="size-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                  <p className="font-medium">Sales Revenue − Cost of Goods</p>
+                  <p className="text-muted-foreground">Net earnings from completed sales</p>
+                </TooltipContent>
+              </TooltipUI>
+            </TooltipProvider>
+          </div>
         </div>
 
         {/* Total Revenue Card */}
@@ -383,7 +410,20 @@ export function DashboardClient({
             <PercentBadge value={percentages.revenue} />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.revenue)}</p>
-          <p className="text-[10px] text-muted-foreground">Sales Revenue</p>
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-muted-foreground">Sales Revenue</p>
+            <TooltipProvider delayDuration={100}>
+              <TooltipUI>
+                <TooltipTrigger asChild>
+                  <IconHelpCircle className="size-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                  <p className="font-medium">Total sales value (Cash + Digital)</p>
+                  <p className="text-muted-foreground">Gross income before costs</p>
+                </TooltipContent>
+              </TooltipUI>
+            </TooltipProvider>
+          </div>
         </div>
 
         {/* Total Cost Card */}
@@ -398,7 +438,20 @@ export function DashboardClient({
             <PercentBadge value={percentages.cost} inverted />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.cost)}</p>
-          <p className="text-[10px] text-muted-foreground">Cost of Goods</p>
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-muted-foreground">Cost of Goods</p>
+            <TooltipProvider delayDuration={100}>
+              <TooltipUI>
+                <TooltipTrigger asChild>
+                  <IconHelpCircle className="size-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                  <p className="font-medium">Sum of item cost prices × quantity sold</p>
+                  <p className="text-muted-foreground">Lower is better for margins</p>
+                </TooltipContent>
+              </TooltipUI>
+            </TooltipProvider>
+          </div>
         </div>
 
         {/* Transactions Count Card */}
@@ -413,14 +466,27 @@ export function DashboardClient({
             <PercentBadge value={percentages.transactions} />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{displayStats.primary.count}</p>
-          <p className="text-[10px] text-muted-foreground">Transactions</p>
+          <div className="flex items-center gap-1">
+            <p className="text-[10px] text-muted-foreground">Transactions</p>
+            <TooltipProvider delayDuration={100}>
+              <TooltipUI>
+                <TooltipTrigger asChild>
+                  <IconHelpCircle className="size-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                  <p className="font-medium">Count of completed receipts</p>
+                  <p className="text-muted-foreground">Higher traffic = more customers served</p>
+                </TooltipContent>
+              </TooltipUI>
+            </TooltipProvider>
+          </div>
         </div>
       </div>
 
-      {/* Sales Overview + Active Orders - 50/50 Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Sales Overview + Active Orders - 75/25 Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Sales Overview Chart */}
-        <div className="bg-card rounded-xl border p-4">
+        <div className="bg-card rounded-xl border p-4 lg:col-span-3">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="font-medium text-sm text-foreground">Sales Overview</h3>
@@ -508,9 +574,9 @@ export function DashboardClient({
                   type="monotone" 
                   fill="url(#fillRevenue)" 
                   stroke="#2EAFC5"
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={false}
-                  activeDot={{ fill: "#2EAFC5", stroke: "white", strokeWidth: 2, r: 4 }}
+                  activeDot={{ fill: "#2EAFC5", stroke: "white", strokeWidth: 2, r: 5 }}
                 />
               )}
               {showProfit && (
@@ -519,9 +585,9 @@ export function DashboardClient({
                   type="monotone" 
                   fill="url(#fillProfit)" 
                   stroke="#10B981"
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={false}
-                  activeDot={{ fill: "#10B981", stroke: "white", strokeWidth: 2, r: 4 }}
+                  activeDot={{ fill: "#10B981", stroke: "white", strokeWidth: 2, r: 5 }}
                 />
               )}
               {showCost && (
@@ -530,9 +596,9 @@ export function DashboardClient({
                   type="monotone" 
                   fill="url(#fillCost)" 
                   stroke="#F1782F"
-                  strokeWidth={2}
+                  strokeWidth={3}
                   dot={false}
-                  activeDot={{ fill: "#F1782F", stroke: "white", strokeWidth: 2, r: 4 }}
+                  activeDot={{ fill: "#F1782F", stroke: "white", strokeWidth: 2, r: 5 }}
                 />
               )}
             </AreaChart>
@@ -564,8 +630,8 @@ export function DashboardClient({
         {/* Live Feed */}
         <div className="bg-card rounded-xl border flex flex-col lg:col-span-1">
           <div className="flex items-center gap-2 p-3 border-b">
-            <IconBroadcast className="size-4 text-[#AC0F16]" />
-            <h3 className="font-medium text-sm">Live Feed</h3>
+            <IconBroadcast className="mt-0 size-5 text-[#AC0F16]" />
+            <h3 className="font-medium text-sm mt-0 mb-0.75">Live Feed</h3>
             <span className="relative flex size-2 ml-auto">
               <span className="animate-ping absolute h-full w-full rounded-full bg-[#2EAFC5] opacity-75"></span>
               <span className="relative rounded-full size-2 bg-[#2EAFC5]"></span>
@@ -578,29 +644,65 @@ export function DashboardClient({
                 <p className="text-xs">No recent activity</p>
               </div>
             ) : (
-              <div className="p-3 space-y-2">
-                {recentSales.transactions.slice(0, 8).map((tx) => (
-                  <button
-                    key={tx.transaction_id}
-                    onClick={() => handleTransactionClick(tx.receipt_no)}
-                    className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
-                  >
-                    <div className="size-7 rounded-full bg-[#2EAFC5]/20 flex items-center justify-center flex-shrink-0">
-                      <IconUser className="size-3.5 text-[#2EAFC5]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium truncate text-foreground">Sale #{tx.receipt_no.slice(-4)}</p>
-                        <span className="text-[10px] ml-2 text-muted-foreground">{formatTime(tx.created_at)}</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">{tx.itemsCount} items</p>
-                    </div>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                      +{formatCurrency(tx.total_amount)}
-                    </span>
-                    <IconArrowRight className="size-3.5 text-muted-foreground" />
-                  </button>
-                ))}
+              <div className="p-2 space-y-1">
+                {recentSales.transactions.slice(0, 8).map((tx) => {
+                  // Smart content: Show item name for single-item sales
+                  const isSingleItem = tx.items && tx.items.length === 1;
+                  const itemContent = isSingleItem 
+                    ? `${tx.items[0].quantity}× ${tx.items[0].product_name}`
+                    : `${tx.itemsCount} item${tx.itemsCount !== 1 ? 's' : ''}`;
+                  
+                  return (
+                    <TooltipProvider key={tx.transaction_id} delayDuration={200}>
+                      <TooltipUI>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => handleTransactionClick(tx.receipt_no)}
+                            className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left group"
+                          >
+                            {/* Left: Avatar + Sale Info */}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="size-8 rounded-full bg-[#2EAFC5]/20 flex items-center justify-center flex-shrink-0">
+                                <IconUser className="size-4 text-[#2EAFC5]" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-foreground">Sale #{tx.receipt_no.slice(-4)}</p>
+                                <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">{itemContent}</p>
+                              </div>
+                            </div>
+                            
+                            {/* Right: Price + Time (stacked) */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                  +{formatCurrency(tx.total_amount)}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">{formatTime(tx.created_at)}</p>
+                              </div>
+                              <IconArrowRight className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </button>
+                        </TooltipTrigger>
+                        {/* Tooltip showing all items */}
+                        {tx.items && tx.items.length > 1 && (
+                          <TooltipContent side="left" className="text-xs max-w-[200px]">
+                            <p className="font-medium mb-1">Items in this sale:</p>
+                            <ul className="space-y-0.5">
+                              {tx.items.slice(0, 5).map((item, idx) => (
+                                <li key={idx} className="text-muted-foreground">
+                                  {item.quantity}× {item.product_name}
+                                </li>
+                              ))}
+                              {tx.items.length > 5 && (
+                                <li className="text-muted-foreground/70">+{tx.items.length - 5} more...</li>
+                              )}
+                            </ul>
+                          </TooltipContent>
+                        )}
+                      </TooltipUI>
+                    </TooltipProvider>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>

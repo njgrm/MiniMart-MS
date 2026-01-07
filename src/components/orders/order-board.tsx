@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   IconRefresh,
   IconClipboardList,
@@ -78,6 +78,7 @@ function OrderColumn({ title, icon, orders, badgeColor, onOrderClick }: ColumnPr
 
 export function OrderBoard({ initialOrders }: OrderBoardProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<GroupedOrders>(initialOrders);
   const [selectedOrder, setSelectedOrder] = useState<IncomingOrder | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -85,6 +86,24 @@ export function OrderBoard({ initialOrders }: OrderBoardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
   const selectedOrderRef = useRef<IncomingOrder | null>(null);
+  const hasHandledUrlOrderRef = useRef(false);
+
+  // Handle orderId from URL to auto-open the drawer
+  useEffect(() => {
+    const orderId = searchParams.get("orderId");
+    if (orderId && !hasHandledUrlOrderRef.current) {
+      const orderIdNum = parseInt(orderId, 10);
+      const allOrders = [...orders.pending, ...orders.preparing, ...orders.ready];
+      const order = allOrders.find((o) => o.order_id === orderIdNum);
+      if (order) {
+        setSelectedOrder(order);
+        setIsSheetOpen(true);
+        hasHandledUrlOrderRef.current = true;
+        // Clear the URL param after opening
+        router.replace("/admin/orders", { scroll: false });
+      }
+    }
+  }, [searchParams, orders, router]);
 
   // Keep selectedOrderRef in sync
   useEffect(() => {

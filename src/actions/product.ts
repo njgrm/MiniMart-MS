@@ -20,6 +20,11 @@ export type ActionResult = {
 /**
  * Get all products with inventory info
  * By default, excludes archived products unless includeArchived is true
+ * 
+ * STOCK LOGIC:
+ * - current_stock: Physical stock on shelf
+ * - allocated_stock: Stock reserved by PENDING/PREPARING orders
+ * - available_stock: current_stock - allocated_stock (what can actually be sold)
  */
 export async function getProducts(includeArchived: boolean = false) {
   const products = await prisma.product.findMany({
@@ -32,27 +37,35 @@ export async function getProducts(includeArchived: boolean = false) {
     },
   });
 
-  return products.map((product) => ({
-    product_id: product.product_id,
-    product_name: product.product_name,
-    category: product.category,
-    retail_price: Number(product.retail_price),
-    wholesale_price: Number(product.wholesale_price),
-    cost_price: Number(product.cost_price),
-    current_stock: product.inventory?.current_stock ?? 0,
-    reorder_level: product.inventory?.reorder_level ?? 10,
-    auto_reorder: product.inventory?.auto_reorder ?? true,
-    lead_time_days: product.inventory?.lead_time_days ?? 7,
-    barcode: product.barcode,
-    image_url: product.image_url,
-    is_archived: product.is_archived,
-    nearest_expiry_date: product.nearest_expiry_date,
-    status: (
-      (product.inventory?.current_stock ?? 0) <= (product.inventory?.reorder_level ?? 10)
-        ? "LOW_STOCK"
-        : "IN_STOCK"
-    ) as "LOW_STOCK" | "IN_STOCK",
-  }));
+  return products.map((product) => {
+    const currentStock = product.inventory?.current_stock ?? 0;
+    const allocatedStock = product.inventory?.allocated_stock ?? 0;
+    const availableStock = Math.max(0, currentStock - allocatedStock);
+    
+    return {
+      product_id: product.product_id,
+      product_name: product.product_name,
+      category: product.category,
+      retail_price: Number(product.retail_price),
+      wholesale_price: Number(product.wholesale_price),
+      cost_price: Number(product.cost_price),
+      current_stock: currentStock,
+      allocated_stock: allocatedStock,
+      available_stock: availableStock,
+      reorder_level: product.inventory?.reorder_level ?? 10,
+      auto_reorder: product.inventory?.auto_reorder ?? true,
+      lead_time_days: product.inventory?.lead_time_days ?? 7,
+      barcode: product.barcode,
+      image_url: product.image_url,
+      is_archived: product.is_archived,
+      nearest_expiry_date: product.nearest_expiry_date,
+      status: (
+        currentStock <= (product.inventory?.reorder_level ?? 10)
+          ? "LOW_STOCK"
+          : "IN_STOCK"
+      ) as "LOW_STOCK" | "IN_STOCK",
+    };
+  });
 }
 
 /**
