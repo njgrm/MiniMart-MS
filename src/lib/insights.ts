@@ -41,6 +41,7 @@ export interface Insight {
   actionHref?: string;    // Link destination
   productId?: number;     // For product-specific insights
   productName?: string;
+  productImage?: string | null; // Product image URL for visual context
   value?: number;         // Associated metric
   metadata?: Record<string, unknown>;
 }
@@ -67,6 +68,7 @@ export interface StockItem {
 export interface VelocityData {
   productId: number;
   productName: string;
+  productImage?: string | null; // Product image URL
   category: string;
   currentStock: number;
   dailyVelocity: number;
@@ -116,6 +118,7 @@ function detectCriticalStockouts(velocityData: VelocityData[]): Insight[] {
         actionHref: `/admin/inventory?restock=${item.productId}`,
         productId: item.productId,
         productName: item.productName,
+        productImage: item.productImage,
         value: daysOfStock,
         metadata: { daysOfStock, dailyVelocity: item.dailyVelocity },
       });
@@ -130,6 +133,7 @@ function detectCriticalStockouts(velocityData: VelocityData[]): Insight[] {
         actionHref: `/admin/inventory?restock=${item.productId}`,
         productId: item.productId,
         productName: item.productName,
+        productImage: item.productImage,
         value: 0,
         metadata: { dailyVelocity: item.dailyVelocity },
       });
@@ -155,17 +159,19 @@ function detectDeadInventory(velocityData: VelocityData[]): Insight[] {
         id: `dead-stock-${item.productId}`,
         level: "WARNING",
         icon: "snowflake",
-        title: "Frozen Inventory",
+        title: "Dead Stock Alert",
         message: `${item.productName} has ${item.currentStock} units sitting unsold for ${item.daysSinceLastSale} days. Consider running a clearance promo to free up shelf space and recover capital.`,
-        actionLabel: "Create Discount",
-        actionHref: `/admin/inventory/${item.productId}`,
+        actionLabel: "Reduce Price",
+        actionHref: `/admin/inventory?editPrice=${item.productId}`,
         productId: item.productId,
         productName: item.productName,
+        productImage: item.productImage,
         value: item.daysSinceLastSale,
         metadata: { 
           daysSinceLastSale: item.daysSinceLastSale, 
           currentStock: item.currentStock,
           estimatedFrozenCash: frozenCash,
+          isDeadStock: true,
         },
       });
     }
@@ -239,6 +245,7 @@ function detectHeroProduct(velocityData: VelocityData[]): Insight | null {
     actionHref: `/admin/inventory/${hero.productId}`,
     productId: hero.productId,
     productName: hero.productName,
+    productImage: hero.productImage,
     value: hero.velocityChange,
     metadata: { 
       weeklyVelocity: hero.weeklyVelocity, 
@@ -273,6 +280,7 @@ function detectSlowMovers(velocityData: VelocityData[]): Insight[] {
       actionHref: `/admin/inventory/${worst.productId}`,
       productId: worst.productId,
       productName: worst.productName,
+      productImage: worst.productImage,
       value: worst.velocityChange,
     });
   }

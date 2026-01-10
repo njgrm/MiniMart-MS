@@ -1542,6 +1542,7 @@ export async function getSmartInsights(): Promise<Insight[]> {
       select: {
         product_id: true,
         product_name: true,
+        image_url: true,
         category: true,
         cost_price: true,
         retail_price: true,
@@ -1659,6 +1660,7 @@ export async function getSmartInsights(): Promise<Insight[]> {
       return {
         productId: product.product_id,
         productName: product.product_name,
+        productImage: product.image_url,
         category: product.category,
         currentStock: product.inventory?.current_stock ?? 0,
         dailyVelocity,

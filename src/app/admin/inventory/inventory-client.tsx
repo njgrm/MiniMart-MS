@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Package, Archive, CheckCircle2 } from "lucide-react";
 import { ProductsTable } from "./products-table";
 import { ProductDialog } from "./product-dialog";
@@ -39,6 +39,7 @@ interface InventoryClientProps {
 
 export function InventoryClient({ initialProducts, initialArchivedProducts }: InventoryClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<ProductData[]>(initialProducts);
   const [archivedProducts, setArchivedProducts] = useState<ArchivedProduct[]>(initialArchivedProducts);
   const [activeTab, setActiveTab] = useState("active");
@@ -60,6 +61,30 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
     setProducts(initialProducts);
     setArchivedProducts(initialArchivedProducts);
   }, [initialProducts, initialArchivedProducts]);
+
+  // Handle URL query params for deep-linking modals (from Analytics page insights)
+  useEffect(() => {
+    const restockId = searchParams.get("restock");
+    const editPriceId = searchParams.get("editPrice");
+    
+    if (restockId) {
+      const product = products.find(p => p.product_id === parseInt(restockId));
+      if (product) {
+        setRestockingProduct(product);
+        // Clear the query param from URL without full page reload
+        router.replace("/admin/inventory", { scroll: false });
+      }
+    }
+    
+    if (editPriceId) {
+      const product = products.find(p => p.product_id === parseInt(editPriceId));
+      if (product) {
+        setEditingProduct(product);
+        // Clear the query param from URL without full page reload
+        router.replace("/admin/inventory", { scroll: false });
+      }
+    }
+  }, [searchParams, products, router]);
 
   const handleProductCreated = (newProduct: ProductData) => {
     setProducts((prev) => [...prev, newProduct].sort((a, b) => 

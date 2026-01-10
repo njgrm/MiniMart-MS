@@ -6,6 +6,101 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-10
 
+### � Production-Ready Business Logic Fixes
+
+Fourth round of improvements focusing on making the dashboard production-ready with proper business logic and actionable features.
+
+#### 1. Days Left Display Logic Improvements
+- **Edge Case Handling:** Properly handles all stock/velocity combinations
+- **Out of Stock (stock=0):** Displays red "Out of Stock" badge
+- **Less than 1 Day (0<days<1):** Displays urgent red "< 1 Day Left" with minimal progress bar
+- **Dead Stock (velocity=0, stock>0):** Displays gray "No Movement" badge with stagnant inventory tooltip
+- **Formula Fix:** Changed daily rate calculation from `/30` to `/7` (since velocity is 7-day based)
+- **Enhanced Tooltip:** Added contextual advice for dead stock items
+
+#### 2. Intelligence Feed Logic Fixes
+- **Dead Stock Alert:** Changed title from "Frozen Inventory" to "Dead Stock Alert"
+- **Action Button:** Changed from "Create Discount" to "Reduce Price" for dead stock items
+- **Contextual Messages:** `getShortIssue()` now provides meaningful context:
+  - Dead stock: "No sales for X days" or "No sales in 30+ days"
+  - Frozen inventory: "Stagnant for X days"
+  - Low demand: "Monitor: Low demand" (instead of generic "Monitor closely")
+- **Metadata Enhancement:** Added `isDeadStock: true` flag to dead stock insight metadata
+
+#### 3. Action Button Destinations (Deep-Linking)
+- **Reduce Price Action:** Links to `/admin/inventory?editPrice={productId}` 
+- **Restock Action:** Links to `/admin/inventory?restock={productId}`
+- **URL Parameter Handling:** Added useSearchParams hook to InventoryClient
+- **Modal Auto-Open:** Inventory page now auto-opens appropriate modal based on URL params:
+  - `?restock=123` → Opens RestockDialog pre-filled with product
+  - `?editPrice=123` → Opens ProductDialog (edit mode) for price adjustment
+- **Clean URLs:** Parameters cleared from URL after modal opens (no page reload)
+
+#### 4. Export Purchase Order Feature
+- **Library:** Replaced vulnerable `xlsx` (SheetJS) with secure `exceljs`
+  - Removed `xlsx` due to Prototype Pollution (GHSA-4r6h-8v6p-xvw6) and ReDoS (GHSA-5pgg-2g8v-p4x9) vulnerabilities
+  - `exceljs` has 0 known vulnerabilities and is actively maintained
+- **Excel Format:** Generates professional `.xlsx` file with:
+  - Store header with generation timestamp
+  - Summary totals (Total Items, Total Order Value)
+  - Detailed columns: Product Name, Category, Current Stock, Daily Sales Rate, Days Left, Forecasted Demand, Suggested Order Qty, Cost Price, Total Cost, Priority
+  - Color-coded priority cells (red for CRITICAL, amber for LOW)
+  - Proper column widths for readability
+- **Filename:** `Purchase_Order_YYYY-MM-DD.xlsx`
+- **Export Buttons:**
+  - Header "Export PO" button: Exports all items needing restock
+  - Table toolbar button: Exports only selected items (appears when items selected)
+- **Smart Filtering:** Only includes CRITICAL and LOW urgency items (excludes healthy stock)
+
+#### Files Modified:
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Days Left logic, Export PO function
+- `src/components/sales/insight-cards.tsx` - getShortIssue(), getActionText() functions
+- `src/lib/insights.ts` - Dead stock title and action updates
+- `src/app/admin/inventory/inventory-client.tsx` - URL parameter handling for modals
+- `package.json` - Added xlsx dependency
+
+---
+
+## [Previous] - 2026-01-10
+
+### �🔧 Analytics Dashboard Bug Fixes & UI Polish
+
+Second round of improvements focusing on functionality and removing remaining UX issues.
+
+#### 1. Time Left Column Sorting Fix
+- **Critical Bug Fix:** Sorting by "Time Left" column now works correctly based on actual days remaining
+- **Previous Issue:** Was sorting by raw stock count instead of calculated days of supply
+- **Solution:** Added `getDaysLeft()` helper function that calculates: `currentStock / (velocity7Day / 7)`
+- **Special Cases:** Out of stock items sort to top (ascending), no-sales-data items sort to bottom
+
+#### 2. Replaced All Emojis with Lucide Icons
+- **Narrative Header Icons:** AlertCircle (critical), Zap (warning), TrendingUp (forecast), CheckCircle (healthy), Lightbulb (info)
+- **Tooltip Icons:** AlertTriangle, BarChart3, Flame, Zap, CheckCircle for different stock states
+- **Chart Markers:** Event reference lines now use "★" symbol instead of 📅 emoji
+
+#### 3. Intelligence Feed Product Images
+- **InsightCard Enhancement:** Now displays product image (Avatar) when available
+- **Fallback:** Shows icon-based fallback if no image
+- **Data Pipeline:** Added `productImage` field to Insight interface and VelocityData
+- **Backend Update:** getSmartInsights() now fetches `image_url` from Product table
+
+#### 4. Forecast Card Image Fix
+- **Problem:** Product image in forecast side panel appeared stretched/thin
+- **Solution:** Added `className="object-cover"` to AvatarImage component
+- **Result:** Images maintain aspect ratio and fill container properly
+
+#### 5. Restock Table Scrollability
+- **Mobile Support:** Added `overflow-x-auto` wrapper around ScrollArea
+- **Min Width:** Increased table min-width from 750px to 850px
+- **Horizontal Scroll:** Table now scrolls horizontally on smaller screens
+
+#### 6. Forecasted Need Column Alignment
+- **Column Header:** Renamed from "Forecasted Need" to just "Forecasted"
+- **Alignment:** Changed from right-align to center-align for better readability
+- **Width:** Increased column widths for better spacing (Product: 180px, Time Left: 120px, etc.)
+
+---
+
 ### 🎨 Analytics Dashboard UX Overhaul - "Store Assistant" Style
 
 Comprehensive refactoring of the Analytics Dashboard to prioritize **Clarity** and **Actionability** over raw data density. Shifted design from "Financial Spreadsheet" to "Store Assistant" with plain English and visual indicators.

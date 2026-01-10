@@ -2,8 +2,10 @@
 
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ArrowRight,
   Flame,
@@ -173,6 +175,9 @@ export function InsightCard({ insight, className }: InsightCardProps) {
   
   // Generate short, plain English issue text based on level
   const getShortIssue = () => {
+    // Extract metadata for context
+    const metadata = insight.metadata || {};
+    
     if (insight.level === "CRITICAL") {
       // Parse "run out in approximately X day" patterns
       const daysMatch = insight.message.match(/(\d+)\s*day/i);
@@ -184,19 +189,44 @@ export function InsightCard({ insight, className }: InsightCardProps) {
       if (insight.message.toLowerCase().includes("out of stock")) return "Out of stock now";
       return "Needs attention";
     }
+    
     if (insight.level === "WARNING") {
+      // Dead stock detection (via metadata or message)
+      if (metadata.isDeadStock || insight.title?.toLowerCase().includes("dead stock")) {
+        const daysStagnant = metadata.daysSinceLastSale || 
+          insight.message.match(/(\d+)\s*days/i)?.[1];
+        if (daysStagnant) return `No sales for ${daysStagnant} days`;
+        return "No sales in 30+ days";
+      }
+      
+      // Frozen inventory / slow-moving
+      if (insight.title?.toLowerCase().includes("frozen") || 
+          insight.message.toLowerCase().includes("unsold")) {
+        const daysStagnant = metadata.daysSinceLastSale || 
+          insight.message.match(/(\d+)\s*days/i)?.[1];
+        if (daysStagnant) return `Stagnant for ${daysStagnant} days`;
+        return "Stagnant inventory";
+      }
+      
+      // Low stock warnings
       const daysMatch = insight.message.match(/(\d+)\s*day/i);
       if (daysMatch) {
         return `Low stock (${daysMatch[1]}d left)`;
       }
+      
+      // Slow-moving
       if (insight.message.toLowerCase().includes("slow")) return "Slow-moving item";
-      return "Monitor closely";
+      
+      // Generic fallback with context
+      return "Monitor: Low demand";
     }
+    
     if (insight.level === "SUCCESS") {
       if (insight.message.toLowerCase().includes("top seller")) return "Top seller!";
       if (insight.message.toLowerCase().includes("trending")) return "Trending up";
       return "Performing well";
     }
+    
     return "Info";
   };
   
@@ -211,13 +241,31 @@ export function InsightCard({ insight, className }: InsightCardProps) {
   
   // Determine action button text (simpler)
   const getActionText = () => {
-    if (insight.level === "CRITICAL" || insight.level === "WARNING") {
-      if (insight.actionLabel?.toLowerCase().includes("order") || insight.actionLabel?.toLowerCase().includes("restock")) {
+    // Use exact actionLabel if it's specific
+    if (insight.actionLabel) {
+      const label = insight.actionLabel.toLowerCase();
+      
+      // Dead stock actions
+      if (label.includes("reduce price") || label.includes("discount")) {
+        return "Reduce Price";
+      }
+      
+      // Restock actions
+      if (label.includes("order") || label.includes("restock")) {
         return "Restock";
       }
+      
+      // Emergency orders for critical items
+      if (label.includes("emergency")) {
+        return "Order Now";
+      }
     }
+    
     return insight.actionLabel || "View";
   };
+  
+  // Check if we have a product image to display
+  const hasProductImage = insight.productImage && productName;
   
   return (
     <div
@@ -231,13 +279,26 @@ export function InsightCard({ insight, className }: InsightCardProps) {
     >
       {/* Simplified Card Layout */}
       <div className="flex items-start gap-2.5">
-        {/* Icon */}
-        <div className={cn(
-          "flex-shrink-0 size-8 rounded-lg flex items-center justify-center",
-          styles.iconBg
-        )}>
-          <IconComponent className={cn("size-4", styles.iconColor)} />
-        </div>
+        {/* Product Image or Icon */}
+        {hasProductImage ? (
+          <Avatar className="size-8 shrink-0 border border-border/50">
+            <AvatarImage 
+              src={insight.productImage || undefined} 
+              alt={productName || "Product"} 
+              className="object-cover"
+            />
+            <AvatarFallback className={cn("text-[10px] font-semibold", styles.iconBg, styles.iconColor)}>
+              {productName?.slice(0, 2).toUpperCase() || "P"}
+            </AvatarFallback>
+          </Avatar>
+        ) : (
+          <div className={cn(
+            "flex-shrink-0 size-8 rounded-lg flex items-center justify-center",
+            styles.iconBg
+          )}>
+            <IconComponent className={cn("size-4", styles.iconColor)} />
+          </div>
+        )}
         
         {/* Content - Simplified Hierarchy */}
         <div className="flex-1 min-w-0">

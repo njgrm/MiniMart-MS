@@ -28,6 +28,11 @@ import {
   Tag,
   Snowflake,
   ShoppingCart,
+  CheckCircle,
+  Lightbulb,
+  AlertCircle,
+  TrendingUp as ChartTrending,
+  CalendarDays,
 } from "lucide-react";
 import {
   IconTrendingUp,
@@ -77,6 +82,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { AIAssistant } from "@/components/ai-assistant";
 import { InsightCardsGrid, IntelligenceFeed } from "@/components/sales/insight-cards";
 import type { Insight } from "@/lib/insights";
+import ExcelJS from "exceljs";
 import {
   AreaChart,
   Area,
@@ -1134,8 +1140,8 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                       size="sm" 
                       className="gap-2 h-8"
                       onClick={() => {
-                        // Export will be handled by ForecastingTable's internal selection
-                        console.log("Exporting PO...");
+                        // Export all restock recommendations (critical + low items)
+                        generatePurchaseOrderExcel(data.forecasts);
                       }}
                     >
                       <FileDown className="h-3.5 w-3.5" />
@@ -1175,7 +1181,11 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   {selectedProductInfo ? (
                     <div className="flex items-center gap-2 mb-2 overflow-hidden">
                       <Avatar className="h-10 w-10 shrink-0 border-2 border-primary/20">
-                        <AvatarImage src={selectedProductInfo.productImage || undefined} alt={selectedProductInfo.productName} />
+                        <AvatarImage 
+                          src={selectedProductInfo.productImage || undefined} 
+                          alt={selectedProductInfo.productName}
+                          className="object-cover"
+                        />
                         <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
                           {selectedProductInfo.productName.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
@@ -1270,37 +1280,48 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                     const dailyRate = historicalDays.length > 0 ? totalHistorical / historicalDays.length : 0;
                     const daysUntilEmpty = dailyRate > 0 ? Math.floor(selectedProductInfo.currentStock / dailyRate) : 999;
                     
-                    // Determine narrative message
-                    let narrativeIcon = "📊";
+                    // Determine narrative message and icon
+                    type NarrativeType = "critical" | "warning" | "forecast" | "healthy" | "info";
+                    let narrativeType: NarrativeType = "info";
                     let narrativeClass = "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200";
                     let narrative = "";
                     
                     if (selectedProductInfo.currentStock === 0) {
-                      narrativeIcon = "🚨";
+                      narrativeType = "critical";
                       narrativeClass = "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-200";
                       narrative = "Out of stock! Immediate restock needed to avoid lost sales.";
                     } else if (daysUntilEmpty <= 2) {
-                      narrativeIcon = "⚠️";
+                      narrativeType = "critical";
                       narrativeClass = "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-200";
                       const runOutDate = format(addDays(new Date(), daysUntilEmpty), "EEEE");
                       narrative = `Stock will run out by ${runOutDate} if not replenished.`;
                     } else if (daysUntilEmpty <= 7) {
-                      narrativeIcon = "⚡";
+                      narrativeType = "warning";
                       narrativeClass = "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200";
                       narrative = `Running low — about ${daysUntilEmpty} days of stock remaining.`;
                     } else if (totalForecast > selectedProductInfo.currentStock) {
-                      narrativeIcon = "📈";
+                      narrativeType = "forecast";
                       narrativeClass = "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200";
                       narrative = `Forecasted demand (${totalForecast} units) exceeds current stock. Consider restocking.`;
                     } else {
-                      narrativeIcon = "✅";
+                      narrativeType = "healthy";
                       narrativeClass = "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-200";
                       narrative = `Stock levels healthy — ${daysUntilEmpty > 30 ? "30+" : daysUntilEmpty} days of supply on hand.`;
                     }
                     
+                    const NarrativeIcon = () => {
+                      switch (narrativeType) {
+                        case "critical": return <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />;
+                        case "warning": return <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+                        case "forecast": return <TrendingUp className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+                        case "healthy": return <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+                        default: return <Lightbulb className="h-3.5 w-3.5 text-blue-500 shrink-0" />;
+                      }
+                    };
+                    
                     return (
-                      <div className={`mb-3 p-2.5 rounded-lg border text-xs ${narrativeClass}`}>
-                        <span className="mr-1.5">{narrativeIcon}</span>
+                      <div className={`mb-3 p-2.5 rounded-lg border text-xs flex items-start gap-1.5 ${narrativeClass}`}>
+                        <NarrativeIcon />
                         <span className="font-medium">{narrative}</span>
                       </div>
                     );
@@ -1308,8 +1329,8 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   
                   {/* Default narrative when no product selected */}
                   {!selectedProductInfo && demandForecastData.length > 0 && (
-                    <div className="mb-3 p-2.5 rounded-lg border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200 text-xs">
-                      <span className="mr-1.5">💡</span>
+                    <div className="mb-3 p-2.5 rounded-lg border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200 text-xs flex items-start gap-1.5">
+                      <Lightbulb className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                       <span className="font-medium">Select a product from the table to see detailed demand insights.</span>
                     </div>
                   )}
@@ -1387,7 +1408,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                                 stroke={COLORS.event}
                                 strokeWidth={2}
                                 strokeDasharray="4 4"
-                                label={{ value: "📅", position: "top", fontSize: 12 }}
+                                label={{ value: "★", position: "top", fontSize: 12 }}
                               />
                             ))}
                           
@@ -1749,6 +1770,153 @@ function getUrgencyPriority(item: ForecastTableItem): number {
   }
 }
 
+/**
+ * Generate and download an Excel Purchase Order file
+ * Uses ExcelJS for secure Excel generation (no prototype pollution vulnerabilities)
+ * @param items - Array of ForecastTableItem to include in the PO
+ */
+async function generatePurchaseOrderExcel(items: ForecastTableItem[]): Promise<void> {
+  // Filter to only items that need restocking (exclude healthy stock)
+  const restockItems = items.filter(item => {
+    const urgency = getUrgencyLevel(item);
+    return urgency === "critical" || urgency === "low";
+  });
+  
+  if (restockItems.length === 0) {
+    alert("No items selected for purchase order. Please select items that need restocking.");
+    return;
+  }
+  
+  // Create workbook and worksheet
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Christian Minimart POS";
+  workbook.created = new Date();
+  
+  const worksheet = workbook.addWorksheet("Purchase Order");
+  
+  // Add header section
+  worksheet.mergeCells("A1:K1");
+  const titleCell = worksheet.getCell("A1");
+  titleCell.value = "PURCHASE ORDER";
+  titleCell.font = { bold: true, size: 16 };
+  titleCell.alignment = { horizontal: "center" };
+  
+  worksheet.mergeCells("A2:K2");
+  worksheet.getCell("A2").value = "Christian Minimart";
+  worksheet.getCell("A2").font = { size: 12 };
+  worksheet.getCell("A2").alignment = { horizontal: "center" };
+  
+  worksheet.mergeCells("A3:K3");
+  worksheet.getCell("A3").value = `Generated: ${format(new Date(), "MMMM dd, yyyy 'at' hh:mm a")}`;
+  worksheet.getCell("A3").font = { size: 10, italic: true };
+  worksheet.getCell("A3").alignment = { horizontal: "center" };
+  
+  // Calculate totals
+  const totalItems = restockItems.reduce((sum, item) => sum + item.recommendedQty, 0);
+  const totalOrderValue = restockItems.reduce((sum, item) => sum + (item.costPrice || 0) * item.recommendedQty, 0);
+  
+  // Add summary row
+  worksheet.getCell("A5").value = `Total Items to Order: ${totalItems.toLocaleString()} units`;
+  worksheet.getCell("A5").font = { bold: true };
+  
+  worksheet.getCell("A6").value = `Total Order Value: ₱${totalOrderValue.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
+  worksheet.getCell("A6").font = { bold: true, color: { argb: "FF10B981" } };
+  
+  // Define columns starting at row 8
+  worksheet.columns = [
+    { key: "no", width: 6 },
+    { key: "productName", width: 35 },
+    { key: "category", width: 15 },
+    { key: "currentStock", width: 14 },
+    { key: "dailyRate", width: 16 },
+    { key: "daysLeft", width: 10 },
+    { key: "forecastedDemand", width: 20 },
+    { key: "suggestedQty", width: 18 },
+    { key: "costPrice", width: 14 },
+    { key: "totalCost", width: 14 },
+    { key: "priority", width: 12 },
+  ];
+  
+  // Add header row at row 8
+  const headerRow = worksheet.getRow(8);
+  headerRow.values = [
+    "No.",
+    "Product Name",
+    "Category",
+    "Current Stock",
+    "Daily Sales Rate",
+    "Days Left",
+    "Forecasted Demand (14d)",
+    "Suggested Order Qty",
+    "Cost Price (₱)",
+    "Total Cost (₱)",
+    "Priority",
+  ];
+  headerRow.font = { bold: true };
+  headerRow.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE5E7EB" },
+  };
+  headerRow.alignment = { horizontal: "center" };
+  
+  // Add data rows starting at row 9
+  restockItems.forEach((item, index) => {
+    const dailyRate = item.velocity7Day / 7;
+    const daysLeft = dailyRate > 0 ? Math.round(item.currentStock / dailyRate) : 0;
+    const urgency = getUrgencyLevel(item).toUpperCase();
+    
+    const row = worksheet.getRow(9 + index);
+    row.values = [
+      index + 1,
+      item.productName,
+      item.category,
+      item.currentStock,
+      Number(dailyRate.toFixed(1)),
+      daysLeft,
+      item.predictedDemand,
+      item.recommendedQty,
+      item.costPrice || 0,
+      Number(((item.costPrice || 0) * item.recommendedQty).toFixed(2)),
+      urgency,
+    ];
+    
+    // Color-code priority column
+    const priorityCell = row.getCell(11);
+    if (urgency === "CRITICAL") {
+      priorityCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFEE2E2" },
+      };
+      priorityCell.font = { color: { argb: "FFDC2626" }, bold: true };
+    } else if (urgency === "LOW") {
+      priorityCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFFEF3C7" },
+      };
+      priorityCell.font = { color: { argb: "FFD97706" }, bold: true };
+    }
+  });
+  
+  // Generate Excel file as buffer
+  const buffer = await workbook.xlsx.writeBuffer();
+  
+  // Create blob and download
+  const blob = new Blob([buffer], { 
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `Purchase_Order_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function ForecastingTable({ 
   forecasts,
   selectedProductId,
@@ -1829,6 +1997,16 @@ function ForecastingTable({
       result = result.filter((item) => getUrgencyLevel(item) === urgencyFilter);
     }
 
+    // Helper function to calculate days left (used for sorting)
+    const getDaysLeft = (item: ForecastTableItem): number => {
+      const dailyRate = item.velocity7Day / 7;
+      if (dailyRate <= 0) {
+        // No sales data - use a large number to push to bottom when sorted ascending
+        return item.currentStock > 0 ? 9999 : -1; // Out of stock gets -1
+      }
+      return item.currentStock / dailyRate;
+    };
+
     // Apply sorting
     result.sort((a, b) => {
       let comparison = 0;
@@ -1838,7 +2016,8 @@ function ForecastingTable({
           comparison = a.productName.localeCompare(b.productName);
           break;
         case "stock":
-          comparison = a.currentStock - b.currentStock;
+          // Sort by actual days remaining, not raw stock count
+          comparison = getDaysLeft(a) - getDaysLeft(b);
           break;
         case "velocity":
           comparison = a.velocity7Day - b.velocity7Day;
@@ -1935,6 +2114,24 @@ function ForecastingTable({
           </Button>
         )}
 
+        {/* Export PO Button (shows selection count when items selected) */}
+        {selectedItems.size > 0 && (
+          <Button
+            variant="default"
+            size="sm"
+            className="h-8 gap-1.5 bg-primary hover:bg-primary/90"
+            onClick={() => {
+              const selectedForecasts = filteredAndSortedForecasts.filter(
+                item => selectedItems.has(item.productId)
+              );
+              generatePurchaseOrderExcel(selectedForecasts);
+            }}
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            Export PO ({selectedItems.size})
+          </Button>
+        )}
+
         {/* Results Count */}
         <div className="flex items-center gap-1.5 h-8 px-2 rounded-md bg-muted/30 border border-border/40 ml-auto">
           <Filter className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1943,48 +2140,49 @@ function ForecastingTable({
         </div>
       </div>
 
-      {/* Table with Scroll */}
+      {/* Table with Scroll - Horizontal for mobile, vertical for content */}
       <div className="rounded-xl border border-border overflow-hidden">
-        <ScrollArea className="h-[400px]">
-          <div className="min-w-[750px]">
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-card">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-10 bg-muted/30 w-[40px]">
-                    <button
-                      onClick={toggleAllSelection}
-                      className="flex items-center justify-center w-full"
-                    >
-                      {selectedItems.size === filteredAndSortedForecasts.length && filteredAndSortedForecasts.length > 0 ? (
-                        <CheckSquare className="h-4 w-4 text-primary" />
-                      ) : (
-                        <Square className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </button>
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 min-w-[160px]">
-                    <SortButton field="product">Product</SortButton>
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[100px]">
-                    <SortButton field="stock">Time Left</SortButton>
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[90px]">
-                    <SortButton field="velocity">Avg. Daily Sales</SortButton>
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[90px]">
-                    <SortButton field="demand"><span className="font-bold text-foreground">Forecasted Need</span></SortButton>
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 w-[90px]">
-                    <SortButton field="urgency">Action</SortButton>
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[130px]">
-                    Restock
-                  </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[90px]">
-                    Est. Cost
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+        <div className="overflow-x-auto">
+          <ScrollArea className="h-[400px]">
+            <div className="min-w-[850px]">
+              <Table>
+                <TableHeader className="sticky top-0 z-10 bg-card">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="h-10 bg-muted/30 w-[40px]">
+                      <button
+                        onClick={toggleAllSelection}
+                        className="flex items-center justify-center w-full"
+                      >
+                        {selectedItems.size === filteredAndSortedForecasts.length && filteredAndSortedForecasts.length > 0 ? (
+                          <CheckSquare className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Square className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 min-w-[180px]">
+                      <SortButton field="product">Product</SortButton>
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 text-right w-[120px]">
+                      <SortButton field="stock">Time Left</SortButton>
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 text-right w-[110px]">
+                      <SortButton field="velocity">Avg. Daily Sales</SortButton>
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 text-center w-[100px]">
+                      <SortButton field="demand"><span className="font-bold text-foreground">Forecasted</span></SortButton>
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 w-[100px]">
+                      <SortButton field="urgency">Action</SortButton>
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[140px]">
+                      Restock
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[100px]">
+                      Est. Cost
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
             <TableBody>
               {filteredAndSortedForecasts.length === 0 ? (
                 <TableRow>
@@ -2036,7 +2234,7 @@ function ForecastingTable({
                     <TableCell className="text-right font-mono py-2 text-foreground text-sm">
                       <VelocityWithTrend velocity={item.velocity7Day} predicted={item.predictedDemand} />
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold py-2 text-foreground text-sm">
+                    <TableCell className="text-center font-mono font-bold py-2 text-foreground text-sm">
                       {item.predictedDemand}
                     </TableCell>
                     <TableCell className="py-2">
@@ -2128,9 +2326,10 @@ function ForecastingTable({
                 ))
               )}
             </TableBody>
-            </Table>
-          </div>
-        </ScrollArea>
+              </Table>
+            </div>
+          </ScrollArea>
+        </div>
         
         {/* Total Order Value Footer - Dynamic based on selection with High Value Warning */}
         {filteredAndSortedForecasts.length > 0 && (() => {
@@ -2204,56 +2403,90 @@ function StockBadge({ stock, status }: { stock: number; status: string }) {
 // =============================================================================
 function StockWithSupply({ stock, status, velocity30d }: { stock: number; status: string; velocity30d: number }) {
   // Calculate Days of Supply
-  // Formula: dailyRate = velocity_30d / 30; daysLeft = current_stock / dailyRate
-  const dailyRate = velocity30d / 30;
-  const daysLeft = dailyRate > 0 ? Math.floor(stock / dailyRate) : (stock > 0 ? 999 : 0);
+  // Formula: dailyRate = velocity_7d / 7 (velocity30d is actually 7-day velocity)
+  const dailyRate = velocity30d / 7;
   
-  // Determine color and label based on urgency
-  // Red: < 3 days, Yellow/Orange: < 7 days, Green: >= 7 days
+  // Determine display logic based on actual data
   const getConfig = () => {
+    // Case 1: Out of Stock (stock = 0)
     if (stock === 0) {
       return {
         color: "text-red-600 dark:text-red-400",
         bgColor: "bg-red-100 dark:bg-red-950/50",
         label: "Out of Stock",
         showBar: false,
+        daysLeft: 0,
+        isDeadStock: false,
       };
     }
-    if (daysLeft === 999) {
+    
+    // Case 2: Dead Stock / No Movement (has stock but 0 velocity)
+    if (dailyRate <= 0) {
       return {
         color: "text-slate-500 dark:text-slate-400",
         bgColor: "bg-slate-100 dark:bg-slate-800/50",
-        label: "No sales data",
+        label: "No Movement",
         showBar: false,
+        daysLeft: -1, // Indicator for dead stock
+        isDeadStock: true,
       };
     }
+    
+    // Case 3: Calculate actual days left
+    const daysLeft = stock / dailyRate;
+    
+    // Sub-case: Less than 1 day left (urgent)
+    if (daysLeft < 1) {
+      return {
+        color: "text-red-600 dark:text-red-400",
+        bgColor: "bg-red-100 dark:bg-red-950/50",
+        barColor: "bg-red-500",
+        label: "< 1 Day Left",
+        showBar: true,
+        percent: 5, // Show minimal bar
+        daysLeft,
+        isDeadStock: false,
+      };
+    }
+    
+    // Sub-case: 1-2 days left (critical)
     if (daysLeft < 3) {
       return {
         color: "text-red-600 dark:text-red-400",
         bgColor: "bg-red-100 dark:bg-red-950/50",
         barColor: "bg-red-500",
-        label: daysLeft <= 1 ? "~1 Day Left" : `${daysLeft} Days Left`,
+        label: `${Math.floor(daysLeft)} Days Left`,
         showBar: true,
         percent: Math.min((daysLeft / 7) * 100, 100),
+        daysLeft,
+        isDeadStock: false,
       };
     }
+    
+    // Sub-case: 3-7 days left (warning)
     if (daysLeft < 7) {
       return {
         color: "text-amber-600 dark:text-amber-400",
         bgColor: "bg-amber-100 dark:bg-amber-950/50",
         barColor: "bg-amber-500",
-        label: `${daysLeft} Days Left`,
+        label: `${Math.floor(daysLeft)} Days Left`,
         showBar: true,
         percent: Math.min((daysLeft / 7) * 100, 100),
+        daysLeft,
+        isDeadStock: false,
       };
     }
+    
+    // Sub-case: 7+ days (healthy)
     return {
       color: "text-emerald-600 dark:text-emerald-400",
       bgColor: "bg-emerald-100 dark:bg-emerald-950/50",
       barColor: "bg-emerald-500",
-      label: daysLeft > 30 ? "30+ Days" : `${daysLeft} Days Left`,
+      label: daysLeft > 30 ? "30+ Days" : `${Math.floor(daysLeft)} Days Left`,
       showBar: true,
       percent: 100,
+      daysLeft,
+      isDeadStock: false,
     };
   };
   
@@ -2262,7 +2495,7 @@ function StockWithSupply({ stock, status, velocity30d }: { stock: number; status
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex flex-col items-end gap-1 cursor-help min-w-[80px]">
+        <div className="flex flex-col items-end gap-1 cursor-help min-w-[90px]">
           {/* Primary: Days Remaining Label */}
           <span className={`text-xs font-semibold ${config.color}`}>
             {config.label}
@@ -2284,13 +2517,21 @@ function StockWithSupply({ stock, status, velocity30d }: { stock: number; status
       </TooltipTrigger>
       <TooltipContent side="left" className="p-3 max-w-[220px] bg-popover">
         <div className="space-y-2">
-          <p className="font-semibold text-sm text-foreground">
-            {config.label === "Out of Stock" ? "⚠️ Out of Stock" : 
-             config.label === "No sales data" ? "📊 No Sales Data" :
-             daysLeft < 3 ? `🔥 ${config.label}` :
-             daysLeft < 7 ? `⚡ ${config.label}` :
-             `✅ ${config.label}`}
-          </p>
+          <div className="flex items-center gap-1.5 font-semibold text-sm text-foreground">
+            {config.label === "Out of Stock" ? (
+              <><AlertTriangle className="h-4 w-4 text-red-500" /> Out of Stock</>
+            ) : config.isDeadStock ? (
+              <><Snowflake className="h-4 w-4 text-slate-500" /> No Movement (Stagnant)</>
+            ) : config.daysLeft < 1 ? (
+              <><Flame className="h-4 w-4 text-red-500" /> Critical: &lt; 1 Day</>
+            ) : config.daysLeft < 3 ? (
+              <><Flame className="h-4 w-4 text-red-500" /> {config.label}</>
+            ) : config.daysLeft < 7 ? (
+              <><Zap className="h-4 w-4 text-amber-500" /> {config.label}</>
+            ) : (
+              <><CheckCircle className="h-4 w-4 text-emerald-500" /> {config.label}</>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground space-y-1">
             <div className="flex justify-between">
               <span>Current Stock:</span>
@@ -2300,6 +2541,11 @@ function StockWithSupply({ stock, status, velocity30d }: { stock: number; status
               <span>Avg. Daily Sales:</span>
               <span className="font-medium text-foreground">{dailyRate > 0 ? dailyRate.toFixed(1) : "0"}/day</span>
             </div>
+            {config.isDeadStock && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 pt-1 border-t border-border">
+                Consider discounting this item to free up capital.
+              </p>
+            )}
           </div>
         </div>
       </TooltipContent>
