@@ -375,7 +375,7 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
                           size="icon"
                           onClick={() => openExpiryDialog(batch)}
                           disabled={isPending}
-                          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:text-orange-300 dark:hover:bg-orange-950/50"
                           title="Edit Expiry Date"
                         >
                           <Calendar className="h-4 w-4" />
@@ -477,7 +477,7 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-sm text-orange-800">
+            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-lg p-3 text-sm text-orange-800 dark:text-orange-300">
               <strong>⚠️ High Risk Action:</strong> Changing expiry dates is a critical operation
               and will be recorded in the audit log.
             </div>
@@ -516,7 +516,7 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
             <Button
               onClick={handleExpirySubmit}
               disabled={isPending}
-              className="bg-orange-600 hover:bg-orange-700"
+              className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-500"
             >
               {isPending ? "Saving..." : "Update Expiry"}
             </Button>

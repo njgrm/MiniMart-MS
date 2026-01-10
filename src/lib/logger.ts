@@ -259,6 +259,7 @@ export async function logProductCreate(
   await logActivity({
     username,
     action: "CREATE",
+    module: "CATALOG",
     entity: "Product",
     entityId: productId,
     entityName: productName,
@@ -280,6 +281,7 @@ export async function logProductUpdate(
   await logActivity({
     username,
     action: "UPDATE",
+    module: "CATALOG",
     entity: "Product",
     entityId: productId,
     entityName: productName,
@@ -300,6 +302,7 @@ export async function logProductDelete(
   await logActivity({
     username,
     action: "DELETE",
+    module: "CATALOG",
     entity: "Product",
     entityId: productId,
     entityName: productName,
@@ -315,26 +318,38 @@ export async function logRestock(
   productId: number,
   productName: string,
   quantity: number,
+  previousStock: number,
   newStock: number,
   supplierName?: string,
-  expiryDate?: Date | null
+  expiryDate?: Date | null,
+  reference?: string,
+  reason?: string,
+  receiptImageUrl?: string,
+  costPrice?: number
 ): Promise<void> {
   let details = `Added ${quantity} stock. New stock level: ${newStock}.`;
   if (supplierName) details += ` Supplier: ${supplierName}.`;
   if (expiryDate) details += ` Expiry: ${format(expiryDate, "MMM d, yyyy")}.`;
+  if (reference) details += ` Ref: ${reference}.`;
 
   await logActivity({
     username,
     action: "RESTOCK",
+    module: "INVENTORY",
     entity: "Inventory",
     entityId: productId,
     entityName: productName,
     details,
     metadata: {
       quantity_added: quantity,
+      previous_stock: previousStock,
       new_stock_level: newStock,
       supplier_name: supplierName || null,
       expiry_date: expiryDate?.toISOString() || null,
+      reference: reference || null,
+      reason: reason || null,
+      receipt_image_url: receiptImageUrl || null,
+      cost_price: costPrice || null,
     },
   });
 }
@@ -357,6 +372,7 @@ export async function logStockAdjust(
   await logActivity({
     username,
     action: "ADJUST_STOCK",
+    module: "INVENTORY",
     entity: "Inventory",
     entityId: productId,
     entityName: productName,
@@ -388,6 +404,7 @@ export async function logExpiryEdit(
   await logActivity({
     username,
     action: "EDIT_EXPIRY",
+    module: "INVENTORY",
     entity: "InventoryBatch",
     entityId: batchId,
     entityName: productName,
@@ -419,6 +436,7 @@ export async function logBatchEdit(
   await logActivity({
     username,
     action: "EDIT_BATCH",
+    module: "INVENTORY",
     entity: "InventoryBatch",
     entityId: batchId,
     entityName: productName,

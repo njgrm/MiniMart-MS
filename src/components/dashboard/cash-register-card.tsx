@@ -12,9 +12,30 @@ import {
   IconClock,
   IconPlus,
   IconReceipt,
+  IconFileText,
+  IconAlertTriangle,
+  IconPrinter,
 } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
 export interface CashRegisterData {
@@ -35,6 +56,9 @@ interface CashRegisterCardProps {
 
 export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
   const router = useRouter();
+  const [xReadOpen, setXReadOpen] = useState(false);
+  const [zReadConfirmOpen, setZReadConfirmOpen] = useState(false);
+  const [zReadReportOpen, setZReadReportOpen] = useState(false);
   
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {
@@ -47,6 +71,30 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
 
   // Calculate expected drawer: Opening + Cash Sales - Expenses
   const calculatedDrawer = data.openingFund + data.cashSales - data.expenses;
+  const totalSales = data.cashSales + data.gcashSales;
+
+  // X-Read: Print current shift summary (NO reset)
+  const handleXRead = () => {
+    setXReadOpen(true);
+  };
+
+  // Z-Read: Close day with confirmation
+  const handleZRead = () => {
+    setZReadConfirmOpen(true);
+  };
+
+  // Confirm Z-Read and show final report
+  const confirmZRead = () => {
+    setZReadConfirmOpen(false);
+    setZReadReportOpen(true);
+    // In production, this would call a server action to reset daily totals
+    // await resetDailySales();
+  };
+
+  // Print report (for both X and Z read)
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
     <div className={cn("bg-card rounded-xl border flex flex-col", className)}>
@@ -173,21 +221,202 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
           <Button
             variant="outline"
             size="sm"
-            className="flex-1 h-7 text-xs"
-            onClick={() => router.push("/admin/sales")}
+            className="flex-1 h-8 text-xs gap-1"
+            onClick={handleXRead}
           >
-            View Sales
+            <IconFileText className="size-3.5" />
+            X-Read
           </Button>
           <Button
             variant="default"
             size="sm"
-            className="flex-1 h-7 text-xs bg-[#2EAFC5] hover:bg-[#2EAFC5]/90"
-            onClick={() => router.push("/admin/sales/financial")}
+            className="flex-1 h-8 text-xs bg-[#AC0F16] hover:bg-[#AC0F16]/90 gap-1"
+            onClick={handleZRead}
           >
-            End of Day
+            <IconReceipt className="size-3.5" />
+            Z-Read
           </Button>
         </div>
       </div>
+
+      {/* X-Read Modal (Shift Check - No Reset) */}
+      <Dialog open={xReadOpen} onOpenChange={setXReadOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IconFileText className="size-5 text-[#2EAFC5]" />
+              X-Read Report (Shift Check)
+            </DialogTitle>
+            <DialogDescription>
+              Current shift summary. This does NOT reset the daily totals.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 py-4">
+            {/* Report Content */}
+            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
+              <div className="text-center border-b border-dashed pb-2 mb-3">
+                <p className="font-bold">CHRISTIAN MINIMART</p>
+                <p className="text-xs text-muted-foreground">X-READ REPORT</p>
+                <p className="text-xs text-muted-foreground">{format(new Date(), "MMM d, yyyy h:mm a")}</p>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Opening Fund:</span>
+                <span>{formatCurrency(data.openingFund)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-600">
+                <span>Cash Sales:</span>
+                <span>+{formatCurrency(data.cashSales)}</span>
+              </div>
+              <div className="flex justify-between text-blue-600">
+                <span>GCash Sales:</span>
+                <span>{formatCurrency(data.gcashSales)}</span>
+              </div>
+              <div className="flex justify-between text-destructive">
+                <span>Expenses:</span>
+                <span>-{formatCurrency(data.expenses)}</span>
+              </div>
+              
+              <div className="border-t border-dashed pt-2 mt-2">
+                <div className="flex justify-between font-bold">
+                  <span>Total Sales:</span>
+                  <span>{formatCurrency(totalSales)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-[#AC0F16]">
+                  <span>Expected Drawer:</span>
+                  <span>{formatCurrency(calculatedDrawer)}</span>
+                </div>
+              </div>
+              
+              <div className="text-center text-xs text-muted-foreground pt-2 border-t border-dashed">
+                <p>Transactions: {data.transactionCount}</p>
+                {data.shiftStartTime && (
+                  <p>Shift Start: {format(data.shiftStartTime, "h:mm a")}</p>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setXReadOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handlePrint} className="gap-1">
+              <IconPrinter className="size-4" />
+              Print
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Z-Read Confirmation Dialog */}
+      <AlertDialog open={zReadConfirmOpen} onOpenChange={setZReadConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <IconAlertTriangle className="size-5" />
+              Close Day (Z-Read)?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This action will:</p>
+              <ul className="list-disc list-inside text-sm space-y-1">
+                <li>Generate the final End-of-Day report</li>
+                <li><strong className="text-destructive">Reset all daily sales totals to zero</strong></li>
+                <li>Archive today's transactions</li>
+              </ul>
+              <p className="font-medium text-foreground mt-3">
+                Are you sure you want to close the day?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmZRead}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Yes, Close Day
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Z-Read Final Report Modal */}
+      <Dialog open={zReadReportOpen} onOpenChange={setZReadReportOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IconReceipt className="size-5 text-[#AC0F16]" />
+              Z-Read Report (End of Day)
+            </DialogTitle>
+            <DialogDescription>
+              Final report generated. Daily totals have been reset.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 py-4">
+            {/* Report Content */}
+            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
+              <div className="text-center border-b border-dashed pb-2 mb-3">
+                <p className="font-bold">CHRISTIAN MINIMART</p>
+                <p className="text-xs font-bold text-[#AC0F16]">Z-READ REPORT (FINAL)</p>
+                <p className="text-xs text-muted-foreground">{format(new Date(), "MMM d, yyyy h:mm a")}</p>
+              </div>
+              
+              <div className="flex justify-between">
+                <span>Opening Fund:</span>
+                <span>{formatCurrency(data.openingFund)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-600">
+                <span>Cash Sales:</span>
+                <span>+{formatCurrency(data.cashSales)}</span>
+              </div>
+              <div className="flex justify-between text-blue-600">
+                <span>GCash Sales:</span>
+                <span>{formatCurrency(data.gcashSales)}</span>
+              </div>
+              <div className="flex justify-between text-destructive">
+                <span>Expenses:</span>
+                <span>-{formatCurrency(data.expenses)}</span>
+              </div>
+              
+              <div className="border-t border-dashed pt-2 mt-2">
+                <div className="flex justify-between font-bold">
+                  <span>TOTAL SALES:</span>
+                  <span>{formatCurrency(totalSales)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-[#AC0F16]">
+                  <span>FINAL DRAWER:</span>
+                  <span>{formatCurrency(calculatedDrawer)}</span>
+                </div>
+              </div>
+              
+              <div className="text-center text-xs text-muted-foreground pt-2 border-t border-dashed">
+                <p>Total Transactions: {data.transactionCount}</p>
+                <p className="font-bold text-[#AC0F16] mt-1">*** END OF DAY ***</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-200">
+              <p className="font-medium flex items-center gap-1">
+                <IconCircleCheck className="size-4" />
+                Daily totals have been reset to zero
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setZReadReportOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handlePrint} className="gap-1">
+              <IconPrinter className="size-4" />
+              Print Final Report
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

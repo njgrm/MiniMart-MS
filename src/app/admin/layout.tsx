@@ -1,8 +1,15 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/auth";
 import AdminLayoutClient from "./layout-client";
 import { getPendingOrdersCount } from "@/actions/orders";
 
+/**
+ * ⚡ Optimized Admin Layout
+ * 
+ * The layout auth check is unavoidable, but we stream the pending orders count
+ * using Suspense so it doesn't block page navigation.
+ */
 export default async function AdminLayout({
   children,
 }: {
@@ -20,11 +27,27 @@ export default async function AdminLayout({
     redirect("/");
   }
 
-  // Get pending orders count for sidebar badge
-  const pendingOrdersCount = await getPendingOrdersCount();
-
+  // Stream the pending orders count - don't block layout render
+  // The count will update when it loads
   return (
-    <AdminLayoutClient user={session.user} pendingOrdersCount={pendingOrdersCount}>
+    <Suspense fallback={<AdminLayoutClient user={session.user} pendingOrdersCount={0}>{children}</AdminLayoutClient>}>
+      <AdminLayoutWithOrders user={session.user}>{children}</AdminLayoutWithOrders>
+    </Suspense>
+  );
+}
+
+// Separate async component to stream the orders count
+async function AdminLayoutWithOrders({ 
+  user, 
+  children 
+}: { 
+  user: NonNullable<Awaited<ReturnType<typeof auth>>>["user"];
+  children: React.ReactNode;
+}) {
+  const pendingOrdersCount = await getPendingOrdersCount();
+  
+  return (
+    <AdminLayoutClient user={user} pendingOrdersCount={pendingOrdersCount}>
       {children}
     </AdminLayoutClient>
   );

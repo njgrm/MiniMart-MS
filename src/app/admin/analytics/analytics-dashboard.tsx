@@ -27,6 +27,7 @@ import {
   Square,
   Tag,
   Snowflake,
+  ShoppingCart,
 } from "lucide-react";
 import {
   IconTrendingUp,
@@ -1257,6 +1258,62 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   )}
                 </CardHeader>
                 <CardContent className="pt-0">
+                  {/* Narrative Header - Dynamic Smart Summary */}
+                  {selectedProductInfo && demandForecastData.length > 0 && (() => {
+                    // Calculate key metrics for narrative from chart data
+                    const historicalDays = demandForecastData.filter(d => d.historical !== null);
+                    const totalHistorical = historicalDays.reduce((sum, d) => sum + (d.historical || 0), 0);
+                    const forecastDays = demandForecastData.filter(d => d.forecast !== null);
+                    const totalForecast = forecastDays.reduce((sum, d) => sum + (d.forecast || 0), 0);
+                    
+                    // Calculate daily rate from historical data
+                    const dailyRate = historicalDays.length > 0 ? totalHistorical / historicalDays.length : 0;
+                    const daysUntilEmpty = dailyRate > 0 ? Math.floor(selectedProductInfo.currentStock / dailyRate) : 999;
+                    
+                    // Determine narrative message
+                    let narrativeIcon = "📊";
+                    let narrativeClass = "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200";
+                    let narrative = "";
+                    
+                    if (selectedProductInfo.currentStock === 0) {
+                      narrativeIcon = "🚨";
+                      narrativeClass = "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-200";
+                      narrative = "Out of stock! Immediate restock needed to avoid lost sales.";
+                    } else if (daysUntilEmpty <= 2) {
+                      narrativeIcon = "⚠️";
+                      narrativeClass = "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-200";
+                      const runOutDate = format(addDays(new Date(), daysUntilEmpty), "EEEE");
+                      narrative = `Stock will run out by ${runOutDate} if not replenished.`;
+                    } else if (daysUntilEmpty <= 7) {
+                      narrativeIcon = "⚡";
+                      narrativeClass = "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200";
+                      narrative = `Running low — about ${daysUntilEmpty} days of stock remaining.`;
+                    } else if (totalForecast > selectedProductInfo.currentStock) {
+                      narrativeIcon = "📈";
+                      narrativeClass = "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200";
+                      narrative = `Forecasted demand (${totalForecast} units) exceeds current stock. Consider restocking.`;
+                    } else {
+                      narrativeIcon = "✅";
+                      narrativeClass = "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-200";
+                      narrative = `Stock levels healthy — ${daysUntilEmpty > 30 ? "30+" : daysUntilEmpty} days of supply on hand.`;
+                    }
+                    
+                    return (
+                      <div className={`mb-3 p-2.5 rounded-lg border text-xs ${narrativeClass}`}>
+                        <span className="mr-1.5">{narrativeIcon}</span>
+                        <span className="font-medium">{narrative}</span>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Default narrative when no product selected */}
+                  {!selectedProductInfo && demandForecastData.length > 0 && (
+                    <div className="mb-3 p-2.5 rounded-lg border bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-200 text-xs">
+                      <span className="mr-1.5">💡</span>
+                      <span className="font-medium">Select a product from the table to see detailed demand insights.</span>
+                    </div>
+                  )}
+                  
                   <div className="h-[280px]">
                     {demandForecastData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
@@ -1265,6 +1322,11 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                             <linearGradient id="demandConfidenceGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.25} />
                               <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.05} />
+                            </linearGradient>
+                            {/* Background shading for forecast area */}
+                            <linearGradient id="forecastBgGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.08} />
+                              <stop offset="100%" stopColor="#F59E0B" stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid vertical={false} className="stroke-border/50" strokeDasharray="3 3" />
@@ -1380,23 +1442,34 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                     )}
                   </div>
                   
+                  {/* Chart Legend */}
+                  <div className="flex items-center justify-center gap-6 mt-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded-sm bg-[#8B5CF6]" />
+                      <span>History (Actual)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-1 rounded-full bg-[#F59E0B]" />
+                      <span>Forecast (Predicted)</span>
+                    </div>
+                  </div>
+                  
                   {/* Summary Stats */}
                   <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 gap-3">
-                  <div className="text-center p-2 rounded-lg bg-muted/30">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{demandHistoryDays}-Day Historical</p>
+                    <div className="text-center p-2 rounded-lg bg-[#8B5CF6]/10 border border-[#8B5CF6]/20">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{demandHistoryDays}-Day History</p>
                       <p className="text-lg font-bold text-foreground tabular-nums">
-                        {demandForecastData.filter(d => d.historical !== null).reduce((sum, d) => sum + (d.historical || 0), 0).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        {demandForecastData.filter(d => d.historical !== null).reduce((sum, d) => sum + (d.historical || 0), 0).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">sold</span>
                       </p>
                     </div>
-                    <div className="text-center p-2 rounded-lg bg-muted/30">
+                    <div className="text-center p-2 rounded-lg bg-[#F59E0B]/10 border border-[#F59E0B]/20">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         {demandHistoryDays === 7 ? "7" : demandHistoryDays === 30 ? "14" : "30"}-Day Forecast
                       </p>
                       <p className="text-lg font-bold text-foreground tabular-nums">
-                        {demandForecastData.filter(d => d.forecast !== null).reduce((sum, d) => sum + (d.forecast || 0), 0  ).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        {demandForecastData.filter(d => d.forecast !== null).reduce((sum, d) => sum + (d.forecast || 0), 0).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">expected</span>
                       </p>
                     </div>
-                    
                   </div>
                 </CardContent>
               </Card>
@@ -1892,20 +1965,20 @@ function ForecastingTable({
                   <TableHead className="h-10 bg-muted/30 min-w-[160px]">
                     <SortButton field="product">Product</SortButton>
                   </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[60px]">
-                    <SortButton field="stock">Stock</SortButton>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[100px]">
+                    <SortButton field="stock">Time Left</SortButton>
                   </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[80px]">
-                    <SortButton field="velocity">Velocity (30d)</SortButton>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[90px]">
+                    <SortButton field="velocity">Avg. Daily Sales</SortButton>
                   </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-right w-[70px]">
-                    <SortButton field="demand"><span className="font-bold text-foreground">Demand</span></SortButton>
+                  <TableHead className="h-10 bg-muted/30 text-right w-[90px]">
+                    <SortButton field="demand"><span className="font-bold text-foreground">Forecasted Need</span></SortButton>
                   </TableHead>
                   <TableHead className="h-10 bg-muted/30 w-[90px]">
                     <SortButton field="urgency">Action</SortButton>
                   </TableHead>
-                  <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[70px]">
-                    Order
+                  <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[130px]">
+                    Restock
                   </TableHead>
                   <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[90px]">
                     Est. Cost
@@ -2025,10 +2098,28 @@ function ForecastingTable({
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className="text-right py-2">
-                      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold shadow-sm px-2">
-                        +{item.recommendedQty}
-                      </Badge>
+                    <TableCell className="py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Rec:</span>
+                        <span className="font-mono font-bold text-sm text-foreground">{item.recommendedQty}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] gap-1 border-emerald-500 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-600 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Add to selection for PO
+                            if (!selectedItems.has(item.productId)) {
+                              const newSelected = new Set(selectedItems);
+                              newSelected.add(item.productId);
+                              setSelectedItems(newSelected);
+                            }
+                          }}
+                        >
+                          <ShoppingCart className="h-3 w-3" />
+                          Add
+                        </Button>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right py-2 font-mono text-xs text-muted-foreground">
                       ₱{(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}
@@ -2109,85 +2200,128 @@ function StockBadge({ stock, status }: { stock: number; status: string }) {
 }
 
 // =============================================================================
-// Days of Supply Progress Bar (Task 3: Stock Progress Bars)
+// Days Remaining Visualization (Simplified "Store Assistant" Style)
 // =============================================================================
 function StockWithSupply({ stock, status, velocity30d }: { stock: number; status: string; velocity30d: number }) {
   // Calculate Days of Supply
   // Formula: dailyRate = velocity_30d / 30; daysLeft = current_stock / dailyRate
   const dailyRate = velocity30d / 30;
-  const daysLeft = dailyRate > 0 ? stock / dailyRate : (stock > 0 ? 999 : 0);
-  const percent = Math.min((daysLeft / 7) * 100, 100); // Cap at 100% (7 days = full)
+  const daysLeft = dailyRate > 0 ? Math.floor(stock / dailyRate) : (stock > 0 ? 999 : 0);
   
-  // Color based on days of supply
-  // Red: <= 2 days, Orange: <= 5 days, Green: > 5 days
-  const getBarColor = () => {
-    if (daysLeft <= 2) return "bg-red-500";
-    if (daysLeft <= 5) return "bg-orange-500";
-    return "bg-emerald-500";
-  };
-  
-  const getStatusColor = () => {
-    switch (status) {
-      case "OUT_OF_STOCK":
-        return "text-red-700 dark:text-red-400";
-      case "CRITICAL":
-        return "text-orange-700 dark:text-orange-400";
-      case "LOW":
-        return "text-yellow-700 dark:text-yellow-400";
-      case "DEAD_STOCK":
-        return "text-slate-600 dark:text-slate-400";
-      default:
-        return "text-green-700 dark:text-green-400";
+  // Determine color and label based on urgency
+  // Red: < 3 days, Yellow/Orange: < 7 days, Green: >= 7 days
+  const getConfig = () => {
+    if (stock === 0) {
+      return {
+        color: "text-red-600 dark:text-red-400",
+        bgColor: "bg-red-100 dark:bg-red-950/50",
+        label: "Out of Stock",
+        showBar: false,
+      };
     }
+    if (daysLeft === 999) {
+      return {
+        color: "text-slate-500 dark:text-slate-400",
+        bgColor: "bg-slate-100 dark:bg-slate-800/50",
+        label: "No sales data",
+        showBar: false,
+      };
+    }
+    if (daysLeft < 3) {
+      return {
+        color: "text-red-600 dark:text-red-400",
+        bgColor: "bg-red-100 dark:bg-red-950/50",
+        barColor: "bg-red-500",
+        label: daysLeft <= 1 ? "~1 Day Left" : `${daysLeft} Days Left`,
+        showBar: true,
+        percent: Math.min((daysLeft / 7) * 100, 100),
+      };
+    }
+    if (daysLeft < 7) {
+      return {
+        color: "text-amber-600 dark:text-amber-400",
+        bgColor: "bg-amber-100 dark:bg-amber-950/50",
+        barColor: "bg-amber-500",
+        label: `${daysLeft} Days Left`,
+        showBar: true,
+        percent: Math.min((daysLeft / 7) * 100, 100),
+      };
+    }
+    return {
+      color: "text-emerald-600 dark:text-emerald-400",
+      bgColor: "bg-emerald-100 dark:bg-emerald-950/50",
+      barColor: "bg-emerald-500",
+      label: daysLeft > 30 ? "30+ Days" : `${daysLeft} Days Left`,
+      showBar: true,
+      percent: 100,
+    };
   };
+  
+  const config = getConfig();
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex flex-col items-end gap-1 cursor-help min-w-[60px]">
-          {/* Stock Number */}
-          <span className={`text-sm font-mono font-medium ${getStatusColor()}`}>
-            {stock.toLocaleString()}
+        <div className="flex flex-col items-end gap-1 cursor-help min-w-[80px]">
+          {/* Primary: Days Remaining Label */}
+          <span className={`text-xs font-semibold ${config.color}`}>
+            {config.label}
           </span>
-          {/* Days of Supply Progress Bar */}
-          <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all ${getBarColor()}`}
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          {/* Small label */}
-          <span className="text-[9px] text-muted-foreground">
-            {stock} left
+          {/* Visual Progress Bar */}
+          {config.showBar && (
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all ${config.barColor}`}
+                style={{ width: `${config.percent}%` }}
+              />
+            </div>
+          )}
+          {/* Secondary: Stock Count */}
+          <span className="text-[9px] text-muted-foreground font-mono">
+            ({stock.toLocaleString()} units)
           </span>
         </div>
       </TooltipTrigger>
-      <TooltipContent side="left" className="p-3 max-w-[200px]">
-        <p className="font-semibold text-sm">
-          {daysLeft === 999 ? "No velocity data" : `${daysLeft.toFixed(1)} Days of Supply`}
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          {dailyRate > 0 
-            ? `Based on avg sales of ${dailyRate.toFixed(1)}/day` 
-            : "No recent sales activity"}
-        </p>
+      <TooltipContent side="left" className="p-3 max-w-[220px] bg-popover">
+        <div className="space-y-2">
+          <p className="font-semibold text-sm text-foreground">
+            {config.label === "Out of Stock" ? "⚠️ Out of Stock" : 
+             config.label === "No sales data" ? "📊 No Sales Data" :
+             daysLeft < 3 ? `🔥 ${config.label}` :
+             daysLeft < 7 ? `⚡ ${config.label}` :
+             `✅ ${config.label}`}
+          </p>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div className="flex justify-between">
+              <span>Current Stock:</span>
+              <span className="font-medium text-foreground">{stock.toLocaleString()} units</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Avg. Daily Sales:</span>
+              <span className="font-medium text-foreground">{dailyRate > 0 ? dailyRate.toFixed(1) : "0"}/day</span>
+            </div>
+          </div>
+        </div>
       </TooltipContent>
     </Tooltip>
   );
 }
 
 // =============================================================================
-// Velocity with Trend Arrow (Task 3B: Velocity Trend)
+// Average Daily Sales with Trend (Store Assistant Style)
 // =============================================================================
 function VelocityWithTrend({ velocity, predicted }: { velocity: number; predicted: number }) {
+  // Calculate daily average (velocity is 7-day total, we need daily)
+  const dailyAvg = velocity / 7;
+  
   // Determine trend: if predicted > velocity, demand is rising; if less, falling
   const isRising = predicted > velocity;
   const isFalling = predicted < velocity;
-  const diff = predicted - velocity;
   
   return (
     <div className="flex items-center justify-end gap-1">
-      <span className="tabular-nums">{velocity}</span>
+      <span className="tabular-nums text-sm">{dailyAvg.toFixed(1)}</span>
+      <span className="text-[9px] text-muted-foreground">/day</span>
       {velocity > 0 && (
         <span className={`text-[10px] ${isRising ? "text-green-600" : isFalling ? "text-orange-500" : "text-muted-foreground"}`}>
           {isRising ? "↑" : isFalling ? "↓" : "→"}

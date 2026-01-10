@@ -156,7 +156,7 @@ function parseRichText(message: string, level: InsightLevel): React.ReactNode[] 
 }
 
 // =============================================================================
-// Single Insight Card Component (Compact for Sidebar)
+// Single Insight Card Component (Store Assistant Style - Simplified)
 // =============================================================================
 
 interface InsightCardProps {
@@ -168,6 +168,57 @@ export function InsightCard({ insight, className }: InsightCardProps) {
   const styles = LEVEL_STYLES[insight.level];
   const IconComponent = ICON_MAP[insight.icon] || Lightbulb;
   
+  // Extract product name if available
+  const productName = insight.productName || null;
+  
+  // Generate short, plain English issue text based on level
+  const getShortIssue = () => {
+    if (insight.level === "CRITICAL") {
+      // Parse "run out in approximately X day" patterns
+      const daysMatch = insight.message.match(/(\d+)\s*day/i);
+      if (daysMatch) {
+        const days = parseInt(daysMatch[1]);
+        if (days <= 1) return "Empty in 1 day";
+        return `Empty in ${days} days`;
+      }
+      if (insight.message.toLowerCase().includes("out of stock")) return "Out of stock now";
+      return "Needs attention";
+    }
+    if (insight.level === "WARNING") {
+      const daysMatch = insight.message.match(/(\d+)\s*day/i);
+      if (daysMatch) {
+        return `Low stock (${daysMatch[1]}d left)`;
+      }
+      if (insight.message.toLowerCase().includes("slow")) return "Slow-moving item";
+      return "Monitor closely";
+    }
+    if (insight.level === "SUCCESS") {
+      if (insight.message.toLowerCase().includes("top seller")) return "Top seller!";
+      if (insight.message.toLowerCase().includes("trending")) return "Trending up";
+      return "Performing well";
+    }
+    return "Info";
+  };
+  
+  const shortIssue = getShortIssue();
+  const issueColor = insight.level === "CRITICAL" 
+    ? "text-red-600 dark:text-red-400" 
+    : insight.level === "WARNING"
+    ? "text-amber-600 dark:text-amber-400"
+    : insight.level === "SUCCESS"
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-blue-600 dark:text-blue-400";
+  
+  // Determine action button text (simpler)
+  const getActionText = () => {
+    if (insight.level === "CRITICAL" || insight.level === "WARNING") {
+      if (insight.actionLabel?.toLowerCase().includes("order") || insight.actionLabel?.toLowerCase().includes("restock")) {
+        return "Restock";
+      }
+    }
+    return insight.actionLabel || "View";
+  };
+  
   return (
     <div
       className={cn(
@@ -178,7 +229,7 @@ export function InsightCard({ insight, className }: InsightCardProps) {
         className
       )}
     >
-      {/* Header: Icon + Title */}
+      {/* Simplified Card Layout */}
       <div className="flex items-start gap-2.5">
         {/* Icon */}
         <div className={cn(
@@ -188,39 +239,41 @@ export function InsightCard({ insight, className }: InsightCardProps) {
           <IconComponent className={cn("size-4", styles.iconColor)} />
         </div>
         
-        {/* Content */}
+        {/* Content - Simplified Hierarchy */}
         <div className="flex-1 min-w-0">
-          {/* Title */}
-          <h4 className={cn("font-semibold text-xs leading-tight", styles.titleColor)}>
-            {insight.title}
-          </h4>
+          {/* Product Name (Bold, Primary) */}
+          {productName ? (
+            <h4 className="font-bold text-sm text-foreground leading-tight truncate" title={productName}>
+              {productName}
+            </h4>
+          ) : (
+            <h4 className={cn("font-semibold text-xs leading-tight", styles.titleColor)}>
+              {insight.title}
+            </h4>
+          )}
           
-          {/* Message (Rich Text with highlighting) - Smaller text for better hierarchy */}
-          <p className="text-[10px] text-muted-foreground/80 mt-0.5 leading-relaxed">
-            {parseRichText(insight.message, insight.level)}
+          {/* Short Issue (Color-coded) */}
+          <p className={cn("text-xs font-semibold mt-0.5", issueColor)}>
+            {shortIssue}
           </p>
         </div>
-      </div>
-      
-      {/* Action Button - Smaller and less dominant */}
-      {insight.actionLabel && insight.actionHref && (
-        <div className="mt-2 pt-2 border-t border-border/40">
-          <Link href={insight.actionHref}>
+        
+        {/* Inline Action Button */}
+        {insight.actionLabel && insight.actionHref && (
+          <Link href={insight.actionHref} className="shrink-0">
             <Button
               size="sm"
-              variant="outline"
+              variant={insight.level === "CRITICAL" ? "destructive" : "outline"}
               className={cn(
-                "w-full gap-1.5 h-6 text-[9px] font-medium transition-colors",
-                styles.iconColor,
-                "hover:bg-muted/50"
+                "h-7 px-2.5 text-[10px] font-semibold",
+                insight.level !== "CRITICAL" && styles.iconColor
               )}
             >
-              {insight.actionLabel}
-              <ArrowRight className="size-2.5" />
+              {getActionText()}
             </Button>
           </Link>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

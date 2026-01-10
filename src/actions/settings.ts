@@ -117,6 +117,113 @@ export async function updateStoreInfo(data: {
   }
 }
 
+// =============================================================================
+// Data Maintenance Actions
+// =============================================================================
+
+import { aggregateDailySales } from "@/lib/forecasting";
+
+/**
+ * Manually trigger sales data aggregation.
+ * This is useful for backfilling data or forcing a refresh.
+ * 
+ * @param daysBack - Number of days to aggregate (default: 1, max: 90)
+ */
+export async function triggerSalesAggregation(daysBack: number = 1): Promise<{
+  success: boolean;
+  message: string;
+  results?: { date: string; products: number }[];
+  error?: string;
+}> {
+  try {
+    const days = Math.min(Math.max(daysBack, 1), 90); // Clamp between 1-90
+    const results: { date: string; products: number }[] = [];
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (let i = 1; i <= days; i++) {
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() - i);
+      
+      await aggregateDailySales(targetDate);
+      
+      const count = await prisma.dailySalesAggregate.count({
+        where: { date: targetDate }
+      });
+      
+      results.push({
+        date: targetDate.toISOString().split("T")[0],
+        products: count
+      });
+    }
+    
+    // Revalidate analytics pages
+    revalidatePath("/admin/analytics");
+    revalidatePath("/dashboard");
+    
+    return {
+      success: true,
+      message: `Successfully aggregated ${days} day(s) of sales data`,
+      results
+    };
+  } catch (error) {
+    console.error("[settings] Error triggering aggregation:", error);
+    return {
+      success: false,
+      message: "Failed to aggregate sales data",
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
+}
+
+/**
+ * Get the status of sales aggregation data.
+ */
+export async function getAggregationStatus(): Promise<{
+  totalRecords: number;
+  earliestDate: string | null;
+  latestDate: string | null;
+  daysCovered: number;
+  lastUpdated: string | null;
+}> {
+  try {
+    const [count, range] = await Promise.all([
+      prisma.dailySalesAggregate.count(),
+      prisma.dailySalesAggregate.aggregate({
+        _min: { date: true },
+        _max: { date: true }
+      })
+    ]);
+    
+    const earliest = range._min.date;
+    const latest = range._max.date;
+    
+    let daysCovered = 0;
+    if (earliest && latest) {
+      daysCovered = Math.ceil((latest.getTime() - earliest.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    }
+    
+    return {
+      totalRecords: count,
+      earliestDate: earliest?.toISOString().split("T")[0] ?? null,
+      latestDate: latest?.toISOString().split("T")[0] ?? null,
+      daysCovered,
+      lastUpdated: latest?.toISOString() ?? null
+    };
+  } catch (error) {
+    console.error("[settings] Error getting aggregation status:", error);
+    return {
+      totalRecords: 0,
+      earliestDate: null,
+      latestDate: null,
+      daysCovered: 0,
+      lastUpdated: null
+    };
+  }
+}
+
+
 
 
 

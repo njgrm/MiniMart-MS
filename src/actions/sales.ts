@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { Decimal } from "@prisma/client/runtime/library";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 // ============================================
@@ -168,6 +169,9 @@ function parseDate(dateStr: string): Date | null {
 /**
  * Get sales history with optional date range filter
  * Financial stats exclude VOID and CANCELLED transactions
+ * 
+ * ⚡ OPTIMIZED: Uses parallel queries and database aggregation
+ * instead of loading all transactions into memory.
  */
 export async function getSalesHistory(
   range: DateRange = "all",
@@ -187,70 +191,78 @@ export async function getSalesHistory(
     status: { notIn: ["VOID", "CANCELLED"] },
   };
 
-  // Get total count (all transactions for display)
-  const totalCount = await prisma.transaction.count({
-    where: whereClause,
-  });
-
-  // Get transactions with items, payment, and user
-  const transactions = await prisma.transaction.findMany({
-    where: whereClause,
-    include: {
-      items: {
-        include: {
-          product: {
-            select: {
-              product_name: true,
-              barcode: true,
+  // Run all queries in PARALLEL for maximum performance
+  const [totalCount, transactions, financialAggregates] = await Promise.all([
+    // Get total count (all transactions for display)
+    prisma.transaction.count({
+      where: whereClause,
+    }),
+    
+    // Get transactions with items, payment, and user
+    prisma.transaction.findMany({
+      where: whereClause,
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                product_name: true,
+                barcode: true,
+              },
             },
           },
         },
-      },
-      payment: {
-        select: {
-          payment_method: true,
-          amount_tendered: true,
-          change: true,
+        payment: {
+          select: {
+            payment_method: true,
+            amount_tendered: true,
+            change: true,
+          },
+        },
+        user: {
+          select: {
+            username: true,
+          },
         },
       },
-      user: {
-        select: {
-          username: true,
-        },
+      orderBy: {
+        created_at: "desc",
       },
-    },
-    orderBy: {
-      created_at: "desc",
-    },
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-  });
-
-  // Calculate aggregates for VALID transactions only (exclude VOID/CANCELLED)
-  const validTransactions = await prisma.transaction.findMany({
-    where: validStatusWhereClause,
-    include: {
-      items: true,
-    },
-  });
-
-  let totalRevenue = 0;
-  let totalCost = 0;
-
-  for (const tx of validTransactions) {
-    // Revenue is the sum of item prices * quantities (not total_amount which may include tax/discount)
-    for (const item of tx.items) {
-      const itemRevenue = Number(item.price_at_sale) * item.quantity;
-      const itemCost = Number(item.cost_at_sale) * item.quantity;
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    
+    // ⚡ Use Prisma aggregate instead of loading ALL transactions into memory
+    // This is the KEY performance fix - was causing 8+ second load times
+    prisma.transactionItem.aggregate({
+      where: {
+        transaction: {
+          ...validStatusWhereClause,
+        },
+        price_at_sale: { gt: 0 }, // Skip items with 0 price (data quality issue)
+      },
+      _sum: {
+        subtotal: true,
+      },
+    }).then(async (revenueResult) => {
+      // Get cost separately since we need quantity * cost_at_sale
+      const costResult = await prisma.$queryRaw<[{ total_cost: Decimal | null }]>`
+        SELECT SUM(ti.cost_at_sale * ti.quantity) as total_cost
+        FROM transaction_items ti
+        JOIN transactions t ON ti.transaction_id = t.transaction_id
+        WHERE t.status NOT IN ('VOID', 'CANCELLED')
+        ${startDate ? Prisma.sql`AND t.created_at >= ${startDate}` : Prisma.empty}
+        AND ti.price_at_sale > 0
+      `;
       
-      // Skip items with 0 price (data quality issue)
-      if (itemRevenue > 0) {
-        totalRevenue += itemRevenue;
-        totalCost += itemCost;
-      }
-    }
-  }
+      return {
+        totalRevenue: Number(revenueResult._sum.subtotal ?? 0),
+        totalCost: Number(costResult[0]?.total_cost ?? 0),
+      };
+    }),
+  ]);
 
+  const { totalRevenue, totalCost } = financialAggregates;
   const totalProfit = totalRevenue - totalCost;
 
   // Transform data for client
@@ -794,6 +806,8 @@ export async function importSalesCsv(data: CsvSaleRow[]): Promise<ImportResult> 
  * Includes previous period data for percentage change calculation
  * 
  * NOTE: Uses Philippine Standard Time (UTC+8) for business day calculations
+ * 
+ * ⚡ OPTIMIZED: Uses database aggregation instead of loading all transactions
  */
 export async function getSalesStats() {
   // Philippine timezone offset is UTC+8 (8 hours = 8 * 60 * 60 * 1000 ms)
@@ -820,73 +834,61 @@ export async function getSalesStats() {
   const lastMonthEndPHT = new Date(Date.UTC(nowPHT.getUTCFullYear(), nowPHT.getUTCMonth(), 0, 23, 59, 59, 999));
   const lastMonthEnd = new Date(lastMonthEndPHT.getTime() - PHT_OFFSET);
 
-  // Today's stats - only COMPLETED transactions
-  const todayTransactions = await prisma.transaction.findMany({
-    where: {
-      created_at: { gte: todayStart },
-      status: "COMPLETED",
-    },
-    include: { items: true },
-  });
+  // ⚡ Use raw SQL for efficient aggregation instead of loading all transactions
+  const stats = await prisma.$queryRaw<Array<{
+    period: string;
+    count: bigint;
+    revenue: Decimal | null;
+    cost: Decimal | null;
+  }>>`
+    WITH period_data AS (
+      SELECT
+        CASE
+          WHEN t.created_at >= ${todayStart} THEN 'today'
+          WHEN t.created_at >= ${yesterdayStart} AND t.created_at < ${todayStart} THEN 'yesterday'
+          WHEN t.created_at >= ${monthStart} THEN 'month'
+          WHEN t.created_at >= ${lastMonthStart} AND t.created_at <= ${lastMonthEnd} THEN 'lastMonth'
+        END as period,
+        t.transaction_id,
+        ti.price_at_sale,
+        ti.cost_at_sale,
+        ti.quantity
+      FROM transactions t
+      JOIN transaction_items ti ON t.transaction_id = ti.transaction_id
+      WHERE t.status = 'COMPLETED'
+        AND ti.price_at_sale > 0
+        AND (
+          t.created_at >= ${todayStart}
+          OR (t.created_at >= ${yesterdayStart} AND t.created_at < ${todayStart})
+          OR t.created_at >= ${monthStart}
+          OR (t.created_at >= ${lastMonthStart} AND t.created_at <= ${lastMonthEnd})
+        )
+    )
+    SELECT
+      period,
+      COUNT(DISTINCT transaction_id) as count,
+      SUM(price_at_sale * quantity) as revenue,
+      SUM(cost_at_sale * quantity) as cost
+    FROM period_data
+    WHERE period IS NOT NULL
+    GROUP BY period
+  `;
 
-  // Yesterday's stats for comparison
-  const yesterdayTransactions = await prisma.transaction.findMany({
-    where: {
-      created_at: { gte: yesterdayStart, lt: todayStart },
-      status: "COMPLETED",
-    },
-    include: { items: true },
-  });
+  // Convert results to our expected format
+  const statsMap = new Map(stats.map(s => [s.period, {
+    count: Number(s.count),
+    revenue: Number(s.revenue ?? 0),
+    cost: Number(s.cost ?? 0),
+    profit: Number(s.revenue ?? 0) - Number(s.cost ?? 0),
+  }]));
 
-  // Month's stats - only COMPLETED transactions
-  const monthTransactions = await prisma.transaction.findMany({
-    where: {
-      created_at: { gte: monthStart },
-      status: "COMPLETED",
-    },
-    include: { items: true },
-  });
-
-  // Last month's stats for comparison
-  const lastMonthTransactions = await prisma.transaction.findMany({
-    where: {
-      created_at: { gte: lastMonthStart, lte: lastMonthEnd },
-      status: "COMPLETED",
-    },
-    include: { items: true },
-  });
-
-  const calculateStats = (transactions: typeof todayTransactions) => {
-    let revenue = 0;
-    let cost = 0;
-
-    for (const tx of transactions) {
-      // Calculate revenue from items (price * qty) to properly track gross revenue
-      for (const item of tx.items) {
-        const itemPrice = Number(item.price_at_sale);
-        const itemCost = Number(item.cost_at_sale);
-        
-        // Skip items with 0 price (data quality issue)
-        if (itemPrice > 0) {
-          revenue += itemPrice * item.quantity;
-          cost += itemCost * item.quantity;
-        }
-      }
-    }
-
-    return {
-      count: transactions.length,
-      revenue,
-      cost,
-      profit: revenue - cost,
-    };
-  };
+  const emptyStats = { count: 0, revenue: 0, cost: 0, profit: 0 };
 
   return {
-    today: calculateStats(todayTransactions),
-    yesterday: calculateStats(yesterdayTransactions),
-    month: calculateStats(monthTransactions),
-    lastMonth: calculateStats(lastMonthTransactions),
+    today: statsMap.get('today') ?? emptyStats,
+    yesterday: statsMap.get('yesterday') ?? emptyStats,
+    month: statsMap.get('month') ?? emptyStats,
+    lastMonth: statsMap.get('lastMonth') ?? emptyStats,
   };
 }
 

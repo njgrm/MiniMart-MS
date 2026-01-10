@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { format } from "date-fns";
+import { DateRange } from "react-day-picker";
 import {
   Search,
   X,
@@ -12,8 +13,8 @@ import {
   Trash2,
   Archive,
   RotateCcw,
-  Package,
   PackagePlus,
+  Package,
   ClipboardEdit,
   Upload,
   XCircle,
@@ -24,13 +25,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Eye,
-  ArrowUp,
-  ArrowDown,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  DollarSign,
+  User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +52,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { cn } from "@/lib/utils";
 import { getAuditLogs, type AuditLogEntry } from "@/actions/audit";
 import { LogDetailsModal } from "@/components/audit/log-details-modal";
@@ -90,93 +86,214 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; icon: typeof Plus; col
 const MODULE_COLORS: Record<string, string> = {
   INVENTORY: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
   CATALOG: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+  PRODUCTS: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
   POS: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-800",
   ORDERS: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800",
   AUTH: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-red-200 dark:border-red-800",
 };
 
-// Helper to extract impact summary from metadata
-function getImpactSummary(log: AuditLogEntry): { text: string; icon: typeof Plus; color: string } | null {
-  const metadata = log.metadata as Record<string, unknown> | null;
-  if (!metadata) return null;
+// Helper: Format category enum to Title Case (e.g., CANNED_GOODS -> "Canned Goods")
+function formatCategory(category: string | null | undefined): string {
+  if (!category) return "";
+  return category
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
 
-  // Stock changes
-  if (log.action === "RESTOCK" || log.action === "ADJUST_STOCK") {
-    const qty = metadata.quantity as number;
-    const oldStock = metadata.old_stock as number | undefined;
-    const newStock = metadata.new_stock as number | undefined;
+// Helper: Get user initials for avatar
+function getUserInitials(username: string): string {
+  if (!username) return "?";
+  const parts = username.split(/[\s_-]+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return username.substring(0, 2).toUpperCase();
+}
+
+// Helper: Get reference from metadata (batch_id, sku, or reference)
+function getReference(log: AuditLogEntry): string | null {
+  const metadata = log.metadata as Record<string, unknown> | null;
+  
+  // For Restock/Adjust/Batch actions, show batch ID
+  if (["RESTOCK", "ADJUST_STOCK", "EDIT_BATCH", "EDIT_EXPIRY"].includes(log.action)) {
+    const batchId = metadata?.batch_id as number | undefined;
+    if (batchId) return `Batch #${batchId}`;
+  }
+  
+  // For product actions, show SKU if available
+  const sku = metadata?.sku as string | undefined;
+  if (sku) return sku;
+  
+  // Fallback to reference field
+  const ref = metadata?.reference as string | undefined;
+  if (ref) return ref;
+  
+  return null;
+}
+
+// Helper to render compact "diff" visualization for scanning (not reading)
+function DiffSummary({ log }: { log: AuditLogEntry }): React.ReactNode {
+  const metadata = log.metadata as Record<string, unknown> | null;
+  
+  // RESTOCK: Show +qty with expiry badge
+  // Metadata fields: quantity_added, new_stock_level, supplier_name, expiry_date
+  if (log.action === "RESTOCK") {
+    const qty = (metadata?.quantity_added ?? metadata?.quantity) as number | undefined;
+    const expiry = metadata?.expiry_date as string | undefined;
+    const isNearExpiry = expiry ? (new Date(expiry).getTime() - Date.now()) < 30 * 24 * 60 * 60 * 1000 : false;
     
-    if (qty !== undefined) {
-      const isPositive = qty > 0;
-      return {
-        text: `${isPositive ? "+" : ""}${qty} units`,
-        icon: isPositive ? ArrowUp : ArrowDown,
-        color: isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
-      };
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <span className="text-base font-bold text-green-600 dark:text-green-400">
+          +{qty?.toLocaleString() ?? 0}
+        </span>
+        {expiry && (
+          <Badge variant="outline" className={cn(
+            "text-[10px] gap-1 shrink-0",
+            isNearExpiry && "border-amber-400 text-amber-600 dark:text-amber-400"
+          )}>
+            {isNearExpiry && <AlertTriangle className="h-2.5 w-2.5" />}
+            Exp {format(new Date(expiry), "MMM d")}
+          </Badge>
+        )}
+      </div>
+    );
+  }
+  
+  // ADJUST_STOCK: Show ±diff
+  // Metadata fields: previous_stock, new_stock, quantity_change, movement_type, reason
+  if (log.action === "ADJUST_STOCK") {
+    // Try quantity_change first (pre-computed), then calculate from previous/new
+    let diff = metadata?.quantity_change as number | undefined;
+    if (diff === undefined) {
+      const oldStock = (metadata?.previous_stock ?? metadata?.old_stock) as number | undefined;
+      const newStock = metadata?.new_stock as number | undefined;
+      if (oldStock !== undefined && newStock !== undefined) {
+        diff = newStock - oldStock;
+      }
     }
     
-    if (oldStock !== undefined && newStock !== undefined) {
-      const diff = newStock - oldStock;
-      return {
-        text: `${diff > 0 ? "+" : ""}${diff} units`,
-        icon: diff > 0 ? TrendingUp : TrendingDown,
-        color: diff > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400",
-      };
+    if (diff !== undefined) {
+      const isPositive = diff > 0;
+      return (
+        <span className={cn(
+          "text-base font-bold",
+          isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+        )}>
+          {isPositive ? "+" : ""}{diff.toLocaleString()}
+        </span>
+      );
     }
   }
-
-  // Price changes
-  if (log.action === "UPDATE" && metadata.changed_fields) {
+  
+  // EDIT_BATCH: Show qty diff
+  // Metadata fields: old_quantity, new_quantity, quantity_change, batch_id, reason
+  if (log.action === "EDIT_BATCH") {
+    // Try quantity_change first (pre-computed), then calculate
+    let diff = metadata?.quantity_change as number | undefined;
+    if (diff === undefined) {
+      const oldQty = metadata?.old_quantity as number | undefined;
+      const newQty = metadata?.new_quantity as number | undefined;
+      if (oldQty !== undefined && newQty !== undefined) {
+        diff = newQty - oldQty;
+      }
+    }
+    
+    if (diff !== undefined) {
+      const isPositive = diff > 0;
+      return (
+        <div className="flex items-center justify-end gap-1.5">
+          <span className={cn(
+            "text-base font-bold",
+            isPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+          )}>
+            {isPositive ? "+" : ""}{diff.toLocaleString()}
+          </span>
+          <span className="text-[10px] text-muted-foreground">batch</span>
+        </div>
+      );
+    }
+  }
+  
+  // EDIT_EXPIRY: Show date transition
+  if (log.action === "EDIT_EXPIRY") {
+    const oldExpiry = metadata?.old_expiry as string | undefined;
+    const newExpiry = metadata?.new_expiry as string | undefined;
+    const isNearExpiry = newExpiry ? (new Date(newExpiry).getTime() - Date.now()) < 30 * 24 * 60 * 60 * 1000 : false;
+    
+    return (
+      <div className="flex items-center gap-1.5 text-sm">
+        {oldExpiry && <span className="text-muted-foreground">{format(new Date(oldExpiry), "MMM d")}</span>}
+        <span className="text-muted-foreground">➝</span>
+        <span className={cn("font-semibold", isNearExpiry && "text-amber-600 dark:text-amber-400")}>
+          {newExpiry ? format(new Date(newExpiry), "MMM d") : "—"}
+        </span>
+      </div>
+    );
+  }
+  
+  // UPDATE with price change
+  if (log.action === "UPDATE" && metadata?.changed_fields) {
     const changedFields = metadata.changed_fields as string[];
     const newValues = metadata.new_values as Record<string, unknown> | undefined;
     const oldValues = metadata.old_values as Record<string, unknown> | undefined;
     
     if (changedFields.includes("retail_price") && oldValues && newValues) {
-      const oldPrice = oldValues.retail_price as number;
-      const newPrice = newValues.retail_price as number;
-      return {
-        text: `₱${oldPrice} → ₱${newPrice}`,
-        icon: DollarSign,
-        color: newPrice > oldPrice ? "text-green-600 dark:text-green-400" : "text-orange-600 dark:text-orange-400",
-      };
+      const oldPrice = Number(oldValues.retail_price);
+      const newPrice = Number(newValues.retail_price);
+      return (
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground font-mono">{oldPrice.toFixed(2)}</span>
+          <span className="text-muted-foreground">➝</span>
+          <span className="font-bold font-mono">{newPrice.toFixed(2)}</span>
+          {changedFields.length > 1 && (
+            <Badge variant="outline" className="text-[9px] ml-1">+{changedFields.length - 1}</Badge>
+          )}
+        </div>
+      );
     }
     
-    // Field count for generic updates
-    return {
-      text: `${changedFields.length} field${changedFields.length > 1 ? "s" : ""} changed`,
-      icon: Pencil,
-      color: "text-blue-600 dark:text-blue-400",
-    };
+    // Generic field count
+    return (
+      <Badge variant="outline" className="text-[10px]">
+        {changedFields.length} field{changedFields.length > 1 ? "s" : ""}
+      </Badge>
+    );
   }
-
-  // Create actions
+  
+  // CREATE
   if (log.action === "CREATE") {
-    return {
-      text: "New entry",
-      icon: Plus,
-      color: "text-green-600 dark:text-green-400",
-    };
+    return <Badge variant="outline" className="text-[10px] text-green-600 border-green-200">new</Badge>;
   }
-
-  // Delete/Archive actions
+  
+  // DELETE / ARCHIVE
   if (log.action === "DELETE" || log.action === "ARCHIVE") {
-    return {
-      text: "Removed",
-      icon: Trash2,
-      color: "text-red-600 dark:text-red-400",
-    };
+    return <Badge variant="outline" className="text-[10px] text-red-600 border-red-200">removed</Badge>;
   }
-
-  // Restore
+  
+  // RESTORE
   if (log.action === "RESTORE") {
-    return {
-      text: "Restored",
-      icon: RotateCcw,
-      color: "text-purple-600 dark:text-purple-400",
-    };
+    return <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-200">restored</Badge>;
   }
-
-  return null;
+  
+  // ORDER_CANCEL
+  if (log.action === "ORDER_CANCEL") {
+    return <Badge variant="outline" className="text-[10px] text-red-600 border-red-200">cancelled</Badge>;
+  }
+  
+  // BULK_IMPORT
+  if (log.action === "BULK_IMPORT") {
+    const count = metadata?.count as number | undefined;
+    return (
+      <Badge variant="outline" className="text-[10px]">
+        {count?.toLocaleString() ?? "—"} items
+      </Badge>
+    );
+  }
+  
+  // Fallback
+  return <span className="text-xs text-muted-foreground truncate max-w-[150px]">{log.details}</span>;
 }
 
 export function AuditLogsClient({
@@ -202,8 +319,9 @@ export function AuditLogsClient({
   const [actionFilter, setActionFilter] = useState<AuditAction | "all">("all");
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("all");
   const [moduleFilter, setModuleFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
 
-  const fetchLogs = (newPage: number, newPageSize: number = pageSize) => {
+  const fetchLogs = (newPage: number, newPageSize: number = pageSize, newDateRange: DateRange | undefined = dateRange) => {
     startTransition(async () => {
       const result = await getAuditLogs(
         {
@@ -211,6 +329,8 @@ export function AuditLogsClient({
           action: actionFilter !== "all" ? actionFilter : undefined,
           entityType: entityTypeFilter !== "all" ? entityTypeFilter : undefined,
           module: moduleFilter !== "all" ? moduleFilter : undefined,
+          startDate: newDateRange?.from,
+          endDate: newDateRange?.to,
         },
         newPage,
         newPageSize
@@ -219,6 +339,12 @@ export function AuditLogsClient({
       setTotal(result.total);
       setPages(result.pages);
     });
+  };
+
+  const handleDateRangeChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    setPage(1);
+    fetchLogs(1, pageSize, range);
   };
 
   const handleSearch = () => {
@@ -243,13 +369,14 @@ export function AuditLogsClient({
   };
 
   // Check if filters are active
-  const hasActiveFilters = !!search || actionFilter !== "all" || entityTypeFilter !== "all" || moduleFilter !== "all";
+  const hasActiveFilters = !!search || actionFilter !== "all" || entityTypeFilter !== "all" || moduleFilter !== "all" || !!dateRange;
 
   const resetFilters = () => {
     setSearch("");
     setActionFilter("all");
     setEntityTypeFilter("all");
     setModuleFilter("all");
+    setDateRange(undefined);
     setPage(1);
     startTransition(async () => {
       const result = await getAuditLogs({}, 1, pageSize);
@@ -286,6 +413,8 @@ export function AuditLogsClient({
                 action: actionFilter !== "all" ? actionFilter : undefined,
                 entityType: entityTypeFilter !== "all" ? entityTypeFilter : undefined,
                 module: v !== "all" ? v : undefined,
+                startDate: dateRange?.from,
+                endDate: dateRange?.to,
               },
               1,
               pageSize
@@ -300,7 +429,8 @@ export function AuditLogsClient({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Modules</SelectItem>
-            {modules.map((mod) => (
+            {/* Hardcoded module options - some may not have data yet */}
+            {["INVENTORY", "CATALOG", "POS", "ORDERS", "AUTH"].map((mod) => (
               <SelectItem key={mod} value={mod}>
                 <div className="flex items-center gap-2">
                   <div className={cn("w-2 h-2 rounded-full", MODULE_COLORS[mod]?.split(" ")[0] || "bg-gray-400")} />
@@ -322,6 +452,8 @@ export function AuditLogsClient({
                 action: v !== "all" ? (v as AuditAction) : undefined,
                 entityType: entityTypeFilter !== "all" ? entityTypeFilter : undefined,
                 module: moduleFilter !== "all" ? moduleFilter : undefined,
+                startDate: dateRange?.from,
+                endDate: dateRange?.to,
               },
               1,
               pageSize
@@ -355,6 +487,8 @@ export function AuditLogsClient({
                 action: actionFilter !== "all" ? actionFilter : undefined,
                 entityType: v !== "all" ? v : undefined,
                 module: moduleFilter !== "all" ? moduleFilter : undefined,
+                startDate: dateRange?.from,
+                endDate: dateRange?.to,
               },
               1,
               pageSize
@@ -376,6 +510,13 @@ export function AuditLogsClient({
             ))}
           </SelectContent>
         </Select>
+
+        {/* Date Range Filter */}
+        <DateRangePicker
+          date={dateRange}
+          onDateChange={handleDateRangeChange}
+          className="w-auto"
+        />
 
         {/* Reset Filters */}
         {hasActiveFilters && (
@@ -417,25 +558,24 @@ export function AuditLogsClient({
       <TooltipProvider>
         <div className="flex-1 min-h-0 rounded-xl border border-border bg-card shadow-card overflow-hidden flex flex-col">
           <div className="flex-1 overflow-auto">
-            <Table>
+            <Table className="w-full">
               <TableHeader className="sticky top-0 bg-card z-10">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-9 bg-muted/30 w-[140px] text-xs">Timestamp</TableHead>
-                  <TableHead className="h-9 bg-muted/30 w-[100px] text-xs">User</TableHead>
-                  <TableHead className="h-9 bg-muted/30 w-[90px] text-xs">Module</TableHead>
-                  <TableHead className="h-9 bg-muted/30 w-[100px] text-xs">Action</TableHead>
-                  <TableHead className="h-9 bg-muted/30 w-[180px] text-xs">Target</TableHead>
-                  <TableHead className="h-9 bg-muted/30 text-xs">Impact</TableHead>
-                  <TableHead className="h-9 bg-muted/30 w-[60px] text-xs text-center">View</TableHead>
+                <TableRow className="hover:bg-transparent border-b">
+                  <TableHead className="h-10 bg-muted/30 w-[120px] text-xs font-semibold uppercase tracking-wide">When</TableHead>
+                  <TableHead className="h-10 bg-muted/30 w-[120px] text-xs font-semibold uppercase tracking-wide">Who</TableHead>
+                  <TableHead className="h-10 bg-muted/30 w-[100px] text-xs font-semibold uppercase tracking-wide">Action</TableHead>
+                  <TableHead className="h-10 bg-muted/30 text-xs font-semibold uppercase tracking-wide">Target</TableHead>
+                  <TableHead className="h-10 bg-muted/30 w-[160px] text-xs font-semibold uppercase tracking-wide">Change</TableHead>
+                  <TableHead className="h-10 bg-muted/30 w-[100px] text-xs font-semibold uppercase tracking-wide">Reference</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {logs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground py-8">
-                        <FileText className="h-8 w-8 opacity-50" />
-                        <p>No audit logs found</p>
+                    <TableCell colSpan={6} className="h-32 text-center">
+                      <div className="flex flex-col items-center gap-3 text-muted-foreground py-8">
+                        <FileText className="h-10 w-10 opacity-50" />
+                        <p className="text-sm">No audit logs found</p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -444,119 +584,106 @@ export function AuditLogsClient({
                     const actionConfig = ACTION_CONFIG[log.action];
                     const ActionIcon = actionConfig?.icon || FileText;
                     const isHighRisk = actionConfig?.isHighRisk || false;
-                    const impact = getImpactSummary(log);
-                    const ImpactIcon = impact?.icon || Minus;
+                    const reference = getReference(log);
 
                     return (
                       <TableRow
                         key={log.id}
                         className={cn(
-                          "group",
+                          "group cursor-pointer hover:bg-muted/50 transition-colors border-b border-border/50",
                           isHighRisk && "bg-orange-50/50 dark:bg-orange-950/10"
                         )}
+                        onClick={() => handleViewLog(log)}
                       >
-                        {/* Timestamp */}
-                        <TableCell className="py-2">
-                          <div className="text-sm font-medium">
-                            {format(new Date(log.created_at), "MMM d, h:mm a")}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground font-mono">
-                            {format(new Date(log.created_at), "yyyy")}
+                        {/* When */}
+                        <TableCell className="py-3">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-foreground">
+                              {format(new Date(log.created_at), "MMM d")}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(log.created_at), "h:mm a")}
+                            </span>
                           </div>
                         </TableCell>
 
-                        {/* User */}
-                        <TableCell className="py-2">
+                        {/* Who - Avatar + Name */}
+                        <TableCell className="py-3">
                           <div className="flex items-center gap-2">
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                {log.username.slice(0, 2).toUpperCase()}
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="text-[10px] font-medium bg-primary/10 text-primary">
+                                {getUserInitials(log.username)}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-medium truncate max-w-[60px]">
+                            <span className="text-sm font-medium text-foreground truncate">
                               {log.username}
                             </span>
                           </div>
                         </TableCell>
 
-                        {/* Module */}
-                        <TableCell className="py-2">
-                          {log.module ? (
-                            <Badge 
-                              variant="outline" 
-                              className={cn(
-                                "text-[10px] font-medium px-1.5 py-0",
-                                MODULE_COLORS[log.module] || "bg-muted"
-                              )}
-                            >
-                              {log.module}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-
-                        {/* Action */}
-                        <TableCell className="py-2">
-                          <Badge className={cn("gap-1 text-[10px] px-1.5 py-0", actionConfig?.color)}>
+                        {/* Action Badge */}
+                        <TableCell className="py-3">
+                          <Badge className={cn("gap-1 text-[10px] px-2 py-0.5 font-medium", actionConfig?.color)}>
                             <ActionIcon className="h-3 w-3" />
                             {actionConfig?.label || log.action}
                           </Badge>
                         </TableCell>
 
-                        {/* Target */}
-                        <TableCell className="py-2">
-                          <div className="flex items-center gap-1.5">
-                            <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        {/* Target (Product w/ Image) - Flexible width */}
+                        <TableCell className="py-3">
+                          <div className="flex items-center gap-2.5">
+                            {/* Product Thumbnail or Fallback */}
+                            <div className="h-9 w-9 rounded-md bg-muted border border-border overflow-hidden shrink-0 flex items-center justify-center">
+                              {log.product_image ? (
+                                <img 
+                                  src={log.product_image} 
+                                  alt={log.entity_name} 
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <Package className="h-4 w-4 text-muted-foreground/50" />
+                              )}
+                            </div>
+                            
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="text-sm font-medium text-foreground truncate">
+                                {log.entity_name}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {log.product_category && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                                    {formatCategory(log.product_category)}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground">
+                                  #{log.entity_id}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        {/* Change - Diff visualization (next to Target for easy scanning) */}
+                        <TableCell className="py-3">
+                            <DiffSummary log={log} />
+                        </TableCell>
+
+                        {/* Reference (moved to end) */}
+                        <TableCell className="py-3">
+                          {reference ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-sm font-medium truncate max-w-[140px] cursor-help">
-                                  {log.entity_name}
+                                <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded truncate max-w-[90px] inline-block">
+                                  {reference}
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent side="top">
-                                <p>{log.entity_name}</p>
+                              <TooltipContent>
+                                <p>{reference}</p>
                               </TooltipContent>
                             </Tooltip>
-                          </div>
-                          <span className="text-[10px] text-muted-foreground">
-                            {log.entity_type}
-                            {log.entity_id && ` #${log.entity_id}`}
-                          </span>
-                        </TableCell>
-
-                        {/* Impact */}
-                        <TableCell className="py-2">
-                          {impact ? (
-                            <div className={cn("flex items-center gap-1.5 text-sm", impact.color)}>
-                              <ImpactIcon className="h-3.5 w-3.5" />
-                              <span className="font-medium">{impact.text}</span>
-                            </div>
                           ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <p className="text-sm text-muted-foreground line-clamp-1 cursor-help max-w-[200px]">
-                                  {log.details}
-                                </p>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="max-w-sm">
-                                <p className="text-sm">{log.details}</p>
-                              </TooltipContent>
-                            </Tooltip>
+                            <span className="text-xs text-muted-foreground/30">—</span>
                           )}
-                        </TableCell>
-
-                        {/* Actions */}
-                        <TableCell className="py-2 text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleViewLog(log)}
-                          >
-                            <Eye className="h-4 w-4" />
-                            <span className="sr-only">View details</span>
-                          </Button>
                         </TableCell>
                       </TableRow>
                     );

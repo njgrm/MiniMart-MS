@@ -150,14 +150,28 @@ function LowStockRow({ item, onAddToPO, onClick }: { item: LowStockItem; onAddTo
 }
 
 function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDiscount: () => void; onClick: () => void }) {
-  const isUrgent = item.days_until_expiry <= 3;
+  // 45-Day Supplier Return Policy:
+  // <= 0 days: EXPIRED (Red) - Cannot return
+  // 1-7 days: CRITICAL - Pull Out Now (Red-ish)
+  // 8-45 days: RETURN TO SUPPLIER (Orange)
+  // > 45 days: Should not appear in this list
+  
   const isExpired = item.days_until_expiry <= 0;
+  const isCritical = item.days_until_expiry > 0 && item.days_until_expiry <= 7;
+  const isInReturnWindow = item.days_until_expiry > 0 && item.days_until_expiry <= 45;
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-PH", {
       month: "short",
       day: "numeric",
     }).format(new Date(date));
+  };
+
+  // Determine action label based on urgency
+  const getActionLabel = () => {
+    if (isExpired) return "Expired";
+    if (isCritical) return "Pull Out";
+    return "Return to Supplier";
   };
 
   return (
@@ -188,14 +202,14 @@ function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDisc
             "text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1",
             isExpired 
               ? "bg-destructive/20 text-destructive" 
-              : isUrgent
-                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+              : isCritical
+                ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                 : "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
           )}>
             <IconCalendarDue className="size-3" />
             {isExpired 
               ? "Expired" 
-              : `${item.days_until_expiry} day${item.days_until_expiry !== 1 ? 's' : ''} left`
+              : `${getActionLabel()} (${item.days_until_expiry}d)`
             }
           </span>
           <span className="text-[10px] text-muted-foreground">
@@ -203,19 +217,28 @@ function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDisc
           </span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          Expires: {formatDate(item.expiry_date)}
+          {isExpired ? "Expired" : "Expires"}: {formatDate(item.expiry_date)}
         </p>
       </div>
       
-      {/* Action */}
+      {/* Action - Context-aware button */}
       <Button
         variant="ghost"
         size="sm"
         className="h-7 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => { e.stopPropagation(); onDiscount(); }}
       >
-        <IconTag className="size-3 mr-1" />
-        Discount
+        {isInReturnWindow && !isExpired ? (
+          <>
+            <IconPackage className="size-3 mr-1" />
+            Return
+          </>
+        ) : (
+          <>
+            <IconTag className="size-3 mr-1" />
+            Discount
+          </>
+        )}
       </Button>
     </div>
   );
@@ -289,7 +312,7 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
               <TooltipTrigger asChild>
                 <TabsTrigger value="expiring" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
                   <IconClock className="size-3 mr-1.5" />
-                  Expiring Soon
+                  Return Window
                   {data.expiringCount > 0 && (
                     <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
                       {data.expiringCount}
@@ -298,8 +321,8 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
                 </TabsTrigger>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                <p className="font-medium">Items expiring within 7 days</p>
-                <p className="text-muted-foreground">Prioritize selling these items first</p>
+                <p className="font-medium">45-Day Supplier Return Window</p>
+                <p className="text-muted-foreground">Items expiring within 45 days - return to supplier or discount</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

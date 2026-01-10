@@ -16,7 +16,7 @@
 * **ORM:** Prisma
 * **State Management:** Zustand (Client-side global state for Cart, POS, Settings)
 * **UI Framework:** Tailwind CSS + Shadcn UI + Radix UI
-* **Icons:** Lucide React
+* **Icons:** Lucide React 
 * **Data Fetching:** React Server Components (RSC) for reads, Server Actions for writes.
 * **Validation:** Zod
 
@@ -111,3 +111,7 @@
     * **Step 3:** UI Components (referencing Design System tokens).
 3.  **Review:** Check against the **Reference Implementations** (e.g., "Does this look like the Analytics page?").
 4.  **Error Handling:** Use Shadcn `toast` for user feedback.
+
+Always write changes in changelog.md after each task finished
+
+Prompts may include emojis, make sure to use icons from lucide-react instead and find the closest match.

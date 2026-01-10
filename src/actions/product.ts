@@ -25,10 +25,14 @@ export type ActionResult = {
  * - current_stock: Physical stock on shelf
  * - allocated_stock: Stock reserved by PENDING/PREPARING orders
  * - available_stock: current_stock - allocated_stock (what can actually be sold)
+ * 
+ * SOFT DELETE LOGIC:
+ * - Uses deletedAt: null filter by default (new approach)
+ * - is_archived kept for backward compatibility
  */
 export async function getProducts(includeArchived: boolean = false) {
   const products = await prisma.product.findMany({
-    where: includeArchived ? {} : { is_archived: false },
+    where: includeArchived ? {} : { deletedAt: null },
     include: {
       inventory: true,
     },
@@ -58,6 +62,7 @@ export async function getProducts(includeArchived: boolean = false) {
       barcode: product.barcode,
       image_url: product.image_url,
       is_archived: product.is_archived,
+      deletedAt: product.deletedAt,
       nearest_expiry_date: product.nearest_expiry_date,
       status: (
         currentStock <= (product.inventory?.reorder_level ?? 10)
@@ -462,101 +467,99 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
   }
 }
 
+// Archive suffix format: __ARCHIVED_<timestamp>
+const ARCHIVE_SUFFIX_REGEX = /__ARCHIVED_\d+$/;
+
 /**
- * Delete a product (soft delete if has sales history, hard delete otherwise)
- * Preserves referential integrity for historical sales data
+ * Generate archive suffix with current timestamp
+ */
+function getArchiveSuffix(): string {
+  return `__ARCHIVED_${Date.now()}`;
+}
+
+/**
+ * Strip archive suffix from a value
+ */
+function stripArchiveSuffix(value: string | null): string | null {
+  if (!value) return null;
+  return value.replace(ARCHIVE_SUFFIX_REGEX, "");
+}
+
+/**
+ * Delete a product (ALWAYS soft delete with Ghost SKU fix)
+ * 
+ * NEW BEHAVIOR:
+ * - Always performs soft delete (sets deletedAt timestamp)
+ * - Appends archive suffix to unique fields (barcode, product_name)
+ * - This allows the same SKU/barcode to be reused immediately
+ * 
+ * @deprecated Use archiveProduct from '@/actions/archive' instead
  */
 export async function deleteProduct(productId: number): Promise<ActionResult> {
   try {
     // Check if product exists
     const existingProduct = await prisma.product.findUnique({
       where: { product_id: productId },
-      include: {
-        transactionItems: { take: 1 }, // Just check if any exist
-        orderItems: { take: 1 },
-      },
     });
 
     if (!existingProduct) {
       return { success: false, error: "Product not found" };
     }
 
-    const hasHistory = existingProduct.transactionItems.length > 0 || existingProduct.orderItems.length > 0;
-
-    if (hasHistory) {
-      // SOFT DELETE: Archive the product to preserve sales history
-      await prisma.product.update({
-        where: { product_id: productId },
-        data: { is_archived: true },
-      });
-
-      revalidatePath("/admin/inventory");
-      
-      // Audit log: Product archived
-      await logActivity({
-        username: "Admin", // TODO: Get from session
-        action: "ARCHIVE",
-        entity: "Product",
-        entityId: productId,
-        entityName: existingProduct.product_name,
-        details: `Archived product "${existingProduct.product_name}" (has sales history, cannot be permanently deleted).`,
-      });
-      
-      return { 
-        success: true, 
-        data: { archived: true },
-        error: undefined,
-      };
+    if (existingProduct.deletedAt) {
+      return { success: false, error: "Product is already archived" };
     }
 
-    // HARD DELETE: Product has no history, safe to delete completely
-    await prisma.$transaction(async (tx) => {
-      // Get inventory to find stock movements
-      const inventory = await tx.inventory.findUnique({
-        where: { product_id: productId },
-      });
-
-      // Delete stock movements first (if inventory exists)
-      if (inventory) {
-        await tx.stockMovement.deleteMany({
-          where: { inventory_id: inventory.inventory_id },
-        });
-      }
-
-      // Delete inventory
-      await tx.inventory.deleteMany({
-        where: { product_id: productId },
-      });
-
-      // Delete sales forecasts
-      await tx.salesForecast.deleteMany({
-        where: { product_id: productId },
-      });
-
-      // Delete product
-      await tx.product.delete({
-        where: { product_id: productId },
-      });
+    // SOFT DELETE with Ghost SKU fix
+    const archiveSuffix = getArchiveSuffix();
+    
+    await prisma.product.update({
+      where: { product_id: productId },
+      data: {
+        deletedAt: new Date(),
+        status: "ARCHIVED",
+        is_archived: true,
+        // Ghost SKU fix: rename unique fields to free them up
+        barcode: existingProduct.barcode ? `${existingProduct.barcode}${archiveSuffix}` : null,
+        product_name: `${existingProduct.product_name}${archiveSuffix}`,
+      },
     });
 
     revalidatePath("/admin/inventory");
     
-    // Audit log: Product deleted
-    await logProductDelete(
-      "Admin", // TODO: Get from session
-      productId,
-      existingProduct.product_name
-    );
+    // Audit log: Product archived
+    await logActivity({
+      username: "Admin", // TODO: Get from session
+      action: "ARCHIVE",
+      module: "CATALOG",
+      entity: "Product",
+      entityId: productId,
+      entityName: existingProduct.product_name,
+      details: `Archived product "${existingProduct.product_name}". Barcode and name suffixed for reuse.`,
+      metadata: {
+        original_barcode: existingProduct.barcode,
+        original_name: existingProduct.product_name,
+        archived_at: new Date().toISOString(),
+      },
+    });
     
-    return { success: true, data: { archived: false } };
+    return { 
+      success: true, 
+      data: { archived: true },
+    };
   } catch (error) {
     console.error("Delete product error:", error);
-    return { success: false, error: "Failed to delete product" };
+    return { success: false, error: "Failed to archive product" };
   }
 }
 
 /**
  * Restore an archived product
+ * 
+ * NEW BEHAVIOR:
+ * - Strips archive suffix from unique fields
+ * - Validates that original values are available
+ * - Throws error if original SKU/barcode is taken
  */
 export async function restoreProduct(productId: number): Promise<ActionResult> {
   try {
@@ -568,13 +571,53 @@ export async function restoreProduct(productId: number): Promise<ActionResult> {
       return { success: false, error: "Product not found" };
     }
 
-    if (!product.is_archived) {
+    if (!product.deletedAt && !product.is_archived) {
       return { success: false, error: "Product is not archived" };
     }
 
+    // Strip archive suffix to get original values
+    const originalBarcode = stripArchiveSuffix(product.barcode);
+    const originalName = stripArchiveSuffix(product.product_name);
+
+    // Check if original barcode is now taken by another product
+    if (originalBarcode) {
+      const existingBarcode = await prisma.product.findUnique({
+        where: { barcode: originalBarcode },
+      });
+      
+      if (existingBarcode && existingBarcode.product_id !== productId) {
+        return {
+          success: false,
+          error: `Cannot restore: Barcode "${originalBarcode}" is now assigned to "${existingBarcode.product_name}". Please rename the conflicting product first.`,
+        };
+      }
+    }
+
+    // Check if original name is now taken
+    const existingName = await prisma.product.findFirst({
+      where: {
+        product_name: { equals: originalName!, mode: "insensitive" },
+        product_id: { not: productId },
+      },
+    });
+
+    if (existingName) {
+      return {
+        success: false,
+        error: `Cannot restore: Product name "${originalName}" is now in use by another product. Please rename the conflicting product first.`,
+      };
+    }
+
+    // Restore the product
     await prisma.product.update({
       where: { product_id: productId },
-      data: { is_archived: false },
+      data: {
+        deletedAt: null,
+        status: "ACTIVE",
+        is_archived: false,
+        barcode: originalBarcode,
+        product_name: originalName!,
+      },
     });
 
     revalidatePath("/admin/inventory");
@@ -583,10 +626,16 @@ export async function restoreProduct(productId: number): Promise<ActionResult> {
     await logActivity({
       username: "Admin", // TODO: Get from session
       action: "RESTORE",
+      module: "CATALOG",
       entity: "Product",
       entityId: productId,
-      entityName: product.product_name,
-      details: `Restored archived product "${product.product_name}" back to active inventory.`,
+      entityName: originalName!,
+      details: `Restored product "${originalName}" from archive.`,
+      metadata: {
+        restored_at: new Date().toISOString(),
+        restored_barcode: originalBarcode,
+        restored_name: originalName,
+      },
     });
     
     return { success: true };

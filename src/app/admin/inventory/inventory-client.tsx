@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Package, Archive, CheckCircle2 } from "lucide-react";
 import { ProductsTable } from "./products-table";
 import { ProductDialog } from "./product-dialog";
-import { DeleteProductDialog } from "./delete-product-dialog";
+import { ArchiveProductDialog, RestoreProductDialog, type ArchivedProduct } from "./delete-product-dialog";
+import { ArchivedProductsTable } from "./archived-products-table";
 import { CSVImportDialog } from "./csv-import-dialog";
 import { RestockDialog } from "./restock-dialog";
 import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { StockHistoryView } from "./stock-history-view";
 import { BarcodeModal } from "@/components/inventory/barcode-modal";
 import { printBarcodesInPopup } from "@/lib/print-utils";
-import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
+import { cn } from "@/lib/utils";
 
 export interface ProductData {
   product_id: number;
@@ -32,17 +34,21 @@ export interface ProductData {
 
 interface InventoryClientProps {
   initialProducts: ProductData[];
+  initialArchivedProducts: ArchivedProduct[];
 }
 
-export function InventoryClient({ initialProducts }: InventoryClientProps) {
+export function InventoryClient({ initialProducts, initialArchivedProducts }: InventoryClientProps) {
   const router = useRouter();
   const [products, setProducts] = useState<ProductData[]>(initialProducts);
+  const [archivedProducts, setArchivedProducts] = useState<ArchivedProduct[]>(initialArchivedProducts);
+  const [activeTab, setActiveTab] = useState("active");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeProducts, setBarcodeProducts] = useState<ProductData[]>([]);
   const [editingProduct, setEditingProduct] = useState<ProductData | null>(null);
-  const [deletingProduct, setDeletingProduct] = useState<ProductData | null>(null);
+  const [archivingProduct, setArchivingProduct] = useState<ProductData | null>(null);
+  const [restoringProduct, setRestoringProduct] = useState<ArchivedProduct | null>(null);
   
   // Stock management dialogs
   const [restockingProduct, setRestockingProduct] = useState<ProductData | null>(null);
@@ -52,7 +58,8 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
   // Sync products state when initialProducts changes (after router.refresh())
   useEffect(() => {
     setProducts(initialProducts);
-  }, [initialProducts]);
+    setArchivedProducts(initialArchivedProducts);
+  }, [initialProducts, initialArchivedProducts]);
 
   const handleProductCreated = (newProduct: ProductData) => {
     setProducts((prev) => [...prev, newProduct].sort((a, b) => 
@@ -68,12 +75,20 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
     );
   };
 
-  const handleProductDeleted = (productId: number) => {
+  const handleProductArchived = (productId: number) => {
+    // Remove from active products, refresh to get updated archived list
     setProducts((prev) => prev.filter((p) => p.product_id !== productId));
+    router.refresh();
   };
 
-  const handleBulkDeleted = (productIds: number[]) => {
+  const handleProductRestored = () => {
+    // Refresh to get updated lists
+    router.refresh();
+  };
+
+  const handleBulkArchived = (productIds: number[]) => {
     setProducts((prev) => prev.filter((p) => !productIds.includes(p.product_id)));
+    router.refresh();
   };
 
   const handleImportSuccess = () => {
@@ -106,93 +121,120 @@ export function InventoryClient({ initialProducts }: InventoryClientProps) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      
-
+      {/* View Toggle + Content */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Products Table */}
-        <ProductsTable
-          onImportClick={() => setIsImportDialogOpen(true)}
-          onAddClick={() => setIsAddDialogOpen(true)}
-          products={products}
-          onEdit={setEditingProduct}
-          onDelete={setDeletingProduct}
-          onBulkDelete={handleBulkDeleted}
-          onRestock={setRestockingProduct}
-          onAdjust={setAdjustingProduct}
-          onViewHistory={setHistoryProduct}
-          onPrintBarcodes={(selectedProducts) => {
-            setBarcodeProducts(selectedProducts);
-            setIsBarcodeModalOpen(true);
-          }}
-        />
+        {/* Active Products View */}
+        {activeTab === "active" && (
+          <ProductsTable
+            onImportClick={() => setIsImportDialogOpen(true)}
+            onAddClick={() => setIsAddDialogOpen(true)}
+            products={products}
+            onEdit={setEditingProduct}
+            onDelete={setArchivingProduct}
+            onBulkDelete={handleBulkArchived}
+            onRestock={setRestockingProduct}
+            onAdjust={setAdjustingProduct}
+            onViewHistory={setHistoryProduct}
+            onPrintBarcodes={(selectedProducts) => {
+              setBarcodeProducts(selectedProducts);
+              setIsBarcodeModalOpen(true);
+            }}
+            // Pass view toggle props
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            activeCount={products.length}
+            archivedCount={archivedProducts.length}
+          />
+        )}
 
-        {/* Add Product Dialog */}
-        <ProductDialog
-          open={isAddDialogOpen}
-          onOpenChange={setIsAddDialogOpen}
-          onSuccess={handleProductCreated}
-        />
-
-        {/* Edit Product Dialog */}
-        <ProductDialog
-          open={!!editingProduct}
-          onOpenChange={(open) => !open && setEditingProduct(null)}
-          product={editingProduct}
-          onSuccess={handleProductUpdated}
-        />
-
-        {/* Delete Confirmation Dialog */}
-        <DeleteProductDialog
-          open={!!deletingProduct}
-          onOpenChange={(open) => !open && setDeletingProduct(null)}
-          product={deletingProduct}
-          onSuccess={() => deletingProduct && handleProductDeleted(deletingProduct.product_id)}
-        />
-
-        {/* CSV Import Dialog */}
-        <CSVImportDialog
-          open={isImportDialogOpen}
-          onOpenChange={setIsImportDialogOpen}
-          onSuccess={handleImportSuccess}
-        />
-
-        {/* Stock Management Dialogs */}
-        <RestockDialog
-          open={!!restockingProduct}
-          onOpenChange={(open) => !open && setRestockingProduct(null)}
-          product={restockingProduct}
-          onSuccess={(newStock) => {
-            if (restockingProduct) {
-              handleStockUpdated(restockingProduct.product_id, newStock);
-            }
-          }}
-        />
-
-        <AdjustStockDialog
-          open={!!adjustingProduct}
-          onOpenChange={(open) => !open && setAdjustingProduct(null)}
-          product={adjustingProduct}
-          onSuccess={(newStock) => {
-            if (adjustingProduct) {
-              handleStockUpdated(adjustingProduct.product_id, newStock);
-            }
-          }}
-        />
-
-        <StockHistoryView
-          open={!!historyProduct}
-          onOpenChange={(open) => !open && setHistoryProduct(null)}
-          product={historyProduct}
-        />
-
-        {/* Barcode Print Modal - Preview for user */}
-        <BarcodeModal
-          open={isBarcodeModalOpen}
-          onClose={() => setIsBarcodeModalOpen(false)}
-          products={barcodeProducts}
-          onPrint={handlePrint}
-        />
+        {/* Archived Products View */}
+        {activeTab === "archived" && (
+          <ArchivedProductsTable
+            products={archivedProducts}
+            onRestore={setRestoringProduct}
+            // Pass view toggle props
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            activeCount={products.length}
+            archivedCount={archivedProducts.length}
+          />
+        )}
       </div>
+
+      {/* Add Product Dialog */}
+      <ProductDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onSuccess={handleProductCreated}
+      />
+
+      {/* Edit Product Dialog */}
+      <ProductDialog
+        open={!!editingProduct}
+        onOpenChange={(open) => !open && setEditingProduct(null)}
+        product={editingProduct}
+        onSuccess={handleProductUpdated}
+      />
+
+      {/* Archive Confirmation Dialog */}
+      <ArchiveProductDialog
+        open={!!archivingProduct}
+        onOpenChange={(open) => !open && setArchivingProduct(null)}
+        product={archivingProduct}
+        onSuccess={() => archivingProduct && handleProductArchived(archivingProduct.product_id)}
+      />
+
+      {/* Restore Confirmation Dialog */}
+      <RestoreProductDialog
+        open={!!restoringProduct}
+        onOpenChange={(open) => !open && setRestoringProduct(null)}
+        product={restoringProduct}
+        onSuccess={handleProductRestored}
+      />
+
+      {/* CSV Import Dialog */}
+      <CSVImportDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onSuccess={handleImportSuccess}
+      />
+
+      {/* Stock Management Dialogs */}
+      <RestockDialog
+        open={!!restockingProduct}
+        onOpenChange={(open) => !open && setRestockingProduct(null)}
+        product={restockingProduct}
+        onSuccess={(newStock) => {
+          if (restockingProduct) {
+            handleStockUpdated(restockingProduct.product_id, newStock);
+          }
+        }}
+      />
+
+      <AdjustStockDialog
+        open={!!adjustingProduct}
+        onOpenChange={(open) => !open && setAdjustingProduct(null)}
+        product={adjustingProduct}
+        onSuccess={(newStock) => {
+          if (adjustingProduct) {
+            handleStockUpdated(adjustingProduct.product_id, newStock);
+          }
+        }}
+      />
+
+      <StockHistoryView
+        open={!!historyProduct}
+        onOpenChange={(open) => !open && setHistoryProduct(null)}
+        product={historyProduct}
+      />
+
+      {/* Barcode Print Modal - Preview for user */}
+      <BarcodeModal
+        open={isBarcodeModalOpen}
+        onClose={() => setIsBarcodeModalOpen(false)}
+        products={barcodeProducts}
+        onPrint={handlePrint}
+      />
     </div>
   );
 }

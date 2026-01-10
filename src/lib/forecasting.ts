@@ -672,17 +672,174 @@ export async function getBatchForecasts(
 
 /**
  * Get forecasts for all active products
+ * 
+ * ⚡ OPTIMIZED: Uses bulk data fetching to avoid N+1 queries.
+ * Pre-fetches all products, inventory, and sales data in parallel,
+ * then calculates forecasts in-memory.
  */
 export async function getAllProductForecasts(
   options?: Omit<ForecastInput, "productId">
 ): Promise<ForecastResult[]> {
-  const products = await prisma.product.findMany({
-    where: { is_archived: false },
-    select: { product_id: true },
-  });
+  const lookbackDays = options?.lookbackDays ?? 30;
+  const forecastDate = options?.forecastDate ?? new Date();
   
-  const productIds = products.map(p => p.product_id);
-  return getBatchForecasts(productIds, options);
+  // Calculate date range
+  const endDate = new Date(forecastDate);
+  endDate.setDate(endDate.getDate() - 1);
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - lookbackDays);
+  
+  // ⚡ Fetch ALL data in parallel (bulk queries)
+  const [products, allAggregates, activeEvents] = await Promise.all([
+    // 1. Get all active products with inventory
+    prisma.product.findMany({
+      where: { is_archived: false },
+      include: { inventory: true },
+    }),
+    
+    // 2. Get all daily aggregates for all products at once
+    prisma.dailySalesAggregate.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate },
+      },
+      orderBy: { date: "desc" },
+    }),
+    
+    // 3. Get all active events
+    prisma.eventLog.findMany({
+      where: {
+        start_date: { lte: forecastDate },
+        end_date: { gte: startDate },
+        is_active: true,
+      },
+      include: { products: true },
+    }),
+  ]);
+  
+  // Group aggregates by product_id for O(1) lookup
+  const aggregatesByProduct = new Map<number, typeof allAggregates>();
+  for (const agg of allAggregates) {
+    const existing = aggregatesByProduct.get(agg.product_id) ?? [];
+    existing.push(agg);
+    aggregatesByProduct.set(agg.product_id, existing);
+  }
+  
+  // Calculate forecasts in parallel (CPU-bound, no more DB calls)
+  const forecasts = await Promise.all(
+    products.map(async (product) => {
+      try {
+        const salesHistory = aggregatesByProduct.get(product.product_id) ?? [];
+        
+        // Separate clean (organic) days from event days
+        const cleanDays = salesHistory.filter(d => !d.is_event_day);
+        
+        // Calculate velocities using calendar days (not data points)
+        const actualCalendarDays = Math.min(lookbackDays, 30);
+        const totalSales = salesHistory.reduce((a, b) => a + b.quantity_sold, 0);
+        const cleanSales = cleanDays.reduce((a, b) => a + b.quantity_sold, 0);
+        
+        const avgDailyVelocity = actualCalendarDays > 0 ? totalSales / actualCalendarDays : 0;
+        const cleanAvgDailyVelocity = actualCalendarDays > 0 ? cleanSales / actualCalendarDays : avgDailyVelocity;
+        
+        // Calculate WMA baseline
+        const cleanQuantities = cleanDays.map(d => d.quantity_sold);
+        const wmaBaseline = cleanQuantities.length > 0
+          ? calculateWMA(cleanQuantities, WMA_WEIGHTS)
+          : avgDailyVelocity;
+        
+        // Seasonality
+        const seasonalityFactor = getSeasonalityMultiplier(forecastDate, product.category);
+        
+        // Check for active events
+        let eventAdjustment = 1.0;
+        const productEvents: ActiveEvent[] = [];
+        
+        for (const event of activeEvents) {
+          const affectsProduct = 
+            event.products.some(p => p.product_id === product.product_id) ||
+            event.affected_category === product.category;
+            
+          if (affectsProduct && event.start_date <= forecastDate && event.end_date >= forecastDate) {
+            productEvents.push({
+              id: event.id,
+              name: event.name,
+              source: event.source,
+              multiplier: new Decimal(event.multiplier.toString()).toNumber(),
+              startDate: event.start_date,
+              endDate: event.end_date,
+            });
+          }
+        }
+        
+        if (productEvents.length > 0) {
+          eventAdjustment = Math.max(...productEvents.map(e => e.multiplier));
+        }
+        
+        // Calculate forecast
+        const forecastedDailyUnits = Math.round(wmaBaseline * seasonalityFactor * eventAdjustment);
+        const forecastedWeeklyUnits = forecastedDailyUnits * 7;
+        
+        // Stock calculations
+        const currentStock = product.inventory?.current_stock ?? 0;
+        const reorderLevel = product.inventory?.reorder_level ?? 10;
+        
+        const targetDays = 7;
+        const targetStock = (forecastedDailyUnits * targetDays) + reorderLevel;
+        let suggestedReorderQty = Math.max(0, targetStock - currentStock);
+        
+        if (forecastedDailyUnits < 0.1) {
+          suggestedReorderQty = 0;
+        } else {
+          const maxByVelocity = Math.ceil(forecastedDailyUnits * 14);
+          suggestedReorderQty = Math.min(suggestedReorderQty, maxByVelocity);
+        }
+        
+        // Stock status
+        const { status: stockStatus, daysOfStock } = calculateStockStatus(
+          currentStock,
+          reorderLevel,
+          forecastedDailyUnits
+        );
+        
+        // Velocity trend
+        const velocityTrend = calculateTrend(cleanQuantities);
+        
+        // Confidence
+        const confidence = determineConfidence(salesHistory.length, cleanDays.length, false);
+        
+        const costPrice = product.cost_price ? new Decimal(product.cost_price.toString()).toNumber() : 0;
+        
+        return {
+          productId: product.product_id,
+          productName: product.product_name,
+          barcode: product.barcode,
+          category: product.category,
+          costPrice,
+          forecastedDailyUnits,
+          forecastedWeeklyUnits,
+          suggestedReorderQty,
+          confidence,
+          dataPoints: salesHistory.length,
+          cleanDataPoints: cleanDays.length,
+          seasonalityFactor: Math.round(seasonalityFactor * 100) / 100,
+          eventAdjustment: Math.round(eventAdjustment * 100) / 100,
+          activeEvents: productEvents,
+          avgDailyVelocity: Math.round(avgDailyVelocity * 10) / 10,
+          cleanAvgDailyVelocity: Math.round(cleanAvgDailyVelocity * 10) / 10,
+          velocityTrend,
+          currentStock,
+          reorderLevel,
+          daysOfStock,
+          stockStatus,
+        } satisfies ForecastResult;
+      } catch (error) {
+        console.error(`Forecast failed for product ${product.product_id}:`, error);
+        return null;
+      }
+    })
+  );
+  
+  return forecasts.filter((f): f is ForecastResult => f !== null);
 }
 
 /**
@@ -934,13 +1091,16 @@ export interface DynamicROPResult {
  * Calculate Dynamic Reorder Point
  * 
  * Formula (when auto_reorder = true AND 30+ days of sales history):
- *   ROP = (Daily_Velocity_30_Day_Avg * lead_time_days) + (Daily_Velocity * 3)
- *   - Covers the lead time until restock arrives
- *   - Plus a 3-day safety buffer for demand variability
+ *   SafetyBuffer = Math.ceil(Daily_Velocity * 3)  // 3 days safety buffer
+ *   ROP = (Daily_Velocity * lead_time_days) + SafetyBuffer
+ * 
+ * CRITICAL FIX: Dead Stock Protection
+ *   - If Daily_Velocity === 0, then ROP = 0 (don't suggest reordering dead items)
+ *   - This prevents dead inventory from getting high reorder recommendations
  * 
  * Falls back to manual reorder_level when:
  *   - auto_reorder is FALSE
- *   - Less than 30 days of sales history
+ *   - Less than 30 days of sales history (but still uses velocity-based approach if available)
  */
 export async function getDynamicReorderPoint(productId: number): Promise<DynamicROPResult> {
   const product = await prisma.product.findUnique({
@@ -951,14 +1111,14 @@ export async function getDynamicReorderPoint(productId: number): Promise<Dynamic
   if (!product || !product.inventory) {
     return {
       productId,
-      reorderPoint: 10, // Default fallback
+      reorderPoint: 0, // Default to 0 for unknown products
       isAutoCalculated: false,
       formula: "Default (no inventory data)",
       breakdown: {
         dailyVelocity: 0,
         leadTimeDays: 7,
         safetyBuffer: 0,
-        manualLevel: 10,
+        manualLevel: 0,
       },
     };
   }
@@ -1009,13 +1169,19 @@ export async function getDynamicReorderPoint(productId: number): Promise<Dynamic
   );
   const salesHistoryLength = uniqueDates.size;
 
-  // If less than 30 days of history, fall back to manual
-  if (salesHistoryLength < 30) {
+  // Calculate 30-day total quantity sold
+  const totalQuantitySold = salesHistory.reduce((sum, item) => sum + item.quantity, 0);
+  const dailyVelocity = totalQuantitySold / 30;
+
+  // CRITICAL: Dead Stock Protection
+  // If velocity is 0 (no sales in 30 days), ROP should be 0
+  // This prevents suggesting reorders for items that don't sell
+  if (dailyVelocity === 0) {
     return {
       productId,
-      reorderPoint: manualLevel,
-      isAutoCalculated: false,
-      formula: `Manual (only ${salesHistoryLength} days of history, need 30+)`,
+      reorderPoint: 0, // Dead stock = no reorder
+      isAutoCalculated: true,
+      formula: "Zero (no sales in 30 days - dead stock)",
       breakdown: {
         dailyVelocity: 0,
         leadTimeDays,
@@ -1025,25 +1191,41 @@ export async function getDynamicReorderPoint(productId: number): Promise<Dynamic
     };
   }
 
-  // Calculate 30-day average daily velocity
-  const totalQuantitySold = salesHistory.reduce((sum, item) => sum + item.quantity, 0);
-  const dailyVelocity = totalQuantitySold / 30;
+  // If less than 30 days of history but has some sales, still calculate with velocity
+  if (salesHistoryLength < 30) {
+    // Use available velocity data, just note the limited history
+    const safetyBuffer = Math.ceil(dailyVelocity * 3);
+    const dynamicROP = Math.ceil((dailyVelocity * leadTimeDays) + safetyBuffer);
+    
+    return {
+      productId,
+      reorderPoint: dynamicROP,
+      isAutoCalculated: true,
+      formula: `Limited history (${salesHistoryLength} days): (${dailyVelocity.toFixed(1)}/day × ${leadTimeDays}d) + ${safetyBuffer} safety`,
+      breakdown: {
+        dailyVelocity: Math.round(dailyVelocity * 10) / 10,
+        leadTimeDays,
+        safetyBuffer,
+        manualLevel,
+      },
+    };
+  }
 
   // Dynamic ROP Formula:
-  // ROP = (Daily_Velocity * lead_time_days) + (Daily_Velocity * 3)
-  // The 3-day safety buffer accounts for demand variability
-  const safetyBuffer = dailyVelocity * 3;
+  // SafetyBuffer = ceil(Daily_Velocity * 3)  -- 3 days of safety stock
+  // ROP = (Daily_Velocity * lead_time_days) + SafetyBuffer
+  const safetyBuffer = Math.ceil(dailyVelocity * 3);
   const dynamicROP = Math.ceil((dailyVelocity * leadTimeDays) + safetyBuffer);
 
   return {
     productId,
     reorderPoint: dynamicROP,
     isAutoCalculated: true,
-    formula: `(${dailyVelocity.toFixed(1)}/day × ${leadTimeDays} days) + (${dailyVelocity.toFixed(1)} × 3 safety)`,
+    formula: `(${dailyVelocity.toFixed(1)}/day × ${leadTimeDays}d) + ${safetyBuffer} safety`,
     breakdown: {
       dailyVelocity: Math.round(dailyVelocity * 10) / 10,
       leadTimeDays,
-      safetyBuffer: Math.round(safetyBuffer),
+      safetyBuffer,
       manualLevel,
     },
   };

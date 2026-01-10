@@ -193,12 +193,13 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
                       ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
                       : ""
                   }
-                  badge={showBadge && open ? (
-                    <span className="ml-auto px-2 py-0.5 text-xs font-bold rounded-full bg-destructive text-white animate-pulse">
-                      {pendingOrdersCount}
-                    </span>
-                  ) : undefined}
                 />
+                {/* Badge shown inline when sidebar is open */}
+                {showBadge && open && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs font-bold rounded-full bg-destructive text-white animate-pulse">
+                    {pendingOrdersCount}
+                  </span>
+                )}
               </div>
             );
           })}

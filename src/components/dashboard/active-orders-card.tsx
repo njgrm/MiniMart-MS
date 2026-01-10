@@ -26,6 +26,28 @@ import type { GroupedOrders, IncomingOrder } from "@/actions/orders";
 // Auto-refresh interval (5 seconds)
 const AUTO_REFRESH_INTERVAL = 5000;
 
+/**
+ * Format minutes into human-readable duration
+ * Examples: 45m, 1h 30m, 2d 4h
+ */
+function formatDuration(minutes: number): string {
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  
+  if (hours < 24) {
+    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  }
+  
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  
+  return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+}
+
 interface ActiveOrdersCardProps {
   incomingOrders: GroupedOrders;
   className?: string;
@@ -106,16 +128,16 @@ function OrderRow({ order, onView }: {
           {statusInfo.label}
         </Badge>
         
-        {/* Timer with detailed Tooltip */}
+        {/* Timer with detailed Tooltip - Now uses formatted duration */}
         <TooltipProvider delayDuration={100}>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className={cn(
-                "flex items-center gap-1 text-xs shrink-0 min-w-[40px] justify-end",
+                "flex items-center gap-1 text-xs shrink-0 min-w-[50px] justify-end",
                 isLate ? "text-destructive font-bold" : "text-muted-foreground"
               )}>
                 {isLate && <IconAlertTriangle className="size-3" />}
-                <span>{minutesElapsed}m</span>
+                <span>{formatDuration(minutesElapsed)}</span>
               </div>
             </TooltipTrigger>
             <TooltipContent side="left" className="text-xs">

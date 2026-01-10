@@ -69,12 +69,17 @@ export interface CartItem {
  * If wholesale_price is 0, use retail_price instead.
  * This allows products to have different distribution vs in-store pricing.
  * 
+ * SOFT DELETE: Only returns active products (deletedAt: null)
+ * 
  * Sorting priority:
  * 1. Products with wholesale_price > 0 come first (true wholesale items)
  * 2. Then sorted alphabetically by product name
  */
 export async function getVendorProducts(): Promise<VendorProduct[]> {
   const products = await prisma.product.findMany({
+    where: {
+      deletedAt: null, // Only active products
+    },
     include: {
       inventory: {
         select: {

@@ -93,6 +93,8 @@ export interface DeductionResult {
  * Deduct stock from batches using FEFO (First Expired, First Out) algorithm
  * This ensures oldest-expiring stock is sold first to minimize spoilage
  * 
+ * NOTE: Only considers ACTIVE batches (deletedAt: null)
+ * 
  * @param tx - Prisma transaction client
  * @param productId - Product to deduct from
  * @param quantityNeeded - Total quantity to deduct
@@ -107,12 +109,14 @@ export async function deductStockFEFO(
     return { success: false, totalDeducted: 0, batchesUsed: [], error: "Quantity must be positive" };
   }
 
-  // Fetch all batches with stock, ordered by expiry date (nulls last = no expiry)
+  // Fetch all ACTIVE batches with stock, ordered by expiry date (nulls last = no expiry)
   // FEFO: Earliest expiry first to minimize spoilage
+  // SOFT DELETE: Filter out archived batches (deletedAt: null)
   const batches = await tx.inventoryBatch.findMany({
     where: {
       product_id: productId,
       quantity: { gt: 0 },
+      deletedAt: null, // Only active batches
     },
     orderBy: [
       { expiry_date: { sort: 'asc', nulls: 'last' } },
@@ -203,11 +207,18 @@ export async function syncProductFromBatches(
 }
 
 /**
- * Get all batches for a product (for Batch Audit UI)
+ * Get all ACTIVE batches for a product (for Batch Audit UI)
+ * Excludes archived batches by default
+ * 
+ * @param productId - Product ID
+ * @param includeArchived - If true, includes archived batches
  */
-export async function getProductBatches(productId: number): Promise<BatchInfo[]> {
+export async function getProductBatches(productId: number, includeArchived: boolean = false): Promise<BatchInfo[]> {
   const batches = await prisma.inventoryBatch.findMany({
-    where: { product_id: productId },
+    where: { 
+      product_id: productId,
+      ...(includeArchived ? {} : { deletedAt: null }),
+    },
     orderBy: [
       { expiry_date: { sort: 'asc', nulls: 'last' } },
       { received_date: 'asc' },
@@ -608,7 +619,7 @@ export async function restockProduct(input: RestockInput): Promise<ActionResult>
         },
       });
 
-      return { movement, newStock: totalStock, productName: inventory.product.product_name };
+      return { movement, newStock: totalStock, previousStock, productName: inventory.product.product_name };
     });
 
     revalidatePath("/admin/inventory");
@@ -620,9 +631,14 @@ export async function restockProduct(input: RestockInput): Promise<ActionResult>
       productId,
       result.productName,
       quantity,
+      result.previousStock,
       result.newStock,
       supplierName,
-      newExpiryDate
+      newExpiryDate,
+      reference,
+      reason,
+      receiptImageUrl,
+      costPrice
     );
 
     return {

@@ -33,6 +33,9 @@ export interface AuditLogEntry {
   metadata: unknown;
   ip_address: string | null;
   created_at: Date;
+  // UI Helpers
+  product_image?: string | null;
+  product_category?: string | null;
 }
 
 export interface AuditLogFilters {
@@ -76,6 +79,7 @@ export async function createAuditLog(input: CreateAuditLogInput): Promise<void> 
 
 /**
  * Get audit logs with filtering and pagination
+ * ⚡ OPTIMIZED: Runs count and data queries in parallel
  */
 export async function getAuditLogs(
   filters?: AuditLogFilters,
@@ -120,38 +124,105 @@ export async function getAuditLogs(
       ];
     }
 
-    // Get total count
-    const total = await prisma.auditLog.count({ where });
+    // ⚡ Run count and data fetch in PARALLEL
+    const [total, logs] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
 
-    // Get paginated results
-    const logs = await prisma.auditLog.findMany({
-      where,
-      orderBy: { created_at: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+    // ENRICHMENT: Fetch Product details for logs related to products
+    const productIds = new Set<number>();
+    logs.forEach(log => {
+      // Check if entity_type is Product or Inventory (which maps to product_id)
+      if ((log.entity_type === "Product" || log.entity_type === "Inventory") && log.entity_id) {
+        productIds.add(log.entity_id);
+      }
     });
 
+    let productMap = new Map<number, { image_url: string | null; category: string }>();
+    
+    if (productIds.size > 0) {
+      const products = await prisma.product.findMany({
+        where: { product_id: { in: Array.from(productIds) } },
+        select: { product_id: true, image_url: true, category: true }
+      });
+      productMap = new Map(products.map(p => [p.product_id, { image_url: p.image_url, category: p.category }]));
+    }
+
     return {
-      logs: logs.map((log) => ({
-        id: log.id,
-        user_id: log.user_id,
-        username: log.username,
-        action: log.action,
-        module: log.module,
-        entity_type: log.entity_type,
-        entity_id: log.entity_id,
-        entity_name: log.entity_name,
-        details: log.details,
-        metadata: log.metadata,
-        ip_address: log.ip_address,
-        created_at: log.created_at,
-      })),
+      logs: logs.map((log) => {
+        const prodDetails = ((log.entity_type === "Product" || log.entity_type === "Inventory") && log.entity_id) 
+          ? productMap.get(log.entity_id) 
+          : undefined;
+
+        return {
+          id: log.id,
+          user_id: log.user_id,
+          username: log.username,
+          action: log.action,
+          module: log.module,
+          entity_type: log.entity_type,
+          entity_id: log.entity_id,
+          entity_name: log.entity_name,
+          details: log.details,
+          metadata: log.metadata,
+          ip_address: log.ip_address,
+          created_at: log.created_at,
+          product_image: prodDetails?.image_url,
+          product_category: prodDetails?.category,
+        };
+      }),
       total,
       pages: Math.ceil(total / pageSize),
     };
   } catch (error) {
     console.error("[AuditLog] Failed to fetch audit logs:", error);
     return { logs: [], total: 0, pages: 0 };
+  }
+}
+
+/**
+ * Get all filter options in a single query batch
+ * ⚡ OPTIMIZED: Fetches all filter dropdowns in one parallel call
+ */
+export async function getAuditLogFilterOptions(): Promise<{
+  entityTypes: string[];
+  usernames: string[];
+  modules: string[];
+}> {
+  try {
+    const [entityTypes, usernames, modules] = await Promise.all([
+      prisma.auditLog.findMany({
+        select: { entity_type: true },
+        distinct: ["entity_type"],
+        orderBy: { entity_type: "asc" },
+      }),
+      prisma.auditLog.findMany({
+        select: { username: true },
+        distinct: ["username"],
+        orderBy: { username: "asc" },
+      }),
+      prisma.auditLog.findMany({
+        select: { module: true },
+        distinct: ["module"],
+        where: { module: { not: null } },
+        orderBy: { module: "asc" },
+      }),
+    ]);
+    
+    return {
+      entityTypes: entityTypes.map((t) => t.entity_type),
+      usernames: usernames.map((u) => u.username),
+      modules: modules.map((m) => m.module).filter((m): m is string => m !== null),
+    };
+  } catch (error) {
+    console.error("[AuditLog] Failed to fetch filter options:", error);
+    return { entityTypes: [], usernames: [], modules: [] };
   }
 }
 

@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
-import { ScanBarcode, Search, Camera, ShoppingBag, Truck, Monitor, Smartphone } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ScanBarcode, Search, Camera, ShoppingBag, Truck, Monitor, Smartphone, ShoppingCart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { 
   usePosStore, 
@@ -18,10 +25,9 @@ import { usePosLayoutStore, type PosViewMode } from "@/stores/use-pos-layout-sto
 import { ProductGrid } from "@/components/pos/product-grid";
 import { CartPanel } from "@/components/pos/cart-panel";
 import { CameraScanner } from "@/components/pos/camera-scanner";
-import { ResizeHandle } from "@/components/pos/resize-handle";
 import { LegacyPOSLayout } from "@/components/pos/legacy-pos-layout";
 import { usePosAudio } from "@/hooks/use-pos-audio";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 type Props = {
@@ -64,18 +70,27 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [lastScan, setLastScan] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  
-  // Container ref for resize calculations
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const { setProducts, addByBarcode, catalogMode, setCatalogMode, cart } = usePosStore();
-  const { cartWidth, isResizing, viewMode, setViewMode, initializeViewMode, setLastAddedItemId } = usePosLayoutStore();
+  const { viewMode, setViewMode, initializeViewMode, setLastAddedItemId } = usePosLayoutStore();
   const { playSuccessBeep, playErrorBuzz } = usePosAudio();
 
   // Initialize view mode based on device type (only once)
   useEffect(() => {
     initializeViewMode();
   }, [initializeViewMode]);
+
+  // Detect mobile/tablet viewport for cart FAB
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // lg breakpoint
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     setProducts(products);
@@ -160,24 +175,29 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
 
   // Get cart total
   const cartTotal = getCartTotal(cart);
+  const itemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
   // If in Legacy Mode, render the LegacyPOSLayout (mode toggle is now inside the layout)
   if (viewMode === "legacy") {
     return <LegacyPOSLayout products={products} gcashQrUrl={gcashQrUrl} />;
   }
 
-  // Touch Mode (original layout) continues below...
+  // Touch Mode - Fixed Split Layout (no draggable panels)
+  // Desktop/Tablet Landscape: grid-cols-[1fr_350px] for fixed split
+  // Mobile/Portrait: Full-width grid with FAB cart
 
   return (
     <div 
-      ref={containerRef}
       className={cn(
-        "w-full h-[calc(100vh-3.5rem)] flex overflow-hidden text-foreground",
-        isResizing && "select-none"
+        "w-full h-[calc(100vh-3.5rem)] text-foreground",
+        // Fixed split grid for tablet/desktop, single column for mobile
+        isMobile 
+          ? "flex flex-col overflow-hidden" 
+          : "grid grid-cols-[1fr_350px] overflow-hidden"
       )}
     >
-      {/* Left panel - Product area (uses flex-1 and min-w-0 for proper shrinking) */} 
-      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+      {/* Left panel - Product area */} 
+      <div className="flex flex-col h-full overflow-hidden min-w-0">
         {/* Top bar - Search & Categories */}
         <div className="flex-shrink-0 border-b w-full border-border px-4 bg-card">
           {/* Search row */}
@@ -288,10 +308,10 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
                   <button
                     key={cat}
                     className={cn(
-                      "whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition shrink-0",
+                      "whitespace-nowrap rounded-full border px-4 py-2 text-xs font-medium transition shrink-0 min-h-[44px] touch-manipulation",
                       cat === category
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted active:bg-muted"
                     )}
                     onClick={() => setCategory(cat)}
                   >
@@ -305,31 +325,69 @@ export default function PosClient({ products, gcashQrUrl }: Props) {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-y-auto px-4 ml-0 py-1 bg-card/70">
-          <div className="flex items-center justify-between mb-3">
-            
-          </div>
+        <div className="flex-1 overflow-y-auto px-3 py-2 bg-card/70">
           <ProductGrid products={filteredProducts} />
         </div>
       </div>
 
-      {/* Resize Handle */}
-      <ResizeHandle containerRef={containerRef} />
+      {/* Right panel - Cart (Fixed 350px width, always visible on tablet/desktop) */}
+      {!isMobile && (
+        <div className="h-full flex flex-col bg-card border-l border-border overflow-hidden">
+          <CartPanel gcashQrUrl={gcashQrUrl} />
+        </div>
+      )}
 
-      {/* Right panel - Cart (resizable) */}
-      <motion.div 
-        className="h-full flex flex-col bg-card flex-shrink-0 overflow-hidden"
-        style={{ width: cartWidth }}
-        animate={{ width: cartWidth }}
-        transition={{ 
-          type: isResizing ? "tween" : "spring",
-          duration: isResizing ? 0 : 0.2,
-          stiffness: 300,
-          damping: 30
-        }}
-      >
-        <CartPanel gcashQrUrl={gcashQrUrl} />
-      </motion.div>
+      {/* Mobile/Tablet: Floating Action Button (FAB) for Cart */}
+      {isMobile && (
+        <Sheet open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
+          <SheetTrigger asChild>
+            <Button
+              className={cn(
+                "fixed bottom-6 right-6 h-14 rounded-full shadow-lg z-50 gap-2 px-5",
+                "bg-primary hover:bg-primary/90 text-primary-foreground",
+                "min-h-[56px] touch-manipulation",
+                "transition-all duration-200 active:scale-95"
+              )}
+              size="lg"
+            >
+              <ShoppingCart className="h-5 w-5" />
+              <span className="font-semibold">
+                {itemCount > 0 ? (
+                  <>
+                    Cart ({itemCount}) • ₱{cartTotal.toFixed(2)}
+                  </>
+                ) : (
+                  "Cart"
+                )}
+              </span>
+              {itemCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-secondary text-secondary-foreground text-xs flex items-center justify-center font-bold">
+                  {itemCount > 9 ? "9+" : itemCount}
+                </span>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent 
+            side="right" 
+            className="w-full sm:w-[400px] p-0 flex flex-col"
+          >
+            <SheetHeader className="px-4 py-3 border-b">
+              <SheetTitle className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Shopping Cart
+                {itemCount > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {itemCount} items
+                  </Badge>
+                )}
+              </SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden">
+              <CartPanel gcashQrUrl={gcashQrUrl} />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       <CameraScanner
         open={cameraOpen}

@@ -3,6 +3,7 @@
 import { useState, useMemo, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import { format, differenceInDays, isAfter, isBefore, startOfDay } from "date-fns";
 import {
   useReactTable,
@@ -20,7 +21,7 @@ import {
   ArrowUpDown,
   MoreHorizontal,
   Pencil,
-  Trash2,
+  Archive,
   Search,
   Package,
   X,
@@ -84,7 +85,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DataTablePagination } from "@/components/data-table-pagination";
-import { bulkDeleteProducts } from "@/actions/product";
+import { bulkArchiveProducts } from "@/actions/archive";
+import { cn } from "@/lib/utils";
 import type { ProductData } from "./inventory-client";
 
 interface ProductsTableProps {
@@ -98,6 +100,11 @@ interface ProductsTableProps {
   onRestock?: (product: ProductData) => void;
   onAdjust?: (product: ProductData) => void;
   onViewHistory?: (product: ProductData) => void;
+  // View toggle props
+  activeTab?: "active" | "archived";
+  onTabChange?: (tab: "active" | "archived") => void;
+  activeCount?: number;
+  archivedCount?: number;
 }
 
 export function ProductsTable({ 
@@ -111,6 +118,10 @@ export function ProductsTable({
   onRestock,
   onAdjust,
   onViewHistory,
+  activeTab = "active",
+  onTabChange,
+  activeCount = 0,
+  archivedCount = 0,
 }: ProductsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -289,30 +300,60 @@ export function ProductsTable({
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
           >
-            Stock
+            Stock / ROP
             <ArrowUpDown className="ml-2 h-3 w-3" />
           </Button>
         ),
         cell: ({ row }) => {
           const stock = row.getValue("current_stock") as number;
-          const reorderLevel = row.original.reorder_level;
+          const staticReorderLevel = row.original.reorder_level;
           const autoReorder = row.original.auto_reorder;
+          const leadTimeDays = row.original.lead_time_days;
+          
+          // Client-side Dynamic ROP Estimation
+          // When auto_reorder is enabled:
+          //   Estimated ROP = (staticReorderLevel / 7) * leadTimeDays * 1.3 (30% safety buffer)
+          // This is an approximation - the full calculation requires sales velocity data
+          const estimatedDynamicROP = autoReorder
+            ? Math.ceil((staticReorderLevel / 7) * leadTimeDays * 1.3)
+            : staticReorderLevel;
+          
+          // Determine which ROP to use for display
+          const displayROP = autoReorder ? estimatedDynamicROP : staticReorderLevel;
+          const isDynamic = autoReorder && estimatedDynamicROP !== staticReorderLevel;
+          
           return (
             <div className="flex flex-col gap-0.5">
-              <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= reorderLevel ? "text-secondary" : ""}`}>
+              <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= displayROP ? "text-secondary" : ""}`}>
                 {stock.toLocaleString()}
               </div>
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span>Low at: {reorderLevel.toLocaleString()}</span>
-                {autoReorder && (
+                {isDynamic ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-amber-500 cursor-help">⚡Auto</span>
+                      <span className="flex items-center gap-1 cursor-help">
+                        <span className="text-amber-500 font-medium">⚡{displayROP}</span>
+                        <span className="text-muted-foreground/60 line-through">{staticReorderLevel}</span>
+                      </span>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs max-w-[180px]">
-                      <p>Dynamic Reorder Point based on sales velocity</p>
+                    <TooltipContent side="bottom" className="text-xs max-w-[220px] p-3">
+                      <p className="font-medium text-foreground mb-1">Dynamic Reorder Point</p>
+                      <div className="space-y-1 text-muted-foreground">
+                        <p>Based on {leadTimeDays}-day lead time</p>
+                        <p>Original: {staticReorderLevel} → Calculated: {displayROP}</p>
+                        <p className="text-amber-600 dark:text-amber-400 font-medium mt-1">
+                          ROP adjusts automatically based on sales velocity
+                        </p>
+                      </div>
                     </TooltipContent>
                   </Tooltip>
+                ) : (
+                  <span>ROP: {displayROP.toLocaleString()}</span>
+                )}
+                {autoReorder && (
+                  <Badge variant="outline" className="h-4 px-1 text-[9px] border-amber-500/50 text-amber-600 dark:text-amber-400">
+                    Auto
+                  </Badge>
                 )}
               </div>
             </div>
@@ -382,7 +423,7 @@ export function ProductsTable({
           return getPriority(stockA, statusA) - getPriority(stockB, statusB);
         },
       },
-      // Expiry Date Column
+      // Expiry Date Column - 45-Day Supplier Return Policy
       {
         accessorKey: "nearest_expiry_date",
         header: ({ column }) => (
@@ -407,25 +448,61 @@ export function ProductsTable({
           const today = startOfDay(new Date());
           const daysUntilExpiry = differenceInDays(expiry, today);
 
-          // Already expired
-          if (isBefore(expiry, today)) {
+          // SUPPLIER RETURN POLICY: 45-Day Return Window
+          // <= 0 days: EXPIRED (Red) - Cannot return
+          // 1-45 days: RETURN TO SUPPLIER (Orange) - Within return window
+          // > 45 days: GOOD (Normal display) - No action needed
+
+          // Already expired - Cannot return to supplier
+          if (daysUntilExpiry <= 0) {
             return (
-              <Badge variant="destructive" className="text-xs font-mono">
-                Expired
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="destructive" className="text-xs font-mono cursor-help">
+                    Expired
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[200px]">
+                  <p className="text-xs font-medium text-destructive">Cannot return to supplier</p>
+                  <p className="text-xs text-muted-foreground">Expired on {format(expiry, "MMM d, yyyy")}</p>
+                </TooltipContent>
+              </Tooltip>
             );
           }
 
-          // Expiring within 7 days
-          if (daysUntilExpiry <= 7) {
+          // Within 45-day return window - ACTION REQUIRED
+          if (daysUntilExpiry <= 45) {
+            const urgencyLevel = daysUntilExpiry <= 7 ? "critical" : daysUntilExpiry <= 14 ? "urgent" : "warning";
             return (
-              <Badge variant="secondary" className="text-xs font-mono">
-                {daysUntilExpiry === 0 ? "Today" : daysUntilExpiry === 1 ? "Tomorrow" : `${daysUntilExpiry}d`}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="secondary" 
+                    className={`text-xs font-mono cursor-help gap-1 ${
+                      urgencyLevel === "critical" 
+                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
+                        : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                    }`}
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {daysUntilExpiry <= 7 
+                      ? "Pull Out" 
+                      : "Return"
+                    } ({daysUntilExpiry}d)
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[220px]">
+                  <p className="text-xs font-medium text-secondary">Return to Supplier</p>
+                  <p className="text-xs text-muted-foreground">Expires {format(expiry, "MMM d, yyyy")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {daysUntilExpiry} days left in 45-day return window
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             );
           }
 
-          // Normal expiry date (more than 7 days)
+          // > 45 days - Good status, show normal date
           return (
             <span className="text-xs text-muted-foreground font-mono">
               {format(expiry, "MMM d, yyyy")}
@@ -512,8 +589,8 @@ export function ProductsTable({
                 <Badge 
                   className={`cursor-help gap-1.5 ${
                     isCritical 
-                      ? "bg-red-100 text-red-700 hover:bg-red-200" 
-                      : "bg-[#AC0F16]/10 text-[#AC0F16] hover:bg-[#AC0F16]/20"
+                      ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50" 
+                      : "bg-[#AC0F16]/10 text-[#AC0F16] hover:bg-[#AC0F16]/20 dark:bg-[#AC0F16]/20 dark:text-red-400"
                   }`}
                 >
                   <Wand2 className="h-3 w-3" />
@@ -581,8 +658,8 @@ export function ProductsTable({
                   onClick={() => onDelete(product)}
                   variant="destructive"
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -641,16 +718,17 @@ export function ProductsTable({
   const selectedCount = Object.keys(rowSelection).length;
   const selectedProductIds = Object.keys(rowSelection).map((id) => parseInt(id));
 
-  const handleBulkDelete = () => {
+  const handleBulkArchive = () => {
     startTransition(async () => {
-      const result = await bulkDeleteProducts(selectedProductIds);
+      const result = await bulkArchiveProducts(selectedProductIds);
       
       if (result.success) {
-        toast.success(`Successfully deleted ${selectedProductIds.length} product${selectedProductIds.length !== 1 ? "s" : ""}`);
+        const data = result.data as { archivedCount: number };
+        toast.success(`Successfully archived ${data.archivedCount} product${data.archivedCount !== 1 ? "s" : ""}`);
         setRowSelection({});
         onBulkDelete?.(selectedProductIds);
       } else {
-        toast.error(result.error || "Failed to delete products");
+        toast.error(result.error || "Failed to archive products");
       }
       
       setShowDeleteDialog(false);
@@ -697,18 +775,81 @@ export function ProductsTable({
               className="h-8 gap-1.5"
               onClick={() => setShowDeleteDialog(true)}
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete ({selectedCount})
+              <Archive className="h-3.5 w-3.5" />
+              Archive ({selectedCount})
             </Button>
           </div>
         </div>
       )}
 
-      {/* Table Toolbar - Single Row */}
-      <div className="flex flex-wrap items-center gap-2 shrink-0">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 bg-light-foreground dark:bg-dark-foreground -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      {/* Table Toolbar - Single Row, No Wrap */}
+      <div className="flex items-center gap-2 shrink-0 overflow-x-auto">
+        {/* View Toggle - Active/Archived with Primary Colors */}
+        {onTabChange && (
+          <div className="relative inline-flex items-center rounded-lg border border-primary/30 bg-primary/5 dark:bg-primary/10 p-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onTabChange("active")}
+              className={cn(
+                "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors z-10",
+                activeTab === "active"
+                  ? "text-white"
+                  : "text-primary/70 hover:text-primary dark:text-primary/60 dark:hover:text-primary"
+              )}
+            >
+              <Package className="h-3.5 w-3.5 relative z-10" />
+              <span className="relative z-10">Active</span>
+              <span className={cn(
+                "relative z-10 ml-0.5 px-1.5 py-0.5 text-xs font-semibold rounded-full transition-colors",
+                activeTab === "active" 
+                  ? "bg-white/20 text-white" 
+                  : "bg-primary/15 text-primary dark:bg-primary/25"
+              )}>
+                {activeCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange("archived")}
+              className={cn(
+                "relative inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors z-10",
+                activeTab === "archived"
+                  ? "text-white"
+                  : "text-primary/70 hover:text-primary dark:text-primary/60 dark:hover:text-primary"
+              )}
+            >
+              <Archive className="h-3.5 w-3.5 relative z-10" />
+              <span className="relative z-10">Archived</span>
+              {archivedCount > 0 && (
+                <span className={cn(
+                  "relative z-10 ml-0.5 px-1.5 py-0.5 text-xs font-semibold rounded-full transition-colors",
+                  activeTab === "archived" 
+                    ? "bg-white/20 text-white" 
+                    : "bg-primary/15 text-primary dark:bg-primary/25"
+                )}>
+                  {archivedCount}
+                </span>
+              )}
+            </button>
+            {/* Animated Background Pill */}
+            <motion.div
+              className="absolute top-0.5 bottom-0.5 bg-primary rounded-md shadow-sm"
+              initial={false}
+              animate={{
+                left: activeTab === "active" ? "2px" : "50%",
+                right: activeTab === "archived" ? "2px" : "50%",
+              }}
+              transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+            />
+          </div>
+        )}
+
+        {/* Separator after toggle */}
+        {onTabChange && <div className="h-8 w-px bg-border shrink-0" />}
+
+        {/* Search - Flexible width */}
+        <div className="relative flex-1 min-w-[140px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by name or barcode..."
             value={globalFilter}
@@ -724,7 +865,7 @@ export function ProductsTable({
             table.getColumn("category")?.setFilterValue(value === "all" ? "" : value)
           }
         >
-          <SelectTrigger className="h-10 w-[140px]">
+          <SelectTrigger className="h-10 w-[120px] lg:w-[140px] shrink-0">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
@@ -751,7 +892,7 @@ export function ProductsTable({
             table.getColumn("status")?.setFilterValue(value === "all" ? "" : value)
           }
         >
-          <SelectTrigger className="h-10 w-[140px]">
+          <SelectTrigger className="h-10 w-[110px] lg:w-[140px] shrink-0">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -762,86 +903,149 @@ export function ProductsTable({
           </SelectContent>
         </Select>
 
-        {/* Reset Filters */}
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10"
-            onClick={resetFilters}
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Reset filters</span>
-          </Button>
-        )}
+        {/* Reset Filters - Animated */}
+        <AnimatePresence mode="wait">
+          {hasActiveFilters && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10"
+                onClick={resetFilters}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Reset filters</span>
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Separator */}
-        <div className="h-8 w-px bg-border mx-1" />
+        <div className="h-8 w-px bg-border mx-1 shrink-0" />
 
-        {/* KPI Cards - Solid in light mode, transparent in dark mode */}
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none">
-          <Boxes className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">{totalProducts}</span>
-          <span className="text-xs text-muted-foreground">Products</span>
-        </div>
+        {/* KPI Cards - Auto-shrink on smaller screens */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 h-10 px-2 lg:px-3 rounded-md bg-card dark:bg-muted/30 border border-border dark:border-border/40 shadow-warm-sm dark:shadow-none shrink-0">
+                <Boxes className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">{totalProducts}</span>
+                <span className="text-xs text-muted-foreground hidden lg:inline">Products</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="lg:hidden">
+              <p>{totalProducts} Products</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         {/* Out of Stock Button - Highest Priority */}
         {outOfStockItems > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              table.getColumn("status")?.setFilterValue("OUT_OF_STOCK");
-            }}
-            className="flex items-center gap-2 h-10 px-3 rounded-md bg-destructive dark:bg-destructive/20 border border-destructive dark:border-destructive/40 text-white dark:text-destructive shadow-warm-sm dark:shadow-none hover:bg-destructive/90 dark:hover:bg-destructive/30 transition-colors cursor-pointer"
-          >
-            <Package className="h-4 w-4" />
-            <span className="text-sm font-medium">{outOfStockItems}</span>
-            <span className="text-xs opacity-90 dark:opacity-80">Out</span>
-          </button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => {
+                    table.getColumn("status")?.setFilterValue("OUT_OF_STOCK");
+                  }}
+                  className="flex items-center gap-1.5 h-10 px-2 lg:px-3 rounded-md bg-destructive dark:bg-destructive/20 border border-destructive dark:border-destructive/40 text-white dark:text-destructive shadow-warm-sm dark:shadow-none hover:bg-destructive/90 dark:hover:bg-destructive/30 transition-colors cursor-pointer shrink-0"
+                >
+                  <Package className="h-4 w-4" />
+                  <span className="text-sm font-medium">{outOfStockItems}</span>
+                  <span className="text-xs opacity-90 dark:opacity-80 hidden lg:inline">Out</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="lg:hidden">
+                <p>{outOfStockItems} Out of Stock</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Low Stock Button */}
-        <button
-          type="button"
-          onClick={() => {
-            table.getColumn("status")?.setFilterValue("LOW_STOCK");
-          }}
-          className="flex items-center gap-2 h-10 px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none hover:bg-secondary/90 dark:hover:bg-secondary/30 transition-colors cursor-pointer"
-        >
-          <AlertTriangle className="h-4 w-4" />
-          <span className="text-sm font-medium">{lowStockItems}</span>
-          <span className="text-xs opacity-90 dark:opacity-80">Low</span>
-        </button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => {
+                  table.getColumn("status")?.setFilterValue("LOW_STOCK");
+                }}
+                className="flex items-center gap-1.5 h-10 px-2 lg:px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none hover:bg-secondary/90 dark:hover:bg-secondary/30 transition-colors cursor-pointer shrink-0"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm font-medium">{lowStockItems}</span>
+                <span className="text-xs opacity-90 dark:opacity-80 hidden lg:inline">Low</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="lg:hidden">
+              <p>{lowStockItems} Low Stock</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
-        <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none">
-          <Coins className="h-4 w-4" />
-          <span className="text-sm font-medium">₱{inventoryValue.toLocaleString()}</span>
-        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 h-10 px-2 lg:px-3 rounded-md bg-accent dark:bg-accent/20 border border-accent dark:border-accent/40 text-white dark:text-accent shadow-warm-sm dark:shadow-none shrink-0">
+                <Coins className="h-4 w-4" />
+                <span className="text-sm font-medium">₱{inventoryValue.toLocaleString()}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Inventory Value: ₱{inventoryValue.toLocaleString()}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         {/* Separator */}
-        <div className="h-8 w-px bg-border mx-1" />
+        <div className="h-8 w-px bg-border mx-1 shrink-0" />
 
-        {/* Import CSV */}
+        {/* Import CSV - Icon only on smaller screens */}
         {onImportClick && (
-          <Button
-            variant="outline"
-            onClick={onImportClick}
-            className="h-10 gap-1.5"
-          >
-            <Upload className="h-4 w-4" />
-            Import CSV
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  onClick={onImportClick}
+                  className="h-10 gap-1.5 shrink-0"
+                >
+                  <Upload className="h-4 w-4" />
+                 
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="xl:hidden">
+                <p>Import CSV</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Add Product - Using primary (crimson) color */}
         {onAddClick && (
-          <Button
-            onClick={onAddClick}
-            className="h-10 gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            Add Product
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onAddClick}
+                  className="h-10 gap-1.5 shrink-0"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span className="hidden lg:inline">Add Product</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="lg:hidden">
+                <p>Add Product</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </div>
 
@@ -893,35 +1097,38 @@ export function ProductsTable({
         <DataTablePagination table={table} />
       </div>
 
-      {/* Bulk Delete Confirmation Dialog */}
+      {/* Bulk Archive Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Are you absolutely sure?
+              Archive {selectedCount} product{selectedCount !== 1 ? "s" : ""}?
             </AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. It will permanently delete{" "}
+            This will archive{" "}
             <span className="font-semibold text-foreground">
               {selectedCount} product{selectedCount !== 1 ? "s" : ""}
-            </span>{" "}
-            from the database.
+            </span>
+            . They will be hidden from inventory and POS, but can be restored anytime from the Archived tab.
           </AlertDialogDescription>
         </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleBulkDelete}
+              onClick={handleBulkArchive}
               disabled={isPending}
               className="bg-warning text-warning-foreground hover:bg-warning/90 focus-visible:ring-warning/40"
             >
               {isPending ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-                  Deleting...
+                  Archiving...
                 </>
               ) : (
-                `Delete ${selectedCount} Product${selectedCount !== 1 ? "s" : ""}`
+                <>
+                  <Archive className="mr-2 h-4 w-4" />
+                  Archive {selectedCount} Product{selectedCount !== 1 ? "s" : ""}
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

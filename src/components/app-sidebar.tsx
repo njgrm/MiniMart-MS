@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import Image from "next/image";
@@ -85,6 +85,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const { state } = useSidebar();
@@ -92,6 +93,20 @@ export function AppSidebar({ pendingOrdersCount = 0 }: AppSidebarProps) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // ⚡ Prefetch ALL admin routes on mount for instant navigation
+  useEffect(() => {
+    // Give the initial page time to fully render before prefetching
+    const timer = setTimeout(() => {
+      navItems.forEach((item) => {
+        if (item.href !== pathname) {
+          router.prefetch(item.href);
+        }
+      });
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [router, pathname]);
 
   const isDark = mounted && resolvedTheme === "dark";
   const isCollapsed = state === "collapsed";

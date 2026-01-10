@@ -8,22 +8,23 @@ interface ProductGridProps {
 }
 
 /**
- * Responsive product grid that uses CSS Grid auto-fill.
- * Cards automatically flow into fewer columns as the container shrinks.
+ * Responsive product grid optimized for touch devices.
+ * Uses compact card sizing for better density on tablets.
  * 
- * - Min card width: 140px (ensures cards don't get too small)
- * - Max card width: 1fr (cards expand to fill available space evenly)
- * - Gap: 12px (0.75rem / gap-3)
+ * Breakpoints:
+ * - Mobile (<640px): 3 columns - Compact cards
+ * - Tablet Portrait (md 768px): 4 columns
+ * - Tablet Landscape (lg 1024px): 5 columns  
+ * - Desktop (xl 1280px+): 5 columns
+ * 
+ * Fixed split layout means grid fills available space naturally.
  */
 export function ProductGrid({ products }: ProductGridProps) {
   const { addProduct, catalogMode } = usePosStore();
 
   return (
     <div 
-      className="grid gap-3"
-      style={{
-        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-      }}
+      className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2"
     >
       {products.map((product) => {
         const displayPrice = getGridDisplayPrice(product, catalogMode);
