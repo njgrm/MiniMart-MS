@@ -79,9 +79,21 @@ export async function getCashRegisterData(): Promise<CashRegisterData> {
 
 /**
  * Get inventory health data: low stock items, out of stock, expiring soon
+ * Uses velocity-based logic matching analytics dashboard:
+ * - CRITICAL: ≤2 days of supply
+ * - LOW: 2-7 days of supply
+ * - HEALTHY: >7 days of supply
  */
 export async function getInventoryHealthData(): Promise<InventoryHealthData> {
   try {
+    // Calculate the date 45 days from now for expiry window
+    const expiryWindowDate = new Date();
+    expiryWindowDate.setDate(expiryWindowDate.getDate() + 45);
+
+    const today = new Date();
+    const last7Days = new Date(today);
+    last7Days.setDate(last7Days.getDate() - 7);
+
     // Get all products with inventory
     const products = await prisma.product.findMany({
       where: { is_archived: false },
@@ -91,52 +103,131 @@ export async function getInventoryHealthData(): Promise<InventoryHealthData> {
       orderBy: { product_name: "asc" },
     });
 
+    // Get recent sales to calculate velocity (last 7 days)
+    const recentSales = await prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          created_at: { gte: last7Days },
+          status: "COMPLETED",
+        },
+      },
+      select: {
+        product_id: true,
+        quantity: true,
+      },
+    });
+
+    // Build velocity map: product_id -> total units sold in last 7 days
+    const velocityMap = new Map<number, number>();
+    for (const sale of recentSales) {
+      const current = velocityMap.get(sale.product_id) ?? 0;
+      velocityMap.set(sale.product_id, current + sale.quantity);
+    }
+
     const lowStockItems: LowStockItem[] = [];
+    const expiringItems: ExpiringItem[] = [];
     let outOfStockCount = 0;
     let lowStockCount = 0;
+    let criticalStockCount = 0;
+    let expiringCount = 0;
 
     for (const product of products) {
       const currentStock = product.inventory?.current_stock ?? 0;
-      const reorderLevel = product.inventory?.reorder_level ?? 10;
+      const weekSales = velocityMap.get(product.product_id) ?? 0;
+      const dailyVelocity = weekSales / 7;
+      
+      // Calculate days of stock (coverage)
+      const daysOfStock = dailyVelocity > 0.1 
+        ? Math.floor(currentStock / dailyVelocity) 
+        : (currentStock > 0 ? 999 : 0); // 999 = dead stock (no velocity)
+
+      // Velocity-based stock status (matches analytics logic)
+      // OUT_OF_STOCK: currentStock === 0
+      // CRITICAL: ≤2 days of supply
+      // LOW: 2-7 days of supply
+      // HEALTHY: >7 days of supply
+      // DEAD_STOCK: velocity < 0.1 (not selling)
 
       if (currentStock === 0) {
-        outOfStockCount++;
-        // Add to low stock list (out of stock is also "low stock")
-        lowStockItems.push({
-          product_id: product.product_id,
-          product_name: product.product_name,
-          current_stock: currentStock,
-          reorder_level: reorderLevel,
-          category: product.category,
-          image_url: product.image_url,
-        });
-      } else if (currentStock <= reorderLevel) {
-        lowStockCount++;
-        lowStockItems.push({
-          product_id: product.product_id,
-          product_name: product.product_name,
-          current_stock: currentStock,
-          reorder_level: reorderLevel,
-          category: product.category,
-          image_url: product.image_url,
-        });
+        // Only count as out of stock if item has velocity (was selling)
+        if (dailyVelocity >= 0.1) {
+          outOfStockCount++;
+          lowStockItems.push({
+            product_id: product.product_id,
+            product_name: product.product_name,
+            current_stock: currentStock,
+            reorder_level: product.inventory?.reorder_level ?? 10,
+            category: product.category,
+            image_url: product.image_url,
+            daily_velocity: dailyVelocity,
+            days_of_stock: 0,
+            stock_status: "OUT_OF_STOCK",
+          });
+        }
+      } else if (dailyVelocity >= 0.1) {
+        // Only check velocity-based alerts for items that are actually selling
+        if (daysOfStock <= 2) {
+          criticalStockCount++;
+          lowStockItems.push({
+            product_id: product.product_id,
+            product_name: product.product_name,
+            current_stock: currentStock,
+            reorder_level: product.inventory?.reorder_level ?? 10,
+            category: product.category,
+            image_url: product.image_url,
+            daily_velocity: dailyVelocity,
+            days_of_stock: daysOfStock,
+            stock_status: "CRITICAL",
+          });
+        } else if (daysOfStock <= 7) {
+          lowStockCount++;
+          lowStockItems.push({
+            product_id: product.product_id,
+            product_name: product.product_name,
+            current_stock: currentStock,
+            reorder_level: product.inventory?.reorder_level ?? 10,
+            category: product.category,
+            image_url: product.image_url,
+            daily_velocity: dailyVelocity,
+            days_of_stock: daysOfStock,
+            stock_status: "LOW",
+          });
+        }
+      }
+
+      // Expiring items logic - check nearest_expiry_date within 45 days
+      if (product.nearest_expiry_date && currentStock > 0) {
+        const expiryDate = new Date(product.nearest_expiry_date);
+        if (expiryDate <= expiryWindowDate) {
+          const daysUntilExpiry = Math.ceil(
+            (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          
+          expiringItems.push({
+            product_id: product.product_id,
+            product_name: product.product_name,
+            current_stock: currentStock,
+            expiry_date: expiryDate,
+            days_until_expiry: daysUntilExpiry,
+            category: product.category,
+            image_url: product.image_url,
+          });
+          expiringCount++;
+        }
       }
     }
 
-    // Sort low stock items by stock level (lowest first)
-    lowStockItems.sort((a, b) => a.current_stock - b.current_stock);
+    // Sort low stock items by days of stock (most urgent first - lowest days)
+    lowStockItems.sort((a, b) => (a.days_of_stock ?? 0) - (b.days_of_stock ?? 0));
 
-    // For expiring items - we don't have expiry dates in the schema
-    // This would need a schema update. For now, return empty array
-    // In a real implementation, you'd add an expiry_date field to Product
-    const expiringItems: ExpiringItem[] = [];
-    const expiringCount = 0;
+    // Sort expiring items by expiry date (soonest first)
+    expiringItems.sort((a, b) => a.days_until_expiry - b.days_until_expiry);
 
     return {
-      lowStockItems: lowStockItems.slice(0, 10), // Top 10 most urgent
-      expiringItems,
+      lowStockItems: lowStockItems.slice(0, 50), // Top 50 most urgent (matches analytics filter count)
+      expiringItems: expiringItems.slice(0, 50), // Top 50 expiring soonest
       outOfStockCount,
-      lowStockCount,
+      lowStockCount: lowStockCount + criticalStockCount, // Combined for badge
       expiringCount,
     };
   } catch (error) {

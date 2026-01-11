@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { DateRange } from "react-day-picker";
 import { subDays, subMonths, startOfMonth, endOfMonth, format, addDays, startOfYear, endOfYear, subYears, startOfDay, endOfDay } from "date-fns";
 import {
@@ -109,12 +110,14 @@ import {
   getSmartInsights,
   getCategorySalesShare,
   getDemandForecastData,
+  getBatchedAnalyticsData,
   type TopMoverResult,
   type HourlyTrafficResult,
   type ForecastDataPoint,
   type CategorySalesResult,
   type DemandForecastDataPoint,
   type ProductDemandInfo,
+  type BatchedAnalyticsData,
 } from "./actions";
 import type { AnalyticsData, ForecastTableItem, DashboardChartDataPoint } from "./actions";
 import Link from "next/link";
@@ -160,6 +163,11 @@ type ChartGranularity = "daily" | "weekly" | "monthly";
 
 export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardProps) {
   const [isPending, startTransition] = useTransition();
+  const searchParams = useSearchParams();
+  
+  // Get addToPO param from URL (from inventory health card)
+  const addToPOParam = searchParams.get("addToPO");
+  const initialAddToPO = addToPOParam ? parseInt(addToPOParam, 10) : null;
   
   // Date range state
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -231,40 +239,21 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
     return ((profit / revenue) * 100).toFixed(1);
   };
 
-  // Fetch chart data when date range changes
+  // Fetch chart data when date range changes - OPTIMIZED: Single batched call instead of 7 separate calls
   useEffect(() => {
     if (dateRange?.from && dateRange?.to) {
       startTransition(async () => {
-        // Fetch current period data
-        const currentData = await getDashboardChartDataByDateRange(dateRange.from!, dateRange.to!);
-        setChartData(currentData);
+        // Single batched fetch for all analytics data (7 queries run in parallel on server)
+        const batchedData = await getBatchedAnalyticsData(dateRange.from!, dateRange.to!);
         
-        // Fetch previous period data for comparison
-        const periodLength = dateRange.to!.getTime() - dateRange.from!.getTime();
-        const prevEnd = new Date(dateRange.from!.getTime() - 1);
-        const prevStart = new Date(prevEnd.getTime() - periodLength);
-        const prevData = await getDashboardChartDataByDateRange(prevStart, prevEnd);
-        setPreviousChartData(prevData);
-        
-        // Fetch top movers
-        const movers = await getTopMovers(dateRange.from!, dateRange.to!);
-        setTopMovers(movers);
-        
-        // Fetch category sales share
-        const categories = await getCategorySalesShare(dateRange.from!, dateRange.to!);
-        setCategoryData(categories);
-        
-        // Fetch peak traffic
-        const traffic = await getPeakTrafficData(dateRange.from!, dateRange.to!);
-        setPeakTraffic(traffic);
-        
-        // Fetch forecast data
-        const forecast = await getForecastData();
-        setForecastData(forecast);
-        
-        // Fetch smart insights
-        const smartInsights = await getSmartInsights();
-        setInsights(smartInsights);
+        // Update all state at once
+        setChartData(batchedData.chartData);
+        setPreviousChartData(batchedData.previousChartData);
+        setTopMovers(batchedData.topMovers);
+        setCategoryData(batchedData.categoryData);
+        setPeakTraffic(batchedData.peakTraffic);
+        setForecastData(batchedData.forecastData);
+        setInsights(batchedData.insights);
       });
     }
   }, [dateRange]);
@@ -852,19 +841,24 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                               {index + 1}
                             </div>
                             
-                            {/* Product Image */}
+                            {/* Product Image - Using SafeImage for offline resilience */}
                             <div className="size-10 rounded-lg overflow-hidden bg-muted shrink-0">
                               {product.image_url ? (
                                 <img 
                                   src={product.image_url} 
                                   alt={product.product_name}
                                   className="size-full object-cover"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    // Hide broken image and show fallback
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                  }}
                                 />
-                              ) : (
-                                <div className="size-full flex items-center justify-center">
-                                  <Package className="size-5 text-muted-foreground/50" />
-                                </div>
-                              )}
+                              ) : null}
+                              <div className={`size-full flex items-center justify-center ${product.image_url ? 'hidden' : ''}`}>
+                                <Package className="size-5 text-muted-foreground/50" />
+                              </div>
                             </div>
                             
                             {/* Product Info */}
@@ -1167,6 +1161,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   onExportPO={(selectedItems) => {
                     console.log("Exporting PO for items:", selectedItems.map(i => i.productName));
                   }}
+                  initialAddToPO={initialAddToPO}
                 />
               </CardContent>
             </Card>
@@ -1921,12 +1916,14 @@ function ForecastingTable({
   forecasts,
   selectedProductId,
   onProductSelect,
-  onExportPO
+  onExportPO,
+  initialAddToPO
 }: { 
   forecasts: ForecastTableItem[];
   selectedProductId?: number | null;
   onProductSelect?: (productId: number | null, productName: string | null) => void;
   onExportPO?: (selectedItems: ForecastTableItem[]) => void;
+  initialAddToPO?: number | null;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -1934,8 +1931,33 @@ function ForecastingTable({
   const [sortField, setSortField] = useState<SortField>("urgency");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   
-  // Selection state for PO workflow
-  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  // Ref for auto-scrolling to this section
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  
+  // Selection state for PO workflow - initialize with URL param if provided
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(() => {
+    if (initialAddToPO) {
+      return new Set([initialAddToPO]);
+    }
+    return new Set();
+  });
+  
+  // Update selection and scroll into view if initialAddToPO is provided (from dashboard Add to PO)
+  useEffect(() => {
+    if (initialAddToPO) {
+      // Add to selection
+      if (!selectedItems.has(initialAddToPO)) {
+        setSelectedItems(new Set([initialAddToPO]));
+      }
+      // Scroll to this table section with smooth animation
+      setTimeout(() => {
+        tableContainerRef.current?.scrollIntoView({ 
+          behavior: "smooth", 
+          block: "center" 
+        });
+      }, 300); // Small delay to allow page to render
+    }
+  }, [initialAddToPO]);
 
   const hasActiveFilters = searchQuery || categoryFilter !== "all" || urgencyFilter !== "all";
 
@@ -2059,7 +2081,7 @@ function ForecastingTable({
   );
 
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={tableContainerRef} className="flex flex-col gap-2">
       {/* Toolbar - Compact */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
@@ -2069,7 +2091,7 @@ function ForecastingTable({
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-8 text-sm w-full"
+            className="pl-8 h-9.75 text-sm w-full"
           />
         </div>
 
@@ -2119,7 +2141,7 @@ function ForecastingTable({
           <Button
             variant="default"
             size="sm"
-            className="h-8 gap-1.5 bg-primary hover:bg-primary/90"
+            className="h-9.75 gap-1.5 bg-primary hover:bg-primary/90"
             onClick={() => {
               const selectedForecasts = filteredAndSortedForecasts.filter(
                 item => selectedItems.has(item.productId)
@@ -2331,28 +2353,19 @@ function ForecastingTable({
           </ScrollArea>
         </div>
         
-        {/* Total Order Value Footer - Dynamic based on selection with High Value Warning */}
-        {filteredAndSortedForecasts.length > 0 && (() => {
-          const totalValue = selectedItems.size > 0
-            ? filteredAndSortedForecasts
-                .filter(item => selectedItems.has(item.productId))
-                .reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0)
-            : filteredAndSortedForecasts.reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0);
+        {/* Total Order Value Footer - Only shows when items are selected */}
+        {filteredAndSortedForecasts.length > 0 && selectedItems.size > 0 && (() => {
+          const totalValue = filteredAndSortedForecasts
+            .filter(item => selectedItems.has(item.productId))
+            .reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0);
           const isHighValue = totalValue > 50000;
-          const itemCount = selectedItems.size > 0 ? selectedItems.size : filteredAndSortedForecasts.length;
-          
-          // Hide footer if no items selected and using selection mode
-          if (selectedItems.size === 0 && filteredAndSortedForecasts.some(i => selectedItems.has(i.productId))) {
-            return null;
-          }
+          const itemCount = selectedItems.size;
           
           return (
             <div className={`sticky bottom-0 border-t border-border px-4 py-3 flex items-center justify-between ${isHighValue ? "bg-amber-50 dark:bg-amber-950/20" : "bg-muted/50"}`}>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-muted-foreground">
-                  {selectedItems.size > 0 
-                    ? `Selected: ${itemCount} items`
-                    : "Total Recommended Order:"}
+                  Selected: {itemCount} items
                 </span>
                 {isHighValue && (
                   <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-100 dark:bg-amber-950/30 gap-1">
@@ -2561,18 +2574,36 @@ function VelocityWithTrend({ velocity, predicted }: { velocity: number; predicte
   const dailyAvg = velocity / 7;
   
   // Determine trend: if predicted > velocity, demand is rising; if less, falling
-  const isRising = predicted > velocity;
-  const isFalling = predicted < velocity;
+  // Only show trend if there's meaningful difference (>10%)
+  const percentDiff = velocity > 0 ? Math.abs((predicted - velocity) / velocity) * 100 : 0;
+  const isRising = predicted > velocity && percentDiff > 10;
+  const isFalling = predicted < velocity && percentDiff > 10;
+  const isStable = !isRising && !isFalling;
+  
+  // Generate tooltip text
+  const getTrendTooltip = () => {
+    if (velocity === 0) return "No recent sales";
+    if (isRising) return `Demand rising: Forecast ${((predicted - velocity) / velocity * 100).toFixed(0)}% above current`;
+    if (isFalling) return `Demand falling: Forecast ${((velocity - predicted) / velocity * 100).toFixed(0)}% below current`;
+    return "Demand stable: Forecast matches current velocity";
+  };
   
   return (
-    <div className="flex items-center justify-end gap-1">
-      <span className="tabular-nums text-sm">{dailyAvg.toFixed(1)}</span>
-      <span className="text-[9px] text-muted-foreground">/day</span>
-      {velocity > 0 && (
-        <span className={`text-[10px] ${isRising ? "text-green-600" : isFalling ? "text-orange-500" : "text-muted-foreground"}`}>
-          {isRising ? "↑" : isFalling ? "↓" : "→"}
-        </span>
-      )}
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center justify-end gap-1 cursor-help">
+          <span className="tabular-nums text-sm">{dailyAvg.toFixed(1)}</span>
+          <span className="text-[9px] text-muted-foreground">/day</span>
+          {velocity > 0 && (
+            <span className={`text-[10px] ${isRising ? "text-green-600" : isFalling ? "text-orange-500" : "text-muted-foreground"}`}>
+              {isRising ? "↑" : isFalling ? "↓" : "→"}
+            </span>
+          )}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground">
+        {getTrendTooltip()}
+      </TooltipContent>
+    </Tooltip>
   );
 }

@@ -18,7 +18,7 @@ export type ActionResult = {
 };
 
 /**
- * Get all products with inventory info
+ * Get all products with inventory info AND velocity-based stock status
  * By default, excludes archived products unless includeArchived is true
  * 
  * STOCK LOGIC:
@@ -26,25 +26,91 @@ export type ActionResult = {
  * - allocated_stock: Stock reserved by PENDING/PREPARING orders
  * - available_stock: current_stock - allocated_stock (what can actually be sold)
  * 
+ * VELOCITY-BASED STATUS (uses DailySalesAggregate - SAME SOURCE as Analytics Dashboard):
+ * - Uses 30-day lookback from DailySalesAggregate for velocity calculation
+ * - days_of_stock = current_stock / daily_velocity
+ * - OUT_OF_STOCK: stock === 0
+ * - CRITICAL: ≤2 days of supply
+ * - LOW: 2-7 days of supply  
+ * - HEALTHY: >7 days of supply
+ * - DEAD_STOCK: velocity < 0.1 (not selling)
+ * 
  * SOFT DELETE LOGIC:
  * - Uses deletedAt: null filter by default (new approach)
  * - is_archived kept for backward compatibility
  */
 export async function getProducts(includeArchived: boolean = false) {
-  const products = await prisma.product.findMany({
-    where: includeArchived ? {} : { deletedAt: null },
-    include: {
-      inventory: true,
-    },
-    orderBy: {
-      product_name: "asc",
-    },
-  });
+  // Use same date range as Analytics forecasting (30-day lookback)
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() - 1); // Yesterday (latest complete day)
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - 30); // 30 days back
+
+  // Fetch products and DailySalesAggregate in parallel (SAME SOURCE as Analytics!)
+  const [products, allAggregates] = await Promise.all([
+    prisma.product.findMany({
+      where: includeArchived ? {} : { deletedAt: null },
+      include: {
+        inventory: true,
+      },
+      orderBy: {
+        product_name: "asc",
+      },
+    }),
+    // Use DailySalesAggregate - same as Analytics forecasting
+    prisma.dailySalesAggregate.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate },
+      },
+    }),
+  ]);
+
+  // Group aggregates by product_id for O(1) lookup
+  const aggregatesByProduct = new Map<number, typeof allAggregates>();
+  for (const agg of allAggregates) {
+    const existing = aggregatesByProduct.get(agg.product_id) ?? [];
+    existing.push(agg);
+    aggregatesByProduct.set(agg.product_id, existing);
+  }
 
   return products.map((product) => {
     const currentStock = product.inventory?.current_stock ?? 0;
     const allocatedStock = product.inventory?.allocated_stock ?? 0;
     const availableStock = Math.max(0, currentStock - allocatedStock);
+    const reorderLevel = product.inventory?.reorder_level ?? 10;
+    
+    // Calculate velocity from DailySalesAggregate (MATCHES Analytics exactly)
+    const salesHistory = aggregatesByProduct.get(product.product_id) ?? [];
+    const totalSales = salesHistory.reduce((sum, day) => sum + day.quantity_sold, 0);
+    const actualDays = 30; // Use full 30-day period for average
+    const dailyVelocity = totalSales / actualDays;
+    
+    // Calculate days of stock (coverage)
+    // If no velocity (dead stock), use large number if stock exists, 0 if out of stock
+    const daysOfStock = dailyVelocity > 0.1 
+      ? currentStock / dailyVelocity 
+      : (currentStock > 0 ? 999 : 0);
+    
+    // Determine velocity-based status (EXACTLY matches Analytics calculateStockStatus)
+    let velocityStatus: "OUT_OF_STOCK" | "CRITICAL" | "LOW" | "HEALTHY" | "DEAD_STOCK";
+    if (currentStock === 0) {
+      velocityStatus = "OUT_OF_STOCK";
+    } else if (dailyVelocity < 0.1) {
+      velocityStatus = "DEAD_STOCK"; // Not selling
+    } else if (daysOfStock <= 2) {
+      velocityStatus = "CRITICAL";
+    } else if (daysOfStock <= 7) {
+      velocityStatus = "LOW";
+    } else {
+      velocityStatus = "HEALTHY";
+    }
+    
+    // Legacy status for backward compatibility
+    const legacyStatus = currentStock === 0 
+      ? "OUT_OF_STOCK" 
+      : currentStock <= reorderLevel 
+        ? "LOW_STOCK" 
+        : "IN_STOCK";
     
     return {
       product_id: product.product_id,
@@ -56,7 +122,7 @@ export async function getProducts(includeArchived: boolean = false) {
       current_stock: currentStock,
       allocated_stock: allocatedStock,
       available_stock: availableStock,
-      reorder_level: product.inventory?.reorder_level ?? 10,
+      reorder_level: reorderLevel,
       auto_reorder: product.inventory?.auto_reorder ?? true,
       lead_time_days: product.inventory?.lead_time_days ?? 7,
       barcode: product.barcode,
@@ -64,11 +130,12 @@ export async function getProducts(includeArchived: boolean = false) {
       is_archived: product.is_archived,
       deletedAt: product.deletedAt,
       nearest_expiry_date: product.nearest_expiry_date,
-      status: (
-        currentStock <= (product.inventory?.reorder_level ?? 10)
-          ? "LOW_STOCK"
-          : "IN_STOCK"
-      ) as "LOW_STOCK" | "IN_STOCK",
+      // Velocity-based fields (SAME as Analytics Dashboard)
+      daily_velocity: Math.round(dailyVelocity * 10) / 10, // Round to 1 decimal
+      days_of_stock: daysOfStock,
+      velocity_status: velocityStatus,
+      // Legacy status for backward compatibility
+      status: legacyStatus as "LOW_STOCK" | "IN_STOCK" | "OUT_OF_STOCK",
     };
   });
 }

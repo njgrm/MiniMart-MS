@@ -244,7 +244,7 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <IconFileText className="size-5 text-[#2EAFC5]" />
+              <IconFileText className="size-5 text-muted-foreground" />
               X-Read Report (Shift Check)
             </DialogTitle>
             <DialogDescription>
@@ -253,43 +253,49 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
           </DialogHeader>
           
           <div className="space-y-3 py-4">
-            {/* Report Content */}
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
-              <div className="text-center border-b border-dashed pb-2 mb-3">
-                <p className="font-bold">CHRISTIAN MINIMART</p>
+            {/* Report Content - Clean Monochrome Receipt Style */}
+            <div className="bg-[#F8F6F1] rounded-lg p-4 font-mono text-sm space-y-3 border">
+              {/* Header */}
+              <div className="text-center border-b border-dashed border-stone-300 pb-3 mb-3">
+                <p className="font-bold text-foreground">CHRISTIAN MINIMART</p>
                 <p className="text-xs text-muted-foreground">X-READ REPORT</p>
                 <p className="text-xs text-muted-foreground">{format(new Date(), "MMM d, yyyy h:mm a")}</p>
               </div>
               
-              <div className="flex justify-between">
-                <span>Opening Fund:</span>
-                <span>{formatCurrency(data.openingFund)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-600">
-                <span>Cash Sales:</span>
-                <span>+{formatCurrency(data.cashSales)}</span>
-              </div>
-              <div className="flex justify-between text-blue-600">
-                <span>GCash Sales:</span>
-                <span>{formatCurrency(data.gcashSales)}</span>
-              </div>
-              <div className="flex justify-between text-destructive">
-                <span>Expenses:</span>
-                <span>-{formatCurrency(data.expenses)}</span>
+              {/* Line Items */}
+              <div className="space-y-2 text-foreground">
+                <div className="flex justify-between">
+                  <span>Opening Fund:</span>
+                  <span className="font-medium">{formatCurrency(data.openingFund)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cash Sales:</span>
+                  <span className="font-medium">+{formatCurrency(data.cashSales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GCash Sales:</span>
+                  <span className="font-medium">{formatCurrency(data.gcashSales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Expenses:</span>
+                  <span className="font-medium">-{formatCurrency(data.expenses)}</span>
+                </div>
               </div>
               
-              <div className="border-t border-dashed pt-2 mt-2">
-                <div className="flex justify-between font-bold">
+              {/* Totals */}
+              <div className="border-t border-dashed border-stone-300 pt-3 mt-3 space-y-1">
+                <div className="flex justify-between font-bold text-foreground">
                   <span>Total Sales:</span>
                   <span>{formatCurrency(totalSales)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-[#AC0F16]">
+                <div className="flex justify-between font-bold text-foreground">
                   <span>Expected Drawer:</span>
                   <span>{formatCurrency(calculatedDrawer)}</span>
                 </div>
               </div>
               
-              <div className="text-center text-xs text-muted-foreground pt-2 border-t border-dashed">
+              {/* Footer */}
+              <div className="text-center text-xs text-muted-foreground pt-3 border-t border-dashed border-stone-300">
                 <p>Transactions: {data.transactionCount}</p>
                 {data.shiftStartTime && (
                   <p>Shift Start: {format(data.shiftStartTime, "h:mm a")}</p>
@@ -347,7 +353,7 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <IconReceipt className="size-5 text-[#AC0F16]" />
+              <IconReceipt className="size-5 text-muted-foreground" />
               Z-Read Report (End of Day)
             </DialogTitle>
             <DialogDescription>
@@ -356,49 +362,55 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
           </DialogHeader>
           
           <div className="space-y-3 py-4">
-            {/* Report Content */}
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm space-y-2">
-              <div className="text-center border-b border-dashed pb-2 mb-3">
-                <p className="font-bold">CHRISTIAN MINIMART</p>
-                <p className="text-xs font-bold text-[#AC0F16]">Z-READ REPORT (FINAL)</p>
+            {/* Report Content - Clean Monochrome Receipt Style */}
+            <div className="bg-[#F8F6F1] rounded-lg p-4 font-mono text-sm space-y-3 border">
+              {/* Header */}
+              <div className="text-center border-b border-dashed border-stone-300 pb-3 mb-3">
+                <p className="font-bold text-foreground">CHRISTIAN MINIMART</p>
+                <p className="text-xs font-bold text-foreground">Z-READ REPORT (FINAL)</p>
                 <p className="text-xs text-muted-foreground">{format(new Date(), "MMM d, yyyy h:mm a")}</p>
               </div>
               
-              <div className="flex justify-between">
-                <span>Opening Fund:</span>
-                <span>{formatCurrency(data.openingFund)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-600">
-                <span>Cash Sales:</span>
-                <span>+{formatCurrency(data.cashSales)}</span>
-              </div>
-              <div className="flex justify-between text-blue-600">
-                <span>GCash Sales:</span>
-                <span>{formatCurrency(data.gcashSales)}</span>
-              </div>
-              <div className="flex justify-between text-destructive">
-                <span>Expenses:</span>
-                <span>-{formatCurrency(data.expenses)}</span>
+              {/* Line Items */}
+              <div className="space-y-2 text-foreground">
+                <div className="flex justify-between">
+                  <span>Opening Fund:</span>
+                  <span className="font-medium">{formatCurrency(data.openingFund)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cash Sales:</span>
+                  <span className="font-medium">+{formatCurrency(data.cashSales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>GCash Sales:</span>
+                  <span className="font-medium">{formatCurrency(data.gcashSales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Expenses:</span>
+                  <span className="font-medium">-{formatCurrency(data.expenses)}</span>
+                </div>
               </div>
               
-              <div className="border-t border-dashed pt-2 mt-2">
-                <div className="flex justify-between font-bold">
+              {/* Totals */}
+              <div className="border-t border-dashed border-stone-300 pt-3 mt-3 space-y-1">
+                <div className="flex justify-between font-bold text-foreground">
                   <span>TOTAL SALES:</span>
                   <span>{formatCurrency(totalSales)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-[#AC0F16]">
+                <div className="flex justify-between font-bold text-foreground">
                   <span>FINAL DRAWER:</span>
                   <span>{formatCurrency(calculatedDrawer)}</span>
                 </div>
               </div>
               
-              <div className="text-center text-xs text-muted-foreground pt-2 border-t border-dashed">
+              {/* Footer */}
+              <div className="text-center text-xs text-muted-foreground pt-3 border-t border-dashed border-stone-300">
                 <p>Total Transactions: {data.transactionCount}</p>
-                <p className="font-bold text-[#AC0F16] mt-1">*** END OF DAY ***</p>
+                <p className="font-bold text-foreground mt-1">*** END OF DAY ***</p>
               </div>
             </div>
 
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-200">
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs text-emerald-800 dark:text-emerald-200">
               <p className="font-medium flex items-center gap-1">
                 <IconCircleCheck className="size-4" />
                 Daily totals have been reset to zero

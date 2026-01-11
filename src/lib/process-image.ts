@@ -8,12 +8,33 @@
  * NOTE: The first time this runs, @imgly/background-removal-node will
  * download the AI model (~100MB). This initial download may take a while
  * depending on your connection. Subsequent runs will use the cached model.
+ * 
+ * FALLBACK: If Sharp is unavailable (broken native bindings), falls back to
+ * saving images as-is without processing.
  */
 
 import { removeBackground, Config } from "@imgly/background-removal-node";
-import sharp from "sharp";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+
+// Dynamic import for Sharp to handle broken installations gracefully
+let sharp: typeof import("sharp") | null = null;
+let sharpLoadError: Error | null = null;
+
+async function getSharp() {
+  if (sharp) return sharp;
+  if (sharpLoadError) return null;
+  
+  try {
+    sharp = (await import("sharp")).default as any;
+    console.log("[process-image] Sharp loaded successfully");
+    return sharp;
+  } catch (error) {
+    sharpLoadError = error as Error;
+    console.warn("[process-image] Sharp unavailable - using fallback mode:", error);
+    return null;
+  }
+}
 
 /**
  * Configuration for the background removal AI
@@ -26,6 +47,27 @@ const bgRemovalConfig: Config = {
     quality: 1.0, // Maximum quality
   },
 };
+
+/**
+ * Detect image type from magic bytes (file signature)
+ */
+function detectImageType(buffer: Buffer): string {
+  // Check magic bytes
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return "jpg";
+  }
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return "png";
+  }
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+    return "gif";
+  }
+  if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) {
+    return "webp";
+  }
+  // Default to jpg
+  return "jpg";
+}
 
 /**
  * Converts a Blob to a Buffer
@@ -57,6 +99,9 @@ function bufferToBlob(buffer: Buffer, mimeType: string): Blob {
  * If AI background removal fails (e.g., memory limits, unsupported image),
  * falls back to just converting the original image to WebP.
  * 
+ * If Sharp is unavailable (broken native bindings on Windows), saves original
+ * file as-is with a generic extension.
+ * 
  * @param fileBuffer - The raw image buffer from upload
  * @param fileName - The filename (without extension) to save as
  * @returns The public path to the processed image (e.g., /uploads/uuid.webp)
@@ -68,8 +113,24 @@ export async function processAndSaveImage(
   const uploadsDir = path.join(process.cwd(), "public", "uploads");
   await mkdir(uploadsDir, { recursive: true });
 
-  // Ensure filename ends with .webp
+  // Ensure filename ends with .webp (or fallback to .jpg if Sharp unavailable)
   const baseFileName = fileName.replace(/\.[^/.]+$/, ""); // Remove any extension
+  
+  // Try to load Sharp
+  const sharpInstance = await getSharp();
+  
+  // If Sharp is not available, save the file as-is
+  if (!sharpInstance) {
+    console.warn(`[process-image] Sharp unavailable, saving original file without processing`);
+    // Determine file type from magic bytes
+    const ext = detectImageType(fileBuffer);
+    const finalFileName = `${baseFileName}.${ext}`;
+    const outputPath = path.join(uploadsDir, finalFileName);
+    await writeFile(outputPath, fileBuffer);
+    console.log(`[process-image] Saved original file to: ${outputPath}`);
+    return `/uploads/${finalFileName}`;
+  }
+  
   const finalFileName = `${baseFileName}.webp`;
   const outputPath = path.join(uploadsDir, finalFileName);
 
@@ -80,7 +141,7 @@ export async function processAndSaveImage(
     // Step 1: Normalize the image to PNG using sharp
     // This ensures a consistent format that the AI library can understand
     console.log(`[process-image] Converting input to PNG for AI processing...`);
-    const pngBuffer = await sharp(fileBuffer)
+    const pngBuffer = await sharpInstance(fileBuffer)
       .png()
       .toBuffer();
 
@@ -100,7 +161,7 @@ export async function processAndSaveImage(
     // Step 4: Post-process with sharp
     // - trim(): Automatically crops transparent pixels
     // - webp(): Converts to WebP format with quality optimization
-    const processedBuffer = await sharp(bgRemovedBuffer)
+    const processedBuffer = await sharpInstance(bgRemovedBuffer)
       .trim() // Remove transparent pixels around the edges
       .webp({ 
         quality: 85, // Good balance between size and quality
@@ -122,7 +183,7 @@ export async function processAndSaveImage(
     console.log(`[process-image] Falling back to basic WebP conversion`);
 
     try {
-      const fallbackBuffer = await sharp(fileBuffer)
+      const fallbackBuffer = await sharpInstance(fileBuffer)
         .webp({ quality: 85 })
         .toBuffer();
 
@@ -132,8 +193,13 @@ export async function processAndSaveImage(
 
       return `/uploads/${finalFileName}`;
     } catch (fallbackError) {
-      console.error(`[process-image] Fallback also failed:`, fallbackError);
-      throw new Error("Failed to process image");
+      console.error(`[process-image] Fallback also failed, saving original:`, fallbackError);
+      // Last resort: save the original file
+      const ext = detectImageType(fileBuffer);
+      const rawFileName = `${baseFileName}.${ext}`;
+      const rawPath = path.join(uploadsDir, rawFileName);
+      await writeFile(rawPath, fileBuffer);
+      return `/uploads/${rawFileName}`;
     }
   }
 }
@@ -151,11 +217,20 @@ export async function processImageBuffer(fileBuffer: Buffer): Promise<{
   buffer: Buffer;
   backgroundRemoved: boolean;
 }> {
+  // Try to load Sharp
+  const sharpInstance = await getSharp();
+  
+  // If Sharp is not available, return the original buffer
+  if (!sharpInstance) {
+    console.warn(`[process-image] Sharp unavailable, returning original buffer`);
+    return { buffer: fileBuffer, backgroundRemoved: false };
+  }
+  
   try {
     console.log(`[process-image] Starting background removal...`);
 
     // Normalize to PNG first
-    const pngBuffer = await sharp(fileBuffer).png().toBuffer();
+    const pngBuffer = await sharpInstance(fileBuffer).png().toBuffer();
     const imageBlob = bufferToBlob(pngBuffer, "image/png");
 
     // Remove background using AI
@@ -163,7 +238,7 @@ export async function processImageBuffer(fileBuffer: Buffer): Promise<{
     const bgRemovedBuffer = await blobToBuffer(resultBlob);
 
     // Post-process with sharp
-    const processedBuffer = await sharp(bgRemovedBuffer)
+    const processedBuffer = await sharpInstance(bgRemovedBuffer)
       .trim()
       .webp({ quality: 85, alphaQuality: 100 })
       .toBuffer();
@@ -172,11 +247,17 @@ export async function processImageBuffer(fileBuffer: Buffer): Promise<{
   } catch (error) {
     console.error(`[process-image] AI background removal failed:`, error);
 
-    // Fallback to basic conversion
-    const fallbackBuffer = await sharp(fileBuffer)
-      .webp({ quality: 85 })
-      .toBuffer();
+    try {
+      // Fallback to basic conversion
+      const fallbackBuffer = await sharpInstance(fileBuffer)
+        .webp({ quality: 85 })
+        .toBuffer();
 
-    return { buffer: fallbackBuffer, backgroundRemoved: false };
+      return { buffer: fallbackBuffer, backgroundRemoved: false };
+    } catch (fallbackError) {
+      // Last resort: return original buffer
+      console.error(`[process-image] WebP conversion also failed:`, fallbackError);
+      return { buffer: fileBuffer, backgroundRemoved: false };
+    }
   }
 }

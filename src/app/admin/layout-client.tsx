@@ -33,7 +33,12 @@ export default function AdminLayoutClient({ children, user, pendingOrdersCount =
   const isPosPage = pathname === "/admin/pos";
 
   return (
-    <SessionProvider>
+    <SessionProvider 
+      // Cache session for 5 minutes to reduce API calls when offline/slow
+      refetchInterval={5 * 60}
+      // Only refetch when window is focused (not on every re-render)
+      refetchOnWindowFocus={false}
+    >
       <PageHeaderProvider>
         {/* Main flex container - full viewport */}
         <div className="flex h-screen w-full bg-background">

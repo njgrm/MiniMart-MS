@@ -61,7 +61,7 @@
     "react-to-print": "^3.2.0",
     "react-zxing": "^2.1.0",
     "recharts": "^2.15.4",
-    "sharp": "^0.32.6",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",

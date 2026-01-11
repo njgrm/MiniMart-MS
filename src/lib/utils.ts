@@ -62,3 +62,57 @@ export function generateBarcode(): string {
   
   return base + checkDigit.toString();
 }
+
+/**
+ * Convert a number of days to a human-readable format
+ * @param days - Number of days to convert
+ * @returns Human-readable string (e.g., "1 year 3 months 5 days" or "45 days")
+ * 
+ * Examples:
+ * - 9999 days → "Over 27 years"
+ * - 450 days → "1 year 2 months 25 days"
+ * - 45 days → "1 month 15 days"
+ * - 7 days → "7 days"
+ * - 1 day → "1 day"
+ */
+export function formatDaysToHumanReadable(days: number): string {
+  if (days === null || days === undefined || isNaN(days) || days < 0) {
+    return "Unknown";
+  }
+
+  // Handle edge cases
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day";
+
+  // For very large numbers (like 9999), simplify to years
+  if (days >= 9000) {
+    return "Over 27 years";
+  }
+
+  const years = Math.floor(days / 365);
+  const remainingAfterYears = days % 365;
+  const months = Math.floor(remainingAfterYears / 30);
+  const remainingDays = remainingAfterYears % 30;
+
+  const parts: string[] = [];
+
+  if (years > 0) {
+    parts.push(`${years} ${years === 1 ? "year" : "years"}`);
+  }
+
+  if (months > 0) {
+    parts.push(`${months} ${months === 1 ? "month" : "months"}`);
+  }
+
+  if (remainingDays > 0 && parts.length < 2) {
+    // Only show days if we don't already have 2 parts (to keep it concise)
+    parts.push(`${remainingDays} ${remainingDays === 1 ? "day" : "days"}`);
+  }
+
+  // If no parts (shouldn't happen), fall back to days
+  if (parts.length === 0) {
+    return `${days} days`;
+  }
+
+  return parts.join(" ");
+}

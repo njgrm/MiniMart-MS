@@ -83,7 +83,8 @@ export async function uploadImage(file: File): Promise<UploadResult> {
  * Useful for images where background removal is not desired
  * (e.g., logos, banners, or pre-processed images).
  * 
- * Still converts to WebP for consistency and optimization.
+ * Still converts to WebP for consistency and optimization (if Sharp is available).
+ * Falls back to saving original file if Sharp is unavailable.
  * 
  * @param file - The image File object from FormData
  * @returns UploadResult with success status and path or error
@@ -107,8 +108,6 @@ export async function uploadImageRaw(file: File): Promise<UploadResult> {
       return { success: false, error: "File too large (max 10MB)" };
     }
 
-    // Import sharp dynamically to avoid loading it if not needed
-    const sharp = (await import("sharp")).default;
     const { mkdir, writeFile } = await import("node:fs/promises");
     const path = await import("node:path");
 
@@ -118,21 +117,52 @@ export async function uploadImageRaw(file: File): Promise<UploadResult> {
     const uploadsDir = path.join(process.cwd(), "public", "uploads");
     await mkdir(uploadsDir, { recursive: true });
 
-    const filename = `${randomUUID()}.webp`;
-    const filePath = path.join(uploadsDir, filename);
+    // Try to import sharp dynamically
+    let sharpInstance: typeof import("sharp") | null = null;
+    try {
+      sharpInstance = (await import("sharp")).default as any;
+    } catch (sharpError) {
+      console.warn("[upload] Sharp unavailable, saving file as-is:", sharpError);
+    }
 
-    // Just convert to WebP without background removal
-    const webpBuffer = await sharp(buffer)
-      .webp({ quality: 85 })
-      .toBuffer();
+    if (sharpInstance) {
+      // Sharp is available - convert to WebP
+      const filename = `${randomUUID()}.webp`;
+      const filePath = path.join(uploadsDir, filename);
 
-    await writeFile(filePath, webpBuffer);
+      const webpBuffer = await sharpInstance(buffer)
+        .webp({ quality: 85 })
+        .toBuffer();
 
-    return { 
-      success: true, 
-      path: `/uploads/${filename}`,
-      backgroundRemoved: false
-    };
+      await writeFile(filePath, webpBuffer);
+
+      return { 
+        success: true, 
+        path: `/uploads/${filename}`,
+        backgroundRemoved: false
+      };
+    } else {
+      // Sharp unavailable - detect file type and save as-is
+      const detectImageType = (buf: Buffer): string => {
+        if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return "jpg";
+        if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return "png";
+        if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "gif";
+        if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) return "webp";
+        return "jpg";
+      };
+      
+      const ext = detectImageType(buffer);
+      const filename = `${randomUUID()}.${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      await writeFile(filePath, buffer);
+
+      return { 
+        success: true, 
+        path: `/uploads/${filename}`,
+        backgroundRemoved: false
+      };
+    }
   } catch (error) {
     console.error("uploadImageRaw error:", error);
     return { success: false, error: "Failed to upload image" };

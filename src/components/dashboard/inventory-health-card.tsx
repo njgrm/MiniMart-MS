@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import {
   IconAlertTriangle,
   IconPackage,
@@ -15,7 +16,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+export type StockStatus = "OUT_OF_STOCK" | "CRITICAL" | "LOW" | "HEALTHY" | "DEAD_STOCK";
+
 export interface LowStockItem {
   product_id: number;
   product_name: string;
@@ -31,6 +33,9 @@ export interface LowStockItem {
   reorder_level: number;
   category: string;
   image_url?: string | null;
+  daily_velocity?: number;
+  days_of_stock?: number;
+  stock_status?: StockStatus;
 }
 
 export interface ExpiringItem {
@@ -59,27 +64,33 @@ interface InventoryHealthCardProps {
 function LowStockRow({ item, onAddToPO, onClick }: { item: LowStockItem; onAddToPO: () => void; onClick: () => void }) {
   const isOutOfStock = item.current_stock === 0;
   
-  // Days of Supply Logic (matching Analytics)
-  // Assume 7-day target, color based on coverage
-  const targetDays = 7;
-  const daysOfSupply = item.reorder_level > 0 
-    ? (item.current_stock / item.reorder_level) * targetDays 
-    : 0;
-  const percent = Math.min((daysOfSupply / targetDays) * 100, 100);
+  // Use velocity-based days of stock from the server action
+  const daysOfStock = item.days_of_stock ?? 0;
+  const dailyVelocity = item.daily_velocity ?? 0;
+  const stockStatus = item.stock_status ?? "LOW";
   
-  // Color logic: Red ≤2 days, Orange ≤5 days, Green >5 days
+  // Calculate progress bar percentage (7 days = 100%)
+  const targetDays = 7;
+  const percent = Math.min((daysOfStock / targetDays) * 100, 100);
+  
+  // Color logic based on stock status (matches analytics)
   const getBarColor = () => {
-    if (daysOfSupply <= 2) return "bg-red-500";
-    if (daysOfSupply <= 5) return "bg-orange-500";
+    if (stockStatus === "OUT_OF_STOCK" || stockStatus === "CRITICAL") return "bg-red-500";
+    if (stockStatus === "LOW") return "bg-orange-500";
     return "bg-emerald-500";
   };
   
-  const getTextColor = () => {
-    if (isOutOfStock) return "text-destructive";
-    if (daysOfSupply <= 2) return "text-red-700 dark:text-red-400";
-    if (daysOfSupply <= 5) return "text-orange-700 dark:text-orange-400";
-    return "text-emerald-700 dark:text-emerald-400";
+  const getStatusBadge = () => {
+    if (stockStatus === "OUT_OF_STOCK") {
+      return { bg: "bg-destructive/20", text: "text-destructive", label: "Critical Restock" };
+    }
+    if (stockStatus === "CRITICAL") {
+      return { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-800 dark:text-red-400", label: `Restock Now (${daysOfStock}d)` };
+    }
+    return { bg: "bg-orange-100 dark:bg-orange-900/30", text: "text-orange-800 dark:text-orange-400", label: `Restock Soon (${daysOfStock}d)` };
   };
+
+  const badge = getStatusBadge();
 
   return (
     <div 
@@ -107,18 +118,13 @@ function LowStockRow({ item, onAddToPO, onClick }: { item: LowStockItem; onAddTo
         <div className="flex items-center gap-2 mt-0.5">
           <span className={cn(
             "text-[10px] font-medium px-1.5 py-0.5 rounded",
-            isOutOfStock 
-              ? "bg-destructive/20 text-destructive" 
-              : daysOfSupply <= 2
-                ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                : daysOfSupply <= 5
-                  ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
-                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+            badge.bg,
+            badge.text
           )}>
-            {isOutOfStock ? "Out of Stock" : `${item.current_stock} left`}
+            {badge.label}
           </span>
           <span className="text-[10px] text-muted-foreground">
-            {daysOfSupply.toFixed(1)}d supply
+            {item.current_stock} units • {dailyVelocity.toFixed(1)}/day
           </span>
         </div>
         {/* Days of Supply Progress Bar (matching Analytics) */}
@@ -249,8 +255,8 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
   const [activeTab, setActiveTab] = useState("low-stock");
 
   const handleAddToPO = (productId: number) => {
-    // Navigate to vendor page with product pre-selected for PO
-    router.push(`/admin/vendor?addProduct=${productId}`);
+    // Navigate to analytics dashboard with product pre-selected for PO
+    router.push(`/admin/analytics?addToPO=${productId}`);
   };
 
   const handleDiscount = (productId: number) => {
@@ -285,95 +291,144 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
         </Button>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-2 mx-3 mt-2 h-8">
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <TabsTrigger value="low-stock" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
-                  <IconShoppingCart className="size-3 mr-1.5" />
-                  Low Stock
-                  {data.lowStockCount + data.outOfStockCount > 0 && (
-                    <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
-                      {data.lowStockCount + data.outOfStockCount}
-                    </Badge>
-                  )}
-                </TabsTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                <p className="font-medium">Items below reorder point</p>
-                <p className="text-muted-foreground">Less than 2 days of supply based on sales velocity</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <TabsTrigger value="expiring" className="text-xs h-7 data-[state=active]:bg-[#F1782F] data-[state=active]:text-white">
-                  <IconClock className="size-3 mr-1.5" />
-                  Return Window
-                  {data.expiringCount > 0 && (
-                    <Badge variant="secondary" className="ml-1.5 h-4 text-[9px] px-1">
-                      {data.expiringCount}
-                    </Badge>
-                  )}
-                </TabsTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs max-w-[200px]">
-                <p className="font-medium">45-Day Supplier Return Window</p>
-                <p className="text-muted-foreground">Items expiring within 45 days - return to supplier or discount</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </TabsList>
+      {/* Animated Tab Toggle */}
+      <div className="flex-1 flex flex-col">
+        <div className="mx-3 mt-2">
+          <div className="relative grid grid-cols-2 bg-muted rounded-lg p-0.5 h-9">
+            {/* Animated Indicator */}
+            <motion.div
+              className="absolute inset-y-0.5 rounded-md bg-[#F1782F] shadow-sm"
+              initial={false}
+              animate={{
+                x: activeTab === "low-stock" ? "2px" : "calc(100% - 2px)",
+                width: "calc(50% - 2px)",
+              }}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 30,
+              }}
+            />
+            
+            {/* Low Stock Tab */}
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setActiveTab("low-stock")}
+                    className={cn(
+                      "relative z-10 flex items-center justify-center text-xs h-8 rounded-md transition-colors",
+                      activeTab === "low-stock" 
+                        ? "text-white font-medium" 
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <IconShoppingCart className="size-3 mr-1.5" />
+                    Low Stock
+                    {data.lowStockCount + data.outOfStockCount > 0 && (
+                      <Badge 
+                        variant="secondary" 
+                        className={cn(
+                          "ml-1.5 h-4 text-[9px] px-1",
+                          activeTab === "low-stock" && "bg-white/20 text-white border-white/30"
+                        )}
+                      >
+                        {data.lowStockCount + data.outOfStockCount}
+                      </Badge>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                  <p className="font-medium">Items below reorder point</p>
+                  <p className="text-muted-foreground">Less than 2 days of supply based on sales velocity</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            {/* Return Window Tab */}
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setActiveTab("expiring")}
+                    className={cn(
+                      "relative z-10 flex items-center justify-center text-xs h-8 rounded-md transition-colors",
+                      activeTab === "expiring" 
+                        ? "text-white font-medium" 
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <IconClock className="size-3 mr-1.5" />
+                    Return Window
+                    {data.expiringCount > 0 && (
+                      <Badge 
+                        variant="secondary" 
+                        className={cn(
+                          "ml-1.5 h-4 text-[9px] px-1",
+                          activeTab === "expiring" && "bg-white/20 text-white border-white/30"
+                        )}
+                      >
+                        {data.expiringCount}
+                      </Badge>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                  <p className="font-medium">45-Day Supplier Return Window</p>
+                  <p className="text-muted-foreground">Items expiring within 45 days - return to supplier or discount</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
 
-        <TabsContent value="low-stock" className="flex-1 mt-0 px-2">
-          <ScrollArea className="h-[57vh]">
-            {data.lowStockItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
-                <IconPackage className="size-8 mb-2 opacity-30" />
-                <p className="text-xs">All items well stocked!</p>
-                <p className="text-[10px] text-muted-foreground/70">No restock needed</p>
-              </div>
-            ) : (
-              <div className="space-y-1 py-2">
-                {data.lowStockItems.map((item) => (
-                  <LowStockRow 
-                    key={item.product_id} 
-                    item={item} 
-                    onAddToPO={() => handleAddToPO(item.product_id)}
-                    onClick={() => router.push(`/admin/inventory?edit=${item.product_id}`)}
-                  />
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </TabsContent>
-
-        <TabsContent value="expiring" className="flex-1 mt-0 px-2">
-          <ScrollArea className="h-[400px]">
-            {data.expiringItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
-                <IconClock className="size-8 mb-2 opacity-30" />
-                <p className="text-xs">No items expiring soon</p>
-                <p className="text-[10px] text-muted-foreground/70">Inventory is fresh</p>
-              </div>
-            ) : (
-              <div className="space-y-1 py-2">
-                {data.expiringItems.map((item) => (
-                  <ExpiringRow 
-                    key={item.product_id} 
-                    item={item} 
-                    onDiscount={() => handleDiscount(item.product_id)}
-                    onClick={() => router.push(`/admin/inventory?edit=${item.product_id}`)}
-                  />
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
+        {/* Tab Content */}
+        <div className="flex-1 mt-2 px-2">
+          {activeTab === "low-stock" ? (
+            <ScrollArea className="h-[57vh]">
+              {data.lowStockItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
+                  <IconPackage className="size-8 mb-2 opacity-30" />
+                  <p className="text-xs">All items well stocked!</p>
+                  <p className="text-[10px] text-muted-foreground/70">No restock needed</p>
+                </div>
+              ) : (
+                <div className="space-y-1 py-2">
+                  {data.lowStockItems.map((item) => (
+                    <LowStockRow 
+                      key={item.product_id} 
+                      item={item} 
+                      onAddToPO={() => handleAddToPO(item.product_id)}
+                      onClick={() => router.push(`/admin/inventory?edit=${item.product_id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          ) : (
+            <ScrollArea className="h-[57vh]">
+              {data.expiringItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
+                  <IconClock className="size-8 mb-2 opacity-30" />
+                  <p className="text-xs">No items expiring soon</p>
+                  <p className="text-[10px] text-muted-foreground/70">Inventory is fresh</p>
+                </div>
+              ) : (
+                <div className="space-y-1 py-2">
+                  {data.expiringItems.map((item) => (
+                    <ExpiringRow 
+                      key={item.product_id} 
+                      item={item} 
+                      onDiscount={() => handleDiscount(item.product_id)}
+                      onClick={() => router.push(`/admin/inventory?edit=${item.product_id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          )}
+        </div>
+      </div>
 
       {/* Footer Summary */}
       <div className="flex items-center justify-between px-3 py-2 border-t bg-muted/20 text-[10px] text-muted-foreground">

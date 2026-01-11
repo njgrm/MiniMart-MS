@@ -40,6 +40,8 @@ import {
   CalendarClock,
   Layers,
   CheckCircle2,
+  Zap,
+  Snowflake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -300,63 +302,65 @@ export function ProductsTable({
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
           >
-            Stock / ROP
+            Stock
             <ArrowUpDown className="ml-2 h-3 w-3" />
           </Button>
         ),
         cell: ({ row }) => {
           const stock = row.getValue("current_stock") as number;
-          const staticReorderLevel = row.original.reorder_level;
-          const autoReorder = row.original.auto_reorder;
-          const leadTimeDays = row.original.lead_time_days;
+          const dailyVelocity = row.original.daily_velocity ?? 0;
+          const daysOfStock = row.original.days_of_stock ?? 0;
+          const velocityStatus = row.original.velocity_status ?? "HEALTHY";
           
-          // Client-side Dynamic ROP Estimation
-          // When auto_reorder is enabled:
-          //   Estimated ROP = (staticReorderLevel / 7) * leadTimeDays * 1.3 (30% safety buffer)
-          // This is an approximation - the full calculation requires sales velocity data
-          const estimatedDynamicROP = autoReorder
-            ? Math.ceil((staticReorderLevel / 7) * leadTimeDays * 1.3)
-            : staticReorderLevel;
+          // Format days of stock for display
+          const formatDaysLeft = () => {
+            if (stock === 0) return "Out";
+            if (dailyVelocity < 0.1) return "No sales";
+            if (daysOfStock < 1) return "< 1 day";
+            if (daysOfStock > 30) return "> 30 days";
+            return `${Math.floor(daysOfStock)} days`;
+          };
           
-          // Determine which ROP to use for display
-          const displayROP = autoReorder ? estimatedDynamicROP : staticReorderLevel;
-          const isDynamic = autoReorder && estimatedDynamicROP !== staticReorderLevel;
+          // Color based on velocity status
+          const getStockColor = () => {
+            if (velocityStatus === "OUT_OF_STOCK") return "text-destructive font-bold";
+            if (velocityStatus === "CRITICAL") return "text-red-600 dark:text-red-400 font-semibold";
+            if (velocityStatus === "LOW") return "text-orange-600 dark:text-orange-400";
+            return "text-foreground";
+          };
           
           return (
-            <div className="flex flex-col gap-0.5">
-              <div className={`text-sm font-medium tabular-nums ${stock === 0 ? "text-destructive" : stock <= displayROP ? "text-secondary" : ""}`}>
-                {stock.toLocaleString()}
-              </div>
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                {isDynamic ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-help">
-                        <span className="text-amber-500 font-medium">⚡{displayROP}</span>
-                        <span className="text-muted-foreground/60 line-through">{staticReorderLevel}</span>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs max-w-[220px] p-3">
-                      <p className="font-medium text-foreground mb-1">Dynamic Reorder Point</p>
-                      <div className="space-y-1 text-muted-foreground">
-                        <p>Based on {leadTimeDays}-day lead time</p>
-                        <p>Original: {staticReorderLevel} → Calculated: {displayROP}</p>
-                        <p className="text-amber-600 dark:text-amber-400 font-medium mt-1">
-                          ROP adjusts automatically based on sales velocity
-                        </p>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <span>ROP: {displayROP.toLocaleString()}</span>
-                )}
-                {autoReorder && (
-                  <Badge variant="outline" className="h-4 px-1 text-[9px] border-amber-500/50 text-amber-600 dark:text-amber-400">
-                    Auto
-                  </Badge>
-                )}
-              </div>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="cursor-help">
+                  <div className={`text-sm tabular-nums ${getStockColor()}`}>
+                    {stock.toLocaleString()}
+                  </div>
+                  <div className={`text-[10px] ${
+                    velocityStatus === "CRITICAL" || velocityStatus === "OUT_OF_STOCK" 
+                      ? "text-red-600 dark:text-red-400" 
+                      : velocityStatus === "LOW" 
+                      ? "text-orange-600 dark:text-orange-400" 
+                      : "text-muted-foreground"
+                  }`}>
+                    {formatDaysLeft()}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs max-w-[200px] p-2.5 bg-popover">
+                <div className="space-y-1">
+                  <p className="font-medium">{stock} units in stock</p>
+                  {dailyVelocity >= 0.1 ? (
+                    <>
+                      <p className="text-muted-foreground">Selling {dailyVelocity.toFixed(1)}/day</p>
+                      <p className="text-muted-foreground">{formatDaysLeft()} of coverage</p>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">No recent sales</p>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -365,12 +369,15 @@ export function ProductsTable({
         header: "Status",
         cell: ({ row }) => {
           const stock = row.original.current_stock;
-          const reorderLevel = row.original.reorder_level;
+          const velocityStatus = row.original.velocity_status ?? "HEALTHY";
+          const dailyVelocity = row.original.daily_velocity ?? 0;
           
-          // Strict Badge Logic:
-          // RED ("Out of Stock"): Stock === 0
-          // ORANGE ("Low Stock"): Stock > 0 AND Stock <= ReorderLevel
-          // GREEN ("In Stock"): Stock > ReorderLevel
+          // Velocity-based status badges (matches Analytics Dashboard):
+          // OUT_OF_STOCK: Red
+          // CRITICAL (≤2 days): Red-ish
+          // LOW (2-7 days): Orange
+          // DEAD_STOCK: Gray
+          // HEALTHY (>7 days): Green/Teal
           
           if (stock === 0) {
             return (
@@ -380,7 +387,23 @@ export function ProductsTable({
             );
           }
           
-          if (stock <= reorderLevel) {
+          if (velocityStatus === "DEAD_STOCK") {
+            return (
+              <Badge variant="outline" className="text-xs border-slate-400 text-slate-600 dark:text-slate-400">
+                Dead Stock
+              </Badge>
+            );
+          }
+          
+          if (velocityStatus === "CRITICAL") {
+            return (
+              <Badge className="text-xs bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400">
+                Critical
+              </Badge>
+            );
+          }
+          
+          if (velocityStatus === "LOW") {
             return (
               <Badge variant="secondary" className="text-xs">
                 Low Stock
@@ -396,31 +419,37 @@ export function ProductsTable({
         },
         filterFn: (row, id, value) => {
           if (value === "all") return true;
+          const velocityStatus = row.original.velocity_status ?? "HEALTHY";
           const stock = row.original.current_stock;
-          // Handle OUT_OF_STOCK filter specially
+          
+          // Filter based on velocity status
           if (value === "OUT_OF_STOCK") {
             return stock === 0;
           }
-          if (value === "LOW_STOCK") {
-            return stock > 0 && row.getValue(id) === "LOW_STOCK";
+          if (value === "CRITICAL") {
+            return velocityStatus === "CRITICAL";
           }
-          return row.getValue(id) === value && stock > 0;
+          if (value === "LOW_STOCK") {
+            return velocityStatus === "LOW" || velocityStatus === "CRITICAL";
+          }
+          if (value === "DEAD_STOCK") {
+            return velocityStatus === "DEAD_STOCK";
+          }
+          return velocityStatus === "HEALTHY";
         },
-        // Custom sort to prioritize: OUT_OF_STOCK > LOW_STOCK > IN_STOCK
+        // Custom sort to prioritize by velocity status urgency
         sortingFn: (rowA, rowB) => {
-          const stockA = rowA.original.current_stock;
-          const stockB = rowB.original.current_stock;
-          const statusA = rowA.getValue("status") as string;
-          const statusB = rowB.getValue("status") as string;
-          
-          // Priority: OUT_OF_STOCK (0) > LOW_STOCK > IN_STOCK
-          const getPriority = (stock: number, status: string) => {
+          const getVelocityPriority = (row: typeof rowA) => {
+            const stock = row.original.current_stock;
+            const status = row.original.velocity_status ?? "HEALTHY";
             if (stock === 0) return 0; // Highest priority
-            if (status === "LOW_STOCK") return 1;
-            return 2; // IN_STOCK
+            if (status === "CRITICAL") return 1;
+            if (status === "LOW") return 2;
+            if (status === "DEAD_STOCK") return 4;
+            return 3; // HEALTHY
           };
           
-          return getPriority(stockA, statusA) - getPriority(stockB, statusB);
+          return getVelocityPriority(rowA) - getVelocityPriority(rowB);
         },
       },
       // Expiry Date Column - 45-Day Supplier Return Policy
@@ -515,99 +544,75 @@ export function ProductsTable({
           return dateA - dateB;
         },
       },
-      // Smart Recommendation Column (AI-Powered)
+      // Smart Recommendation Column - Clean Action Badge (matches Analytics style)
       {
         id: "recommendation",
         header: () => (
           <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider uppercase">
-            <Wand2 className="h-3 w-3 text-[#AC0F16]" />
-            Smart Tip
+            <Wand2 className="h-3 w-3 text-primary" />
+            Action
           </div>
         ),
         cell: ({ row }) => {
           const product = row.original;
           const stock = product.current_stock;
-          const reorderLevel = product.reorder_level;
+          const dailyVelocity = product.daily_velocity ?? 0;
+          const daysOfStock = product.days_of_stock ?? 999;
+          const velocityStatus = product.velocity_status ?? "HEALTHY";
           
-          // Calculate a simple recommendation based on stock levels
-          // In production, this would fetch from the forecasting engine
-          const daysOfStock = stock / Math.max(1, reorderLevel * 0.5); // Rough estimate
-          const isLow = stock <= reorderLevel;
-          const isCritical = stock <= reorderLevel * 0.5 || stock === 0;
+          // Calculate recommended quantity (14-day coverage target)
+          const targetDays = 14;
+          const targetStock = dailyVelocity > 0.1 ? Math.ceil(dailyVelocity * targetDays) : 0;
+          const recommendedQty = Math.max(0, targetStock - stock);
           
-          // Calculate recommended restock quantity
-          const recommendedQty = isCritical 
-            ? Math.ceil(reorderLevel * 2) 
-            : isLow 
-            ? Math.ceil(reorderLevel * 1.5 - stock) 
-            : 0;
+          // Healthy - no action needed
+          if (velocityStatus === "HEALTHY") {
+            return (
+              <span className="text-xs text-teal-600 dark:text-teal-400">Maintain</span>
+            );
+          }
           
-          // FIXED: Hide badge for healthy items - show subtle checkmark only
-          if (recommendedQty <= 0) {
+          // Dead stock - different action
+          if (velocityStatus === "DEAD_STOCK") {
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center justify-center cursor-help">
-                    <CheckCircle2 className="h-4 w-4 text-muted-foreground/50" />
-                  </div>
+                  <span className="text-xs text-slate-500 cursor-help">Slow Mover</span>
                 </TooltipTrigger>
-                <TooltipContent 
-                  side="left" 
-                  className="max-w-[200px] p-3"
-                >
-                  <p className="text-xs">Stock levels are healthy. No restock needed at this time.</p>
+                <TooltipContent side="left" className="text-xs max-w-[180px] p-2 bg-popover">
+                  No sales in 30 days. Consider discount or promotion.
                 </TooltipContent>
               </Tooltip>
             );
           }
           
-          // Determine the reason for recommendation
-          const getReason = () => {
-            if (isCritical) {
-              return "Stock critically low. Immediate restock needed to avoid stockouts.";
+          // Get action badge styling (matches Analytics exactly)
+          const getBadgeStyle = () => {
+            if (velocityStatus === "OUT_OF_STOCK" || velocityStatus === "CRITICAL") {
+              return "border-red-600 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400";
             }
-            if (isLow) {
-              return `Stock below reorder level (${reorderLevel}). Consider restocking soon.`;
-            }
-            return "Based on current velocity trends.";
+            return "border-orange-500 bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400";
           };
           
-          const getTrend = () => {
-            // Simulated trend - in production, fetch from forecasting
-            const rand = product.product_id % 3;
-            if (rand === 0) return { icon: TrendingUp, text: "Velocity up 15%", color: "text-green-600" };
-            if (rand === 1) return { icon: TrendingDown, text: "Steady demand", color: "text-[#6c5e5d]" };
-            return { icon: TrendingUp, text: "Seasonal boost", color: "text-[#F1782F]" };
+          const getLabel = () => {
+            if (velocityStatus === "OUT_OF_STOCK") return "Critical Restock";
+            if (velocityStatus === "CRITICAL") return `Critical (${Math.floor(daysOfStock)}d left)`;
+            return `Restock (${Math.floor(daysOfStock)}d left)`;
           };
-          
-          const trend = getTrend();
-          const TrendIcon = trend.icon;
           
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge 
-                  className={`cursor-help gap-1.5 ${
-                    isCritical 
-                      ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50" 
-                      : "bg-[#AC0F16]/10 text-[#AC0F16] hover:bg-[#AC0F16]/20 dark:bg-[#AC0F16]/20 dark:text-red-400"
-                  }`}
-                >
-                  <Wand2 className="h-3 w-3" />
-                  +{recommendedQty}
+                <Badge variant="outline" className={`text-[10px] cursor-help ${getBadgeStyle()}`}>
+                  {getLabel()}
                 </Badge>
               </TooltipTrigger>
-              <TooltipContent 
-                side="left" 
-                className="max-w-[250px] p-3 bg-popover text-popover-foreground border shadow-md"
-              >
-                <div className="space-y-2">
-                  <p className="font-medium text-sm">Restock Recommendation</p>
-                  <p className="text-xs text-muted-foreground">{getReason()}</p>
-                  <div className="flex items-center gap-1.5 pt-1 border-t">
-                    <TrendIcon className={`h-3 w-3 ${trend.color}`} />
-                    <span className={`text-xs ${trend.color}`}>{trend.text}</span>
-                  </div>
+              <TooltipContent side="left" className="text-xs max-w-[200px] p-2.5 bg-popover">
+                <div className="space-y-1.5">
+                  <p className="font-medium">Recommended: +{recommendedQty} units</p>
+                  <p className="text-muted-foreground">
+                    Selling {dailyVelocity.toFixed(1)}/day, {Math.floor(daysOfStock)} days left
+                  </p>
                 </div>
               </TooltipContent>
             </Tooltip>

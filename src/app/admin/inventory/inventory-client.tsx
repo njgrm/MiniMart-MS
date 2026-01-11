@@ -30,6 +30,10 @@ export interface ProductData {
   image_url: string | null;
   status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
   nearest_expiry_date: Date | string | null;
+  // Velocity-based fields (matches Analytics Dashboard)
+  daily_velocity: number;
+  days_of_stock: number;
+  velocity_status: "OUT_OF_STOCK" | "CRITICAL" | "LOW" | "HEALTHY" | "DEAD_STOCK";
 }
 
 interface InventoryClientProps {

@@ -894,26 +894,63 @@ export async function getAllStockMovements(
 
 /**
  * Get inventory alerts (out of stock and low stock counts)
- * Used for global stock alerts component
+ * Uses velocity-based logic matching analytics dashboard:
+ * - OUT_OF_STOCK: currentStock === 0 AND has velocity (was selling)
+ * - CRITICAL: ≤2 days of supply
+ * - LOW: 2-7 days of supply
  */
 export async function getInventoryAlerts(): Promise<{ outOfStock: number; lowStock: number }> {
   try {
+    const today = new Date();
+    const last7Days = new Date(today);
+    last7Days.setDate(last7Days.getDate() - 7);
+
     // Get all products with inventory to compute status
     const products = await prisma.product.findMany({
       where: { is_archived: false },
       include: { inventory: true },
     });
 
+    // Get recent sales to calculate velocity (last 7 days)
+    const recentSales = await prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          created_at: { gte: last7Days },
+          status: "COMPLETED",
+        },
+      },
+      select: {
+        product_id: true,
+        quantity: true,
+      },
+    });
+
+    // Build velocity map: product_id -> total units sold in last 7 days
+    const velocityMap = new Map<number, number>();
+    for (const sale of recentSales) {
+      const current = velocityMap.get(sale.product_id) ?? 0;
+      velocityMap.set(sale.product_id, current + sale.quantity);
+    }
+
     let outOfStock = 0;
     let lowStock = 0;
 
     for (const product of products) {
       const currentStock = product.inventory?.current_stock ?? 0;
-      const reorderLevel = product.inventory?.reorder_level ?? 10;
+      const weekSales = velocityMap.get(product.product_id) ?? 0;
+      const dailyVelocity = weekSales / 7;
+      
+      // Calculate days of stock (coverage)
+      const daysOfStock = dailyVelocity > 0.1 
+        ? Math.floor(currentStock / dailyVelocity) 
+        : (currentStock > 0 ? 999 : 0);
 
-      if (currentStock === 0) {
+      // Velocity-based stock status (matches analytics logic)
+      if (currentStock === 0 && dailyVelocity >= 0.1) {
+        // Only count as out of stock if item was selling
         outOfStock++;
-      } else if (currentStock <= reorderLevel) {
+      } else if (dailyVelocity >= 0.1 && daysOfStock <= 7) {
+        // CRITICAL (≤2 days) or LOW (2-7 days) - combined for alert badge
         lowStock++;
       }
     }

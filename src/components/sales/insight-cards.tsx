@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { cn } from "@/lib/utils";
+import { cn, formatDaysToHumanReadable } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -121,14 +121,14 @@ function parseRichText(message: string, level: InsightLevel): React.ReactNode[] 
       // Bold text - product names, actions - make them pop
       const text = fullMatch.slice(2, -2);
       parts.push(
-        <span key={key++} className="font-bold text-foreground">
+        <span key={key++} className="font-semibold text-foreground">
           {text}
         </span>
       );
     } else if (fullMatch.startsWith("₱")) {
       // Currency - always emerald and bold
       parts.push(
-        <span key={key++} className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+        <span key={key++} className="font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
           {fullMatch}
         </span>
       );
@@ -140,7 +140,7 @@ function parseRichText(message: string, level: InsightLevel): React.ReactNode[] 
           ? "text-amber-600 dark:text-amber-400"
           : "text-foreground";
       parts.push(
-        <span key={key++} className={cn("font-bold tabular-nums", valueColor)}>
+        <span key={key++} className={cn("font-semibold tabular-nums", valueColor)}>
           {fullMatch}
         </span>
       );
@@ -193,18 +193,34 @@ export function InsightCard({ insight, className }: InsightCardProps) {
     if (insight.level === "WARNING") {
       // Dead stock detection (via metadata or message)
       if (metadata.isDeadStock || insight.title?.toLowerCase().includes("dead stock")) {
-        const daysStagnant = metadata.daysSinceLastSale || 
-          insight.message.match(/(\d+)\s*days/i)?.[1];
-        if (daysStagnant) return `No sales for ${daysStagnant} days`;
+        // Extract days from metadata or message
+        let days: number | null = null;
+        if (typeof metadata.daysSinceLastSale === "number") {
+          days = metadata.daysSinceLastSale;
+        } else {
+          const match = insight.message.match(/(\d+)\s*days/i);
+          if (match) days = parseInt(match[1], 10);
+        }
+        if (days !== null) {
+          return `No sales for ${formatDaysToHumanReadable(days)}`;
+        }
         return "No sales in 30+ days";
       }
       
       // Frozen inventory / slow-moving
       if (insight.title?.toLowerCase().includes("frozen") || 
           insight.message.toLowerCase().includes("unsold")) {
-        const daysStagnant = metadata.daysSinceLastSale || 
-          insight.message.match(/(\d+)\s*days/i)?.[1];
-        if (daysStagnant) return `Stagnant for ${daysStagnant} days`;
+        // Extract days from metadata or message
+        let days: number | null = null;
+        if (typeof metadata.daysSinceLastSale === "number") {
+          days = metadata.daysSinceLastSale;
+        } else {
+          const match = insight.message.match(/(\d+)\s*days/i);
+          if (match) days = parseInt(match[1], 10);
+        }
+        if (days !== null) {
+          return `Stagnant for ${formatDaysToHumanReadable(days)}`;
+        }
         return "Stagnant inventory";
       }
       
@@ -304,7 +320,7 @@ export function InsightCard({ insight, className }: InsightCardProps) {
         <div className="flex-1 min-w-0">
           {/* Product Name (Bold, Primary) */}
           {productName ? (
-            <h4 className="font-bold text-sm text-foreground leading-tight truncate" title={productName}>
+            <h4 className="font-semibold text-sm text-foreground leading-tight truncate" title={productName}>
               {productName}
             </h4>
           ) : (
@@ -417,7 +433,7 @@ export function IntelligenceFeed({ insights, className, maxHeight = "h-[400px]" 
             <Bell className="size-3" />
             Attention Needed
             {alerts.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-red-500 text-white">
+              <span className="ml-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full bg-red-500 text-white">
                 {alerts.length}
               </span>
             )}
@@ -434,7 +450,7 @@ export function IntelligenceFeed({ insights, className, maxHeight = "h-[400px]" 
             <Sparkles className="size-3" />
             Highlights
             {highlights.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500 text-white">
+              <span className="ml-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full bg-emerald-500 text-white">
                 {highlights.length}
               </span>
             )}

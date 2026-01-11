@@ -4,6 +4,239 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ---
 
+## [Unreleased] - 2026-01-11
+
+### CRITICAL FIX: Inventory Page Now Uses Same Data Source as Analytics
+
+**Problem:** Inventory page showed "In Stock" for products that were actually critical (1-2 days left) according to Analytics. Root cause: Inventory used `TransactionItem` while Analytics used `DailySalesAggregate` table.
+
+**Solution:** Changed `getProducts()` to use `DailySalesAggregate` - the **exact same data source** as Analytics forecasting.
+
+#### 1. Data Source Alignment (`src/actions/product.ts`)
+- **Before:** Used `TransactionItem` for velocity (different from Analytics)
+- **After:** Uses `DailySalesAggregate` (30-day lookback, same as Analytics)
+- **Result:** Inventory status now matches Analytics exactly
+
+#### 2. Cleaner Stock Column (`src/app/admin/inventory/products-table.tsx`)
+- **Simplified layout:** Stock number + days of coverage below
+- **Removed clutter:** No more ROP/Auto badges inline
+- **Color-coded text:** Red for critical, orange for low, default for healthy
+- **Tooltip:** Shows velocity and coverage details on hover
+
+#### 3. Cleaner Action Column (`src/app/admin/inventory/products-table.tsx`)
+- **Renamed from "Smart Tip" to "Action"** (clearer purpose)
+- **Badge style matches Analytics:** Same colors and format
+- **Clean labels:**
+  - "Critical Restock" - Out of stock
+  - "Critical (Xd left)" - ≤2 days supply
+  - "Restock (Xd left)" - 2-7 days supply
+  - "Maintain" - Healthy
+  - "Slow Mover" - Dead stock
+
+#### 4. Status Alignment
+| Product | Before | After (Matches Analytics) |
+|---------|--------|---------------------------|
+| 555 Sardine (150 units, 52/day) | "In Stock" | "Critical" (2d left) |
+| 7-up 1.5L (13 units, 51.3/day) | "In Stock" | "Critical" (<1d left) |
+| Ajinomoto (99 units, 45.7/day) | "In Stock" | "Critical" (2d left) |
+| Alaska Condensada (16 units, 52/day) | "In Stock" | "Critical" (<1d left) |
+
+---
+
+### Inventory Health & Analytics Improvements (Part 2)
+
+#### 1. Increased Low Stock Items Limit (`src/actions/dashboard.ts`)
+- **Before:** Limited to 10 items in Inventory Health card
+- **After:** Shows up to 50 items (matches analytics "Restock Immediately" count of 43)
+- **Rationale:** Users need to see all critical items, not just top 10
+
+#### 2. Auto-Scroll on Add to PO (`src/app/admin/analytics/analytics-dashboard.tsx`)
+- **New Feature:** When clicking "Add to PO" from Inventory Health, page auto-scrolls to Restock Recommendations table
+- **Implementation:** Added `tableContainerRef` and `scrollIntoView({ behavior: "smooth", block: "center" })` on `initialAddToPO` change
+
+#### 3. Stock/ROP Column - Replaced Emoji with Icon (`src/app/admin/inventory/products-table.tsx`)
+- **Before:** Used ⚡ emoji for dynamic ROP indicator
+- **After:** Uses `<Zap>` Lucide React icon (consistent with design system)
+
+#### 4. Smart Tips - Unified Logic with Analytics (`src/app/admin/inventory/products-table.tsx`)
+- **Before:** Used inconsistent simulated trend data
+- **After:** Uses clear stock/ROP-based logic matching analytics dashboard:
+  - **Critical Restock:** Out of stock (stock === 0)
+  - **Restock Now:** Stock ≤ 50% of reorder level
+  - **Restock Soon:** Stock ≤ reorder level
+  - **Healthy:** Stock > reorder level (shows checkmark)
+- **Updated Tooltips:**
+  - Clear action labels with stock status
+  - Suggested quantity calculation (target: 2x reorder level)
+  - Note: "View Analytics for velocity-based forecasts"
+
+---
+
+### Analytics & Inventory Integration
+
+#### 1. Favicon Update
+- **Replaced:** Default Next.js favicon with Christian Minimart logo
+- **File:** `src/app/icon.png` (from `assets/christian_minimart_logo_collapsed.png`)
+
+#### 2. Low Stock Labels - Actionable Text (`src/components/dashboard/inventory-health-card.tsx`)
+- **Before:** "Out of Stock", "2d left", "5d left" (vague)
+- **After:** "Critical Restock", "Restock Now (2d)", "Restock Soon (5d)" (actionable)
+- **Rationale:** Matches analytics dashboard urgency language
+
+#### 3. Add to PO - Analytics Integration (`src/components/dashboard/inventory-health-card.tsx`)
+- **Before:** Navigated to `/admin/vendor?addProduct=X` (broken)
+- **After:** Navigates to `/admin/analytics?addToPO=X` with pre-selected item
+- **New:** `initialAddToPO` prop on ForecastingTable to pre-select items from URL
+
+#### 4. PO Footer - Selection Only Mode (`src/app/admin/analytics/analytics-dashboard.tsx`)
+- **Before:** Always showed "Total Recommended Order" with all items cost
+- **After:** Only shows when user explicitly selects items
+- **Rationale:** Don't confuse users with phantom PO they didn't create
+
+#### 5. Avg Daily Sales Arrows - Fixed Logic + Tooltip (`src/app/admin/analytics/analytics-dashboard.tsx`)
+- **Before:** Always showed arrow based on simple predicted vs velocity comparison
+- **After:** 
+  - Only shows trend if >10% difference (avoids noise)
+  - ↑ Green = demand rising (forecast >10% above current)
+  - ↓ Orange = demand falling (forecast >10% below current)
+  - → Gray = stable (within ±10%)
+- **Added:** Tooltip explaining: "Demand rising: Forecast X% above current"
+
+---
+
+### �📊 Velocity-Based Inventory Alerts
+
+Unified low stock detection logic between Dashboard and Analytics to use sales velocity instead of static reorder levels.
+
+#### 1. Inventory Health Card - Velocity Logic (`src/actions/dashboard.ts`)
+- **Before:** Used static `current_stock <= reorder_level` comparison
+- **After:** Uses sales velocity from last 7 days to calculate "days of stock"
+- **Logic:**
+  - **OUT_OF_STOCK:** `currentStock === 0` AND `dailyVelocity >= 0.1` (item was selling)
+  - **CRITICAL:** ≤2 days of supply
+  - **LOW:** 2-7 days of supply
+  - **HEALTHY:** >7 days of supply (not shown in alerts)
+  - **DEAD_STOCK:** `velocity < 0.1` (not selling - excluded from alerts)
+- **New Fields on LowStockItem:** `daily_velocity`, `days_of_stock`, `stock_status`
+
+#### 2. Global Stock Alerts - Velocity Logic (`src/actions/inventory.ts`)
+- **Updated:** `getInventoryAlerts()` now uses same velocity-based logic
+- **Impact:** Top nav badges now match analytics dashboard numbers
+- **Excludes:** Dead stock items (no velocity) from counts
+
+#### 3. Inventory Health Card UI (`src/components/dashboard/inventory-health-card.tsx`)
+- **Updated LowStockRow:** Displays days of stock, daily velocity, and stock status
+- **Progress Bar:** Shows days of coverage (7 days = 100%)
+- **Badge Colors:** Red (CRITICAL/OUT), Orange (LOW)
+- **New Display:** "X units • Y.Z/day" velocity info
+
+---
+
+### 🎨 UI/UX Improvements
+
+#### 4. X-Read & Z-Read Report - Clean Monochrome Style (`src/components/dashboard/cash-register-card.tsx`)
+- **Before:** Multiple colors (green for cash, blue for GCash, red for expenses)
+- **After:** Clean monochrome receipt style matching thermal printer output
+- **Changes:**
+  - Removed colored text (emerald, blue, destructive)
+  - All text now uses `text-foreground` for consistency
+  - Background changed to `bg-[#F8F6F1]` (soft off-white)
+  - Border changed to `border-stone-300` for subtle separation
+  - Icons changed from colored to `text-muted-foreground`
+  - Z-Read confirmation banner changed from amber to emerald (success state)
+
+#### 5. Human-Readable Days Format (`src/lib/utils.ts`)
+- **New Utility:** `formatDaysToHumanReadable(days: number)` function
+- **Converts:** Large day counts to readable format (e.g., 9999 → "Over 27 years")
+- **Examples:**
+  - 450 days → "1 year 2 months"
+  - 45 days → "1 month 15 days"  
+  - 7 days → "7 days"
+  - 1 day → "1 day"
+  - 0 days → "Today"
+
+#### 6. Dead Stock Display Fix (`src/components/sales/insight-cards.tsx`)
+- **Before:** "No sales for 9999 days" (raw number)
+- **After:** "No sales for Over 27 years" (human-readable)
+- **Updated:** `getShortIssue()` function now uses `formatDaysToHumanReadable()`
+
+#### 7. Animated Tab Toggle - Inventory Health Card (`src/components/dashboard/inventory-health-card.tsx`)
+- **Added:** Smooth animated indicator using Framer Motion
+- **Animation:** Spring-based transition (stiffness: 400, damping: 30)
+- **Visual:** Orange background slides between tabs on selection
+- **Badge Styling:** Active tab badges now have `bg-white/20` for better contrast
+- **Removed:** Shadcn Tabs dependency in favor of custom animated toggle
+
+#### 8. Return Window - Expiring Items Query (`src/actions/dashboard.ts`)
+- **Fixed:** `getInventoryHealthData()` now queries actual expiring products
+- **Logic:** Fetches products with `nearest_expiry_date` within 45 days
+- **Calculation:** Days until expiry computed from today's date
+- **Sorting:** Expiring items sorted by soonest expiry first
+- **Limit:** Returns top 10 expiring items
+
+---
+
+### ⚡ Offline Performance Optimizations
+
+Major performance improvements for offline/slow network scenarios. Addresses 45-48 second delays from external image fetching and reduces repeated API calls.
+
+#### 1. Next.js Image Configuration (`next.config.ts`)
+- **Restricted Remote Patterns:** Only allow localhost images by default
+- **24-hour Cache TTL:** Increased `minimumCacheTTL` to 24 hours for cached images
+- **Environment Toggle:** Added `DISABLE_IMAGE_OPTIMIZATION=true` env var option
+- **Reduced Device Sizes:** Optimized `deviceSizes` and `imageSizes` arrays
+
+#### 2. SafeImage Component (`src/components/ui/safe-image.tsx`)
+- **New Component:** Wrapper around Next/Image with graceful offline handling
+- **Auto-detect External URLs:** Automatically adds `unoptimized` prop for external URLs
+- **Error Fallback:** Shows Package or ImageOff icon when images fail to load
+- **ProductImage Helper:** Pre-configured component for product thumbnails
+- **Loading Skeleton:** Optional loading state with skeleton animation
+
+#### 3. Analytics Dashboard Batched Queries
+- **Before:** 7 sequential server action calls (~500-2000ms each = 3.5-14s total)
+- **After:** 1 batched call with parallel DB queries (~500-800ms total)
+- **New Action:** `getBatchedAnalyticsData()` in `actions.ts`
+- **Parallel Execution:** Uses `Promise.all()` to run all queries simultaneously:
+  - `getDashboardChartDataByDateRange` (current & previous period)
+  - `getTopMovers`
+  - `getCategorySalesShare`
+  - `getPeakTrafficData`
+  - `getForecastData`
+  - `getSmartInsights`
+
+#### 4. Auth Session Caching
+- **SessionProvider Config:** Added `refetchInterval={5 * 60}` (5 minutes)
+- **Reduced API Calls:** Set `refetchOnWindowFocus={false}`
+- **Affected Files:** `admin/layout-client.tsx`, `vendor/layout-client.tsx`
+- **Impact:** Reduces `/api/auth/session` calls from every navigation to once per 5 minutes
+
+#### 5. Image Error Handling in Analytics Dashboard
+- **Lazy Loading:** Added `loading="lazy"` to product images
+- **Error Fallback:** Added `onError` handler to show Package icon fallback
+- **Prevents Timeouts:** Images that fail to load don't block the UI
+
+#### 6. Sharp Module Graceful Fallback (`src/lib/process-image.ts`, `src/actions/upload.ts`)
+- **Problem:** Sharp native bindings (libvips/GLib) broken on Windows causing GLib-GObject-CRITICAL errors
+- **Solution:** Dynamic Sharp import with graceful fallback
+- **Behavior When Sharp Works:** Full AI background removal + WebP conversion + trim
+- **Behavior When Sharp Broken:** Save original file as-is (jpg/png/gif detected from magic bytes)
+- **No Crashes:** Image upload now works even with broken Sharp installation
+- **Files Modified:**
+  - `process-image.ts`: Added `getSharp()` lazy loader, `detectImageType()` helper
+  - `upload.ts`: `uploadImageRaw()` now falls back to saving original file
+
+### Performance Impact Summary
+| Metric | Before | After |
+|--------|--------|-------|
+| External image timeout | 45-48s | Instant fallback |
+| Analytics page load (initial) | 11-16s | ~1-2s |
+| Analytics date range change | 7 API calls | 1 batched call |
+| Auth session checks | Every navigation | Every 5 min |
+| Image upload with broken Sharp | Crash | Works (saves original) |
+
+---
+
 ## [Unreleased] - 2026-01-10
 
 ### � Production-Ready Business Logic Fixes
