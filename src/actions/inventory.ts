@@ -535,6 +535,114 @@ export async function deleteBatch(batchId: number, reason: string, userId: numbe
   }
 }
 
+/**
+ * Return a batch to supplier (expired, damaged, recalled products)
+ * Removes the batch quantity and logs as SUPPLIER_RETURN movement
+ * HIGH RISK: Logged with detailed information
+ */
+export async function returnBatchToSupplier(
+  batchId: number, 
+  reason: string, 
+  supplierName?: string,
+  userId: number = 1
+): Promise<ActionResult> {
+  if (!reason || reason.trim().length < 3) {
+    return { success: false, error: "Please provide a reason (min 3 characters)" };
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Get the batch
+      const batch = await tx.inventoryBatch.findUnique({
+        where: { id: batchId },
+        include: { product: { include: { inventory: true } } },
+      });
+
+      if (!batch) {
+        throw new Error("Batch not found");
+      }
+
+      const quantityReturned = batch.quantity;
+      const batchSupplier = supplierName || batch.supplier_name || "Unknown Supplier";
+
+      // Get inventory for movement record
+      const inventory = batch.product.inventory;
+      if (!inventory) {
+        throw new Error("Product inventory not found");
+      }
+
+      const previousStock = inventory.current_stock;
+
+      // Delete the batch (or set to 0 and mark as returned)
+      await tx.inventoryBatch.delete({
+        where: { id: batchId },
+      });
+
+      // Sync inventory.current_stock and product.nearest_expiry_date
+      const { totalStock } = await syncProductFromBatches(tx, batch.product_id);
+
+      // Create SUPPLIER_RETURN stock movement
+      await tx.stockMovement.create({
+        data: {
+          inventory_id: inventory.inventory_id,
+          user_id: userId,
+          movement_type: "SUPPLIER_RETURN",
+          quantity_change: -quantityReturned,
+          previous_stock: previousStock,
+          new_stock: totalStock,
+          reason: `Batch #${batchId} returned to supplier: ${reason}`,
+          reference: `RETURN-${batchId}-${Date.now()}`,
+          supplier_name: batchSupplier,
+          cost_price: batch.cost_price,
+        },
+      });
+
+      return { 
+        quantityReturned, 
+        newTotalStock: totalStock, 
+        productId: batch.product_id,
+        productName: batch.product.product_name,
+        expiryDate: batch.expiry_date,
+        supplierName: batchSupplier,
+        costPrice: batch.cost_price,
+      };
+    });
+
+    revalidatePath("/admin/inventory");
+    revalidatePath(`/admin/inventory/${result.productId}/batches`);
+    
+    // Audit log: Batch returned to supplier (HIGH RISK)
+    await logActivity({
+      username: "Admin", // TODO: Get from session
+      action: "DELETE",
+      entity: "InventoryBatch",
+      entityId: batchId,
+      entityName: result.productName,
+      details: `📦 Returned Batch #${batchId} to supplier "${result.supplierName}". Returned ${result.quantityReturned} units of "${result.productName}". Reason: ${reason}.`,
+      metadata: {
+        product_id: result.productId,
+        batch_id: batchId,
+        quantity_returned: result.quantityReturned,
+        expiry_date: result.expiryDate?.toISOString() || null,
+        new_total_stock: result.newTotalStock,
+        supplier_name: result.supplierName,
+        cost_price: result.costPrice?.toString() || null,
+        reason,
+        movement_type: "SUPPLIER_RETURN",
+      },
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  } catch (error) {
+    console.error("Return batch to supplier error:", error);
+    const message = error instanceof Error ? error.message : "Failed to return batch to supplier";
+    return { success: false, error: message };
+  }
+}
+
 // ============================================================================
 // Stock Movement Actions
 // ============================================================================
@@ -893,54 +1001,58 @@ export async function getAllStockMovements(
 }
 
 /**
- * Get inventory alerts (out of stock and low stock counts)
- * Uses velocity-based logic matching analytics dashboard:
+ * Get inventory alerts (out of stock, critical stock, and low stock counts)
+ * 
+ * CRITICAL: Uses DailySalesAggregate (30-day) - SAME SOURCE AS ANALYTICS!
+ * This ensures top nav badges match Analytics and Inventory pages.
+ * 
  * - OUT_OF_STOCK: currentStock === 0 AND has velocity (was selling)
- * - CRITICAL: ≤2 days of supply
- * - LOW: 2-7 days of supply
+ * - CRITICAL: ≤2 days of supply (RED badge)
+ * - LOW: 2-7 days of supply (ORANGE badge)
  */
-export async function getInventoryAlerts(): Promise<{ outOfStock: number; lowStock: number }> {
+export async function getInventoryAlerts(): Promise<{ outOfStock: number; criticalStock: number; lowStock: number }> {
   try {
-    const today = new Date();
-    const last7Days = new Date(today);
-    last7Days.setDate(last7Days.getDate() - 7);
+    // Use same date range as Analytics forecasting (30-day lookback)
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() - 1); // Yesterday (latest complete day)
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 30); // 30 days back
 
-    // Get all products with inventory to compute status
-    const products = await prisma.product.findMany({
-      where: { is_archived: false },
-      include: { inventory: true },
-    });
-
-    // Get recent sales to calculate velocity (last 7 days)
-    const recentSales = await prisma.transactionItem.findMany({
-      where: {
-        transaction: {
-          created_at: { gte: last7Days },
-          status: "COMPLETED",
+    // Fetch products and DailySalesAggregate in parallel (SAME SOURCE as Analytics!)
+    const [products, allAggregates] = await Promise.all([
+      prisma.product.findMany({
+        where: { is_archived: false },
+        include: { inventory: true },
+      }),
+      // Use DailySalesAggregate - same as Analytics forecasting
+      prisma.dailySalesAggregate.findMany({
+        where: {
+          date: { gte: startDate, lte: endDate },
         },
-      },
-      select: {
-        product_id: true,
-        quantity: true,
-      },
-    });
+      }),
+    ]);
 
-    // Build velocity map: product_id -> total units sold in last 7 days
-    const velocityMap = new Map<number, number>();
-    for (const sale of recentSales) {
-      const current = velocityMap.get(sale.product_id) ?? 0;
-      velocityMap.set(sale.product_id, current + sale.quantity);
+    // Group aggregates by product_id for O(1) lookup
+    const aggregatesByProduct = new Map<number, typeof allAggregates>();
+    for (const agg of allAggregates) {
+      const existing = aggregatesByProduct.get(agg.product_id) ?? [];
+      existing.push(agg);
+      aggregatesByProduct.set(agg.product_id, existing);
     }
 
     let outOfStock = 0;
+    let criticalStock = 0;
     let lowStock = 0;
 
     for (const product of products) {
       const currentStock = product.inventory?.current_stock ?? 0;
-      const weekSales = velocityMap.get(product.product_id) ?? 0;
-      const dailyVelocity = weekSales / 7;
       
-      // Calculate days of stock (coverage)
+      // Calculate velocity from DailySalesAggregate (MATCHES Analytics exactly)
+      const salesHistory = aggregatesByProduct.get(product.product_id) ?? [];
+      const totalSales = salesHistory.reduce((sum, day) => sum + day.quantity_sold, 0);
+      const dailyVelocity = totalSales / 30; // 30-day average
+      
+      // Calculate days of stock (coverage) - USE Math.floor() TO MATCH ANALYTICS!
       const daysOfStock = dailyVelocity > 0.1 
         ? Math.floor(currentStock / dailyVelocity) 
         : (currentStock > 0 ? 999 : 0);
@@ -949,15 +1061,219 @@ export async function getInventoryAlerts(): Promise<{ outOfStock: number; lowSto
       if (currentStock === 0 && dailyVelocity >= 0.1) {
         // Only count as out of stock if item was selling
         outOfStock++;
-      } else if (dailyVelocity >= 0.1 && daysOfStock <= 7) {
-        // CRITICAL (≤2 days) or LOW (2-7 days) - combined for alert badge
-        lowStock++;
+      } else if (dailyVelocity >= 0.1) {
+        if (daysOfStock <= 2) {
+          // CRITICAL (≤2 days) - urgent!
+          criticalStock++;
+        } else if (daysOfStock <= 7) {
+          // LOW (2-7 days) - attention needed
+          lowStock++;
+        }
       }
     }
 
-    return { outOfStock, lowStock };
+    return { outOfStock, criticalStock, lowStock };
   } catch (error) {
     console.error("Error fetching inventory alerts:", error);
-    return { outOfStock: 0, lowStock: 0 };
+    return { outOfStock: 0, criticalStock: 0, lowStock: 0 };
+  }
+}
+
+// ============================================================================
+// Batch Restock (Multiple Products from Single Supplier Delivery)
+// ============================================================================
+
+export interface BatchRestockItem {
+  productId: number;
+  quantity: number;
+  costPrice?: number;
+  newExpiryDate?: Date;
+}
+
+export interface BatchRestockInput {
+  items: BatchRestockItem[];
+  supplierName?: string;
+  reference?: string;
+  reason?: string;
+  receiptImageUrl?: string;
+  userId?: number;
+}
+
+export interface BatchRestockResult {
+  results: Array<{
+    productId: number;
+    productName: string;
+    success: boolean;
+    newStock?: number;
+    error?: string;
+  }>;
+  successCount: number;
+  failedCount: number;
+}
+
+/**
+ * Batch Restock - Add stock for multiple products from a single supplier delivery
+ * 
+ * Use Case: Supplier delivers multiple different products with a single receipt/invoice.
+ * All items share the same supplier name, reference number, and receipt image.
+ * 
+ * Features:
+ * - Single transaction for all items (all succeed or all fail together)
+ * - Each product gets its own InventoryBatch with individual expiry date
+ * - Single receipt image shared across all items
+ * - Individual cost prices per product
+ * - Comprehensive audit trail with batch reference
+ */
+export async function batchRestockProducts(input: BatchRestockInput): Promise<ActionResult<BatchRestockResult>> {
+  const { items, supplierName, reference, reason, receiptImageUrl, userId = 1 } = input;
+
+  if (!items || items.length === 0) {
+    return { success: false, error: "No items provided for batch restock" };
+  }
+
+  // Validate all items have valid quantities
+  const invalidItems = items.filter(i => i.quantity <= 0);
+  if (invalidItems.length > 0) {
+    return { success: false, error: "All items must have a quantity greater than 0" };
+  }
+
+  try {
+    const results: BatchRestockResult['results'] = [];
+
+    // Process all items in a single transaction for atomicity
+    await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        try {
+          // Get current inventory
+          const inventory = await tx.inventory.findUnique({
+            where: { product_id: item.productId },
+            include: { product: true },
+          });
+
+          if (!inventory) {
+            results.push({
+              productId: item.productId,
+              productName: `Product #${item.productId}`,
+              success: false,
+              error: "Product inventory not found",
+            });
+            continue;
+          }
+
+          const previousStock = inventory.current_stock;
+
+          // Create new Inventory Batch for FEFO tracking
+          await tx.inventoryBatch.create({
+            data: {
+              product_id: item.productId,
+              quantity: item.quantity,
+              expiry_date: item.newExpiryDate || null,
+              received_date: new Date(),
+              supplier_ref: reference || null,
+              supplier_name: supplierName || null,
+              cost_price: item.costPrice ? new Decimal(item.costPrice) : null,
+            },
+          });
+
+          // Sync inventory.current_stock and product.nearest_expiry_date from batches
+          const { totalStock } = await syncProductFromBatches(tx, item.productId);
+
+          // Update product cost price if provided (latest cost becomes default)
+          if (item.costPrice !== undefined && item.costPrice > 0) {
+            await tx.product.update({
+              where: { product_id: item.productId },
+              data: { cost_price: new Decimal(item.costPrice) },
+            });
+          }
+
+          // Update last_restock timestamp
+          await tx.inventory.update({
+            where: { product_id: item.productId },
+            data: { last_restock: new Date() },
+          });
+
+          // Create stock movement record for audit trail
+          await tx.stockMovement.create({
+            data: {
+              inventory_id: inventory.inventory_id,
+              user_id: userId,
+              movement_type: "RESTOCK",
+              quantity_change: item.quantity,
+              previous_stock: previousStock,
+              new_stock: totalStock,
+              reason: reason || `Batch restock: ${supplierName || "Supplier delivery"}`,
+              reference: reference || null,
+              supplier_name: supplierName || null,
+              cost_price: item.costPrice ? new Decimal(item.costPrice) : null,
+              receipt_image_url: receiptImageUrl || null,
+            },
+          });
+
+          results.push({
+            productId: item.productId,
+            productName: inventory.product.product_name,
+            success: true,
+            newStock: totalStock,
+          });
+
+          // Audit log for each item (outside transaction to not block)
+        } catch (itemError) {
+          const message = itemError instanceof Error ? itemError.message : "Unknown error";
+          results.push({
+            productId: item.productId,
+            productName: `Product #${item.productId}`,
+            success: false,
+            error: message,
+          });
+        }
+      }
+    });
+
+    // Revalidate paths
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/pos");
+    revalidatePath("/admin");
+
+    // Log the batch operation
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+    const totalUnits = items.reduce((sum, i) => sum + i.quantity, 0);
+
+    // Centralized audit log for batch operation
+    await logActivity({
+      action: "BATCH_RESTOCK",
+      module: "INVENTORY",
+      actor: "Admin", // TODO: Get from session
+      description: `Batch restock: ${successCount} products (${totalUnits} total units) from ${supplierName || "Unknown supplier"}`,
+      details: {
+        supplierName,
+        reference,
+        itemCount: items.length,
+        totalUnits,
+        successCount,
+        failedCount,
+        receiptImageUrl,
+        products: results.map(r => ({
+          productId: r.productId,
+          productName: r.productName,
+          success: r.success,
+          newStock: r.newStock,
+        })),
+      },
+    });
+
+    return {
+      success: failedCount === 0,
+      data: {
+        results,
+        successCount,
+        failedCount,
+      },
+      error: failedCount > 0 ? `${failedCount} items failed to restock` : undefined,
+    };
+  } catch (error) {
+    console.error("Batch restock error:", error);
+    const message = error instanceof Error ? error.message : "Failed to process batch restock";
+    return { success: false, error: message };
   }
 }

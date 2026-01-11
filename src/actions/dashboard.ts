@@ -79,7 +79,10 @@ export async function getCashRegisterData(): Promise<CashRegisterData> {
 
 /**
  * Get inventory health data: low stock items, out of stock, expiring soon
- * Uses velocity-based logic matching analytics dashboard:
+ * 
+ * CRITICAL: Uses DailySalesAggregate (30-day) - SAME SOURCE AS ANALYTICS!
+ * This ensures dashboard and analytics show the same data.
+ * 
  * - CRITICAL: ≤2 days of supply
  * - LOW: 2-7 days of supply
  * - HEALTHY: >7 days of supply
@@ -91,37 +94,36 @@ export async function getInventoryHealthData(): Promise<InventoryHealthData> {
     expiryWindowDate.setDate(expiryWindowDate.getDate() + 45);
 
     const today = new Date();
-    const last7Days = new Date(today);
-    last7Days.setDate(last7Days.getDate() - 7);
+    
+    // Use same date range as Analytics forecasting (30-day lookback)
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() - 1); // Yesterday (latest complete day)
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 30); // 30 days back
 
-    // Get all products with inventory
-    const products = await prisma.product.findMany({
-      where: { is_archived: false },
-      include: { 
-        inventory: true,
-      },
-      orderBy: { product_name: "asc" },
-    });
-
-    // Get recent sales to calculate velocity (last 7 days)
-    const recentSales = await prisma.transactionItem.findMany({
-      where: {
-        transaction: {
-          created_at: { gte: last7Days },
-          status: "COMPLETED",
+    // Fetch products and DailySalesAggregate in parallel (SAME SOURCE as Analytics!)
+    const [products, allAggregates] = await Promise.all([
+      prisma.product.findMany({
+        where: { is_archived: false },
+        include: { 
+          inventory: true,
         },
-      },
-      select: {
-        product_id: true,
-        quantity: true,
-      },
-    });
+        orderBy: { product_name: "asc" },
+      }),
+      // Use DailySalesAggregate - same as Analytics forecasting
+      prisma.dailySalesAggregate.findMany({
+        where: {
+          date: { gte: startDate, lte: endDate },
+        },
+      }),
+    ]);
 
-    // Build velocity map: product_id -> total units sold in last 7 days
-    const velocityMap = new Map<number, number>();
-    for (const sale of recentSales) {
-      const current = velocityMap.get(sale.product_id) ?? 0;
-      velocityMap.set(sale.product_id, current + sale.quantity);
+    // Group aggregates by product_id for O(1) lookup
+    const aggregatesByProduct = new Map<number, typeof allAggregates>();
+    for (const agg of allAggregates) {
+      const existing = aggregatesByProduct.get(agg.product_id) ?? [];
+      existing.push(agg);
+      aggregatesByProduct.set(agg.product_id, existing);
     }
 
     const lowStockItems: LowStockItem[] = [];
@@ -133,10 +135,13 @@ export async function getInventoryHealthData(): Promise<InventoryHealthData> {
 
     for (const product of products) {
       const currentStock = product.inventory?.current_stock ?? 0;
-      const weekSales = velocityMap.get(product.product_id) ?? 0;
-      const dailyVelocity = weekSales / 7;
       
-      // Calculate days of stock (coverage)
+      // Calculate velocity from DailySalesAggregate (MATCHES Analytics exactly)
+      const salesHistory = aggregatesByProduct.get(product.product_id) ?? [];
+      const totalSales = salesHistory.reduce((sum, day) => sum + day.quantity_sold, 0);
+      const dailyVelocity = totalSales / 30; // 30-day average
+      
+      // Calculate days of stock (coverage) - USE Math.floor() TO MATCH ANALYTICS!
       const daysOfStock = dailyVelocity > 0.1 
         ? Math.floor(currentStock / dailyVelocity) 
         : (currentStock > 0 ? 999 : 0); // 999 = dead stock (no velocity)

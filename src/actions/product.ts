@@ -85,11 +85,12 @@ export async function getProducts(includeArchived: boolean = false) {
     const actualDays = 30; // Use full 30-day period for average
     const dailyVelocity = totalSales / actualDays;
     
-    // Calculate days of stock (coverage)
-    // If no velocity (dead stock), use large number if stock exists, 0 if out of stock
-    const daysOfStock = dailyVelocity > 0.1 
+    // Calculate days of stock (coverage) - USE Math.floor() TO MATCH ANALYTICS!
+    // This is CRITICAL: Analytics uses floor(), so 2.8 days = 2 days = CRITICAL
+    const rawDaysOfStock = dailyVelocity > 0.1 
       ? currentStock / dailyVelocity 
       : (currentStock > 0 ? 999 : 0);
+    const daysOfStock = dailyVelocity > 0.1 ? Math.floor(rawDaysOfStock) : rawDaysOfStock;
     
     // Determine velocity-based status (EXACTLY matches Analytics calculateStockStatus)
     let velocityStatus: "OUT_OF_STOCK" | "CRITICAL" | "LOW" | "HEALTHY" | "DEAD_STOCK";

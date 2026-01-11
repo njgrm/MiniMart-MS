@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operational Diagram - Christian Minimart</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f8fafc; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); width: 80%; max-width: 1000px; text-align: center; }
+        h2 { margin-bottom: 30px; color: #1e293b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Christian Minimart System - Operational Diagram</h2>
+        <div class="mermaid">
+            flowchart TD
+                %% Styles
+                classDef person fill:#000,stroke:#333,stroke-width:2px,color:#fff;
+                classDef system fill:#000,stroke:#fff,stroke-width:2px,color:#fff,stroke-dasharray: 0;
+                classDef db fill:#fff,stroke:#000,stroke-width:2px,color:#000;
+                classDef module fill:#fff,stroke:#000,stroke-width:2px,color:#000,stroke-dasharray: 0;
+
+                %% Nodes
+                Customer((Customer)):::person
+                Cashier((Cashier)):::person
+                Manager((Sales Manager)):::person
+                
+                System[Minimart\nSystem]:::system
+                DB[(Inventory & Sales\nDatabase)]:::db
+                Forecast[Statistical Forecasting\nModule]:::module
+
+                %% Flow
+                Customer -- "Items / Payment" --> Cashier
+                Cashier -- "POS Transaction / Scan" --> System
+                
+                System <==> DB
+                System -- "Low stocks alert" --> Manager
+                
+                DB -.-> Forecast
+                Forecast -- "Demand Forecasts" --> Manager
+                
+                Manager -- "Restock / Update Inventory" --> DB
+        </div>
+        <p style="margin-top: 20px; color: #64748b; font-size: 0.9em;">Diagram updated to reflect Statistical Forecasting Module (WMA)</p>
+    </div>
+</body>
+</html>

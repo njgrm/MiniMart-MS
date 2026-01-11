@@ -113,6 +113,7 @@ model InventoryBatch {
 /// ADJUSTMENT: Manual adjustment (audit, correction)
 /// DAMAGE: Stock removed due to damage/spoilage
 /// RETURN: Stock added back from customer return
+/// SUPPLIER_RETURN: Stock returned to supplier (expired, damaged, recalled)
 /// INTERNAL_USE: Stock used internally (not sold)
 /// ORDER_SHORTAGE: Stock removed when item marked unavailable in order
 enum StockMovementType {
@@ -122,6 +123,7 @@ enum StockMovementType {
   ADJUSTMENT
   DAMAGE
   RETURN
+  SUPPLIER_RETURN
   INTERNAL_USE
   ORDER_SHORTAGE
 }

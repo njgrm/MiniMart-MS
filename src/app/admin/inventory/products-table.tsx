@@ -42,6 +42,7 @@ import {
   CheckCircle2,
   Zap,
   Snowflake,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ interface ProductsTableProps {
   onBulkDelete?: (productIds: number[]) => void;
   onImportClick?: () => void;
   onAddClick?: () => void;
+  onBatchRestockClick?: () => void;
   onPrintBarcodes?: (products: ProductData[]) => void;
   onRestock?: (product: ProductData) => void;
   onAdjust?: (product: ProductData) => void;
@@ -107,6 +109,8 @@ interface ProductsTableProps {
   onTabChange?: (tab: "active" | "archived") => void;
   activeCount?: number;
   archivedCount?: number;
+  // Initial filter from URL param
+  initialStatusFilter?: string;
 }
 
 export function ProductsTable({ 
@@ -116,6 +120,7 @@ export function ProductsTable({
   onBulkDelete,
   onImportClick,
   onAddClick,
+  onBatchRestockClick,
   onPrintBarcodes,
   onRestock,
   onAdjust,
@@ -124,9 +129,25 @@ export function ProductsTable({
   onTabChange,
   activeCount = 0,
   archivedCount = 0,
+  initialStatusFilter,
 }: ProductsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  // Initialize column filters with URL param if provided
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() => {
+    if (initialStatusFilter) {
+      // Map URL params to filter values
+      const filterMap: Record<string, string> = {
+        "critical": "CRITICAL",
+        "low": "LOW_STOCK", 
+        "out": "OUT_OF_STOCK",
+      };
+      const filterValue = filterMap[initialStatusFilter];
+      if (filterValue) {
+        return [{ id: "status", value: filterValue }];
+      }
+    }
+    return [];
+  });
   const [globalFilter, setGlobalFilter] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -371,6 +392,7 @@ export function ProductsTable({
           const stock = row.original.current_stock;
           const velocityStatus = row.original.velocity_status ?? "HEALTHY";
           const dailyVelocity = row.original.daily_velocity ?? 0;
+          const daysOfStock = row.original.days_of_stock ?? 999;
           
           // Velocity-based status badges (matches Analytics Dashboard):
           // OUT_OF_STOCK: Red
@@ -379,42 +401,129 @@ export function ProductsTable({
           // DEAD_STOCK: Gray
           // HEALTHY (>7 days): Green/Teal
           
+          // Helper for tooltip content
+          const getTooltipContent = () => {
+            if (stock === 0) {
+              return (
+                <div className="space-y-1">
+                  <p className="font-medium text-destructive">Out of Stock</p>
+                  <p className="text-muted-foreground">
+                    {dailyVelocity >= 0.1 
+                      ? `Was selling ${dailyVelocity.toFixed(1)}/day. Needs immediate restock.` 
+                      : "No recent sales data."}
+                  </p>
+                </div>
+              );
+            }
+            if (velocityStatus === "DEAD_STOCK") {
+              return (
+                <div className="space-y-1">
+                  <p className="font-medium text-slate-600">Dead Stock</p>
+                  <p className="text-muted-foreground">No sales in 30 days. Consider discount or promotion.</p>
+                </div>
+              );
+            }
+            if (velocityStatus === "CRITICAL") {
+              return (
+                <div className="space-y-1">
+                  <p className="font-medium text-red-600">Critical Stock Level</p>
+                  <p className="text-muted-foreground">Only {Math.floor(daysOfStock)} day(s) of stock left at {dailyVelocity.toFixed(1)}/day velocity.</p>
+                  <p className="text-muted-foreground">Will run out within 48 hours!</p>
+                </div>
+              );
+            }
+            if (velocityStatus === "LOW") {
+              return (
+                <div className="space-y-1">
+                  <p className="font-medium text-orange-600">Low Stock</p>
+                  <p className="text-muted-foreground">{Math.floor(daysOfStock)} days of stock at {dailyVelocity.toFixed(1)}/day.</p>
+                  <p className="text-muted-foreground">Restock within a week recommended.</p>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-1">
+                <p className="font-medium text-teal-600">Healthy Stock</p>
+                <p className="text-muted-foreground">
+                  {dailyVelocity >= 0.1 
+                    ? `${Math.floor(daysOfStock)} days of coverage at ${dailyVelocity.toFixed(1)}/day.`
+                    : `${stock} units in stock. No recent sales.`}
+                </p>
+              </div>
+            );
+          };
+          
           if (stock === 0) {
             return (
-              <Badge variant="destructive" className="text-xs">
-                Out of Stock
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="destructive" className="text-xs cursor-help">
+                    Out of Stock
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[220px] p-2.5 bg-popover text-xs">
+                  {getTooltipContent()}
+                </TooltipContent>
+              </Tooltip>
             );
           }
           
           if (velocityStatus === "DEAD_STOCK") {
             return (
-              <Badge variant="outline" className="text-xs border-slate-400 text-slate-600 dark:text-slate-400">
-                Dead Stock
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-xs border-slate-400 text-slate-600 dark:text-slate-400 cursor-help">
+                    Dead Stock
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[220px] p-2.5 bg-popover text-xs">
+                  {getTooltipContent()}
+                </TooltipContent>
+              </Tooltip>
             );
           }
           
           if (velocityStatus === "CRITICAL") {
             return (
-              <Badge className="text-xs bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400">
-                Critical
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className="text-xs bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 cursor-help">
+                    Critical
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[220px] p-2.5 bg-popover text-xs">
+                  {getTooltipContent()}
+                </TooltipContent>
+              </Tooltip>
             );
           }
           
           if (velocityStatus === "LOW") {
             return (
-              <Badge variant="secondary" className="text-xs">
-                Low Stock
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="text-xs cursor-help">
+                    Low Stock
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[220px] p-2.5 bg-popover text-xs">
+                  {getTooltipContent()}
+                </TooltipContent>
+              </Tooltip>
             );
           }
           
           return (
-            <Badge variant="accent" className="text-xs">
-              In Stock
-            </Badge>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="accent" className="text-xs cursor-help">
+                  In Stock
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[220px] p-2.5 bg-popover text-xs">
+                {getTooltipContent()}
+              </TooltipContent>
+            </Tooltip>
           );
         },
         filterFn: (row, id, value) => {
@@ -482,7 +591,7 @@ export function ProductsTable({
           // 1-45 days: RETURN TO SUPPLIER (Orange) - Within return window
           // > 45 days: GOOD (Normal display) - No action needed
 
-          // Already expired - Cannot return to supplier
+          // Already expired - Should not display/sell, but CAN be returned
           if (daysUntilExpiry <= 0) {
             return (
               <Tooltip>
@@ -491,9 +600,19 @@ export function ProductsTable({
                     Expired
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent side="left" className="max-w-[200px]">
-                  <p className="text-xs font-medium text-destructive">Cannot return to supplier</p>
-                  <p className="text-xs text-muted-foreground">Expired on {format(expiry, "MMM d, yyyy")}</p>
+                <TooltipContent side="left" className="max-w-[240px] p-2.5 bg-popover">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-destructive">Product Expired</p>
+                    <p className="text-xs text-muted-foreground">Expired on {format(expiry, "MMM d, yyyy")}</p>
+                    <div className="border-t border-border pt-1.5 mt-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        <strong>⚠️ Do NOT display or sell.</strong>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Can still be returned to supplier if within their return policy window.
+                      </p>
+                    </div>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             );
@@ -544,81 +663,7 @@ export function ProductsTable({
           return dateA - dateB;
         },
       },
-      // Smart Recommendation Column - Clean Action Badge (matches Analytics style)
-      {
-        id: "recommendation",
-        header: () => (
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider uppercase">
-            <Wand2 className="h-3 w-3 text-primary" />
-            Action
-          </div>
-        ),
-        cell: ({ row }) => {
-          const product = row.original;
-          const stock = product.current_stock;
-          const dailyVelocity = product.daily_velocity ?? 0;
-          const daysOfStock = product.days_of_stock ?? 999;
-          const velocityStatus = product.velocity_status ?? "HEALTHY";
-          
-          // Calculate recommended quantity (14-day coverage target)
-          const targetDays = 14;
-          const targetStock = dailyVelocity > 0.1 ? Math.ceil(dailyVelocity * targetDays) : 0;
-          const recommendedQty = Math.max(0, targetStock - stock);
-          
-          // Healthy - no action needed
-          if (velocityStatus === "HEALTHY") {
-            return (
-              <span className="text-xs text-teal-600 dark:text-teal-400">Maintain</span>
-            );
-          }
-          
-          // Dead stock - different action
-          if (velocityStatus === "DEAD_STOCK") {
-            return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs text-slate-500 cursor-help">Slow Mover</span>
-                </TooltipTrigger>
-                <TooltipContent side="left" className="text-xs max-w-[180px] p-2 bg-popover">
-                  No sales in 30 days. Consider discount or promotion.
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
-          
-          // Get action badge styling (matches Analytics exactly)
-          const getBadgeStyle = () => {
-            if (velocityStatus === "OUT_OF_STOCK" || velocityStatus === "CRITICAL") {
-              return "border-red-600 bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400";
-            }
-            return "border-orange-500 bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400";
-          };
-          
-          const getLabel = () => {
-            if (velocityStatus === "OUT_OF_STOCK") return "Critical Restock";
-            if (velocityStatus === "CRITICAL") return `Critical (${Math.floor(daysOfStock)}d left)`;
-            return `Restock (${Math.floor(daysOfStock)}d left)`;
-          };
-          
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className={`text-[10px] cursor-help ${getBadgeStyle()}`}>
-                  {getLabel()}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent side="left" className="text-xs max-w-[200px] p-2.5 bg-popover">
-                <div className="space-y-1.5">
-                  <p className="font-medium">Recommended: +{recommendedQty} units</p>
-                  <p className="text-muted-foreground">
-                    Selling {dailyVelocity.toFixed(1)}/day, {Math.floor(daysOfStock)} days left
-                  </p>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          );
-        },
-      },
+      // Actions Dropdown Column
       {
         id: "actions",
         cell: ({ row }) => {
@@ -903,6 +948,7 @@ export function ProductsTable({
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="OUT_OF_STOCK">Out of Stock</SelectItem>
+            <SelectItem value="CRITICAL">Critical (≤2d)</SelectItem>
             <SelectItem value="LOW_STOCK">Low Stock</SelectItem>
             <SelectItem value="IN_STOCK">In Stock</SelectItem>
           </SelectContent>
@@ -1028,6 +1074,27 @@ export function ProductsTable({
               </TooltipTrigger>
               <TooltipContent className="xl:hidden">
                 <p>Import CSV</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        {/* Batch Restock - For supplier deliveries */}
+        {onBatchRestockClick && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  onClick={onBatchRestockClick}
+                  className="h-10 gap-1.5 shrink-0"
+                >
+                  <Truck className="h-4 w-4" />
+                  <span className="hidden xl:inline">Batch Restock</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Batch Restock - Receive supplier delivery</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

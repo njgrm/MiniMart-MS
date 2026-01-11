@@ -14,6 +14,7 @@ import {
   Trash2,
   RefreshCw,
   Layers,
+  Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import {
   deleteBatch,
   editBatchExpiry,
   getProductBatches,
+  returnBatchToSupplier,
 } from "@/actions/inventory";
 
 interface ProductInfo {
@@ -120,6 +122,12 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingBatch, setDeletingBatch] = useState<BatchInfo | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
+
+  // Return to supplier dialog state
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returningBatch, setReturningBatch] = useState<BatchInfo | null>(null);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnSupplier, setReturnSupplier] = useState("");
 
   const refreshBatches = async () => {
     startTransition(async () => {
@@ -223,6 +231,39 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
         await refreshBatches();
       } else {
         toast.error(result.error || "Failed to delete batch");
+      }
+    });
+  };
+
+  // Return to supplier handlers
+  const openReturnDialog = (batch: BatchInfo) => {
+    setReturningBatch(batch);
+    setReturnReason("");
+    setReturnSupplier(batch.supplier_name || "");
+    setReturnDialogOpen(true);
+  };
+
+  const handleReturnConfirm = async () => {
+    if (!returningBatch) return;
+
+    if (!returnReason.trim() || returnReason.trim().length < 3) {
+      toast.error("Please provide a reason (min 3 characters)");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await returnBatchToSupplier(
+        returningBatch.id, 
+        returnReason.trim(),
+        returnSupplier.trim() || undefined
+      );
+
+      if (result.success) {
+        toast.success(`Returned ${returningBatch.quantity} units to supplier`);
+        setReturnDialogOpen(false);
+        await refreshBatches();
+      } else {
+        toast.error(result.error || "Failed to return batch to supplier");
       }
     });
   };
@@ -389,6 +430,19 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
                           title="Delete Batch"
                         >
                           <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={getExpiryStatus(batch.expiry_date).isExpired 
+                            ? "text-orange-600 hover:text-orange-700 hover:bg-orange-50" 
+                            : "text-muted-foreground hover:text-foreground"
+                          }
+                          onClick={() => openReturnDialog(batch)}
+                          disabled={isPending}
+                          title="Return to Supplier"
+                        >
+                          <Undo2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -561,6 +615,62 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isPending ? "Removing..." : "Remove Batch"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Return to Supplier Dialog */}
+      <AlertDialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-orange-600">
+              <Undo2 className="h-5 w-5" />
+              Return to Supplier
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {returningBatch && (
+                <>
+                  Return Batch #{returningBatch.id} with{" "}
+                  <strong>{returningBatch.quantity} units</strong> to supplier.
+                  {getExpiryStatus(returningBatch.expiry_date).isExpired && (
+                    <span className="block mt-1 text-destructive font-medium">
+                      ⚠️ This batch has expired ({returningBatch.expiry_date ? new Date(returningBatch.expiry_date).toLocaleDateString() : "N/A"})
+                    </span>
+                  )}
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="return-supplier">Supplier Name</Label>
+              <Input
+                id="return-supplier"
+                value={returnSupplier}
+                onChange={(e) => setReturnSupplier(e.target.value)}
+                placeholder="e.g., ABC Distributors, Direct Supplier..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="return-reason">Reason for Return *</Label>
+              <Textarea
+                id="return-reason"
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+                placeholder="e.g., Expired stock, damaged on arrival, wrong item delivered..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleReturnConfirm}
+              disabled={isPending}
+              className="bg-orange-600 text-white hover:bg-orange-700"
+            >
+              {isPending ? "Processing..." : "Return to Supplier"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

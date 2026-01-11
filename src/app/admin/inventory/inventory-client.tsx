@@ -9,6 +9,7 @@ import { ArchiveProductDialog, RestoreProductDialog, type ArchivedProduct } from
 import { ArchivedProductsTable } from "./archived-products-table";
 import { CSVImportDialog } from "./csv-import-dialog";
 import { RestockDialog } from "./restock-dialog";
+import { BatchRestockDialog } from "./batch-restock-dialog";
 import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { StockHistoryView } from "./stock-history-view";
 import { BarcodeModal } from "@/components/inventory/barcode-modal";
@@ -49,6 +50,7 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
   const [activeTab, setActiveTab] = useState("active");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isBatchRestockOpen, setIsBatchRestockOpen] = useState(false);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeProducts, setBarcodeProducts] = useState<ProductData[]>([]);
   const [editingProduct, setEditingProduct] = useState<ProductData | null>(null);
@@ -89,6 +91,9 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
       }
     }
   }, [searchParams, products, router]);
+
+  // Get initial status filter from URL (for nav badge deep-linking)
+  const initialStatusFilter = searchParams.get("status") ?? undefined;
 
   const handleProductCreated = (newProduct: ProductData) => {
     setProducts((prev) => [...prev, newProduct].sort((a, b) => 
@@ -157,6 +162,7 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
           <ProductsTable
             onImportClick={() => setIsImportDialogOpen(true)}
             onAddClick={() => setIsAddDialogOpen(true)}
+            onBatchRestockClick={() => setIsBatchRestockOpen(true)}
             products={products}
             onEdit={setEditingProduct}
             onDelete={setArchivingProduct}
@@ -173,6 +179,8 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
             onTabChange={setActiveTab}
             activeCount={products.length}
             archivedCount={archivedProducts.length}
+            // Pass initial status filter from URL
+            initialStatusFilter={initialStatusFilter}
           />
         )}
 
@@ -237,6 +245,16 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
           if (restockingProduct) {
             handleStockUpdated(restockingProduct.product_id, newStock);
           }
+        }}
+      />
+
+      {/* Batch Restock - Multiple products from single supplier delivery */}
+      <BatchRestockDialog
+        open={isBatchRestockOpen}
+        onOpenChange={setIsBatchRestockOpen}
+        products={products}
+        onSuccess={() => {
+          router.refresh();
         }}
       />
 

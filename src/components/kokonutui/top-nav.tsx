@@ -31,7 +31,7 @@ export default function TopNav({ user }: TopNavProps) {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [stockAlerts, setStockAlerts] = useState({ outOfStock: 0, lowStock: 0 });
+  const [stockAlerts, setStockAlerts] = useState({ outOfStock: 0, criticalStock: 0, lowStock: 0 });
 
   useEffect(() => {
     setMounted(true);
@@ -67,6 +67,10 @@ export default function TopNav({ user }: TopNavProps) {
       .slice(0, 2);
   };
 
+  // Calculate combined urgent alerts (out of stock + critical)
+  const urgentCount = stockAlerts.outOfStock + stockAlerts.criticalStock;
+  const hasAlerts = urgentCount > 0 || stockAlerts.lowStock > 0;
+
   return (
     <div className="h-full flex items-center dark:bg-sidebar justify-between px-4 bg-card">
       {/* Left side - Breadcrumb + Stock Alerts */}
@@ -75,18 +79,22 @@ export default function TopNav({ user }: TopNavProps) {
           <DynamicBreadcrumb />
         </div>
         
-        {/* Stock Alerts - inline badges */}
-        {mounted && (stockAlerts.outOfStock > 0 || stockAlerts.lowStock > 0) && (
+        {/* Stock Alerts - inline badges with critical prominence */}
+        {mounted && hasAlerts && (
           <div className="flex items-center gap-2 shrink-0">
-            {stockAlerts.outOfStock > 0 && (
+            {/* URGENT: Out of Stock + Critical (≤2 days) - Combined RED badge */}
+            {urgentCount > 0 && (
               <button
-                onClick={() => router.push("/admin/inventory?status=out")}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-destructive/10 border border-destructive/30 hover:bg-destructive/20 transition-colors"
+                onClick={() => router.push("/admin/inventory?status=critical")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-destructive/10 border border-destructive/30 hover:bg-destructive/20 transition-colors animate-pulse"
               >
                 <AlertTriangle className="size-3.5 text-destructive" />
-                <span className="text-[13px] font-medium text-destructive">{stockAlerts.outOfStock} out of stock</span>
+                <span className="text-[13px] font-medium text-destructive">
+                  {urgentCount} critical
+                </span>
               </button>
             )}
+            {/* LOW STOCK (2-7 days) - Orange badge */}
             {stockAlerts.lowStock > 0 && (
               <button
                 onClick={() => router.push("/admin/inventory?status=low")}

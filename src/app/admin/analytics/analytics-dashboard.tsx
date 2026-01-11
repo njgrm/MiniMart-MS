@@ -2197,8 +2197,11 @@ function ForecastingTable({
                     <TableHead className="h-10 bg-muted/30 w-[100px]">
                       <SortButton field="urgency">Action</SortButton>
                     </TableHead>
-                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[140px]">
-                      Restock
+                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[70px] text-right">
+                      Rec
+                    </TableHead>
+                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[60px] text-center">
+                      Add
                     </TableHead>
                     <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[100px]">
                       Est. Cost
@@ -2208,7 +2211,7 @@ function ForecastingTable({
             <TableBody>
               {filteredAndSortedForecasts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
+                  <TableCell colSpan={9} className="h-24 text-center">
                     <p className="text-muted-foreground">No results found.</p>
                   </TableCell>
                 </TableRow>
@@ -2318,28 +2321,27 @@ function ForecastingTable({
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className="py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Rec:</span>
-                        <span className="font-mono font-bold text-sm text-foreground">{item.recommendedQty}</span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 px-2 text-[10px] gap-1 border-emerald-500 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-600 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Add to selection for PO
-                            if (!selectedItems.has(item.productId)) {
-                              const newSelected = new Set(selectedItems);
-                              newSelected.add(item.productId);
-                              setSelectedItems(newSelected);
-                            }
-                          }}
-                        >
-                          <ShoppingCart className="h-3 w-3" />
-                          Add
-                        </Button>
-                      </div>
+                    <TableCell className="py-2 text-right">
+                      <span className="font-mono font-bold text-sm text-foreground">{item.recommendedQty}</span>
+                    </TableCell>
+                    <TableCell className="py-2 text-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[10px] gap-1 border-emerald-500 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-600 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Add to selection for PO
+                          if (!selectedItems.has(item.productId)) {
+                            const newSelected = new Set(selectedItems);
+                            newSelected.add(item.productId);
+                            setSelectedItems(newSelected);
+                          }
+                        }}
+                      >
+                        <ShoppingCart className="h-3 w-3" />
+                        Add
+                      </Button>
                     </TableCell>
                     <TableCell className="text-right py-2 font-mono text-xs text-muted-foreground">
                       ₱{(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}

@@ -6,40 +6,174 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-11
 
-### CRITICAL FIX: Inventory Page Now Uses Same Data Source as Analytics
+### Return to Supplier Feature for Batch Management
 
-**Problem:** Inventory page showed "In Stock" for products that were actually critical (1-2 days left) according to Analytics. Root cause: Inventory used `TransactionItem` while Analytics used `DailySalesAggregate` table.
+#### 1. Added SUPPLIER_RETURN Stock Movement Type
+- **File:** `prisma/schema.prisma`
+- Added `SUPPLIER_RETURN` to `StockMovementType` enum
+- Tracks when batches are returned to suppliers (expired, damaged, wrong item)
 
-**Solution:** Changed `getProducts()` to use `DailySalesAggregate` - the **exact same data source** as Analytics forecasting.
+#### 2. Return to Supplier Server Action
+- **File:** `src/actions/inventory.ts`
+- Added `returnBatchToSupplier(batchId, reason, supplierName?)` function
+- Removes batch from inventory
+- Creates SUPPLIER_RETURN stock movement with audit trail
+- Syncs product stock via `syncProductFromBatches`
+- Logs detailed audit entry with metadata
 
-#### 1. Data Source Alignment (`src/actions/product.ts`)
-- **Before:** Used `TransactionItem` for velocity (different from Analytics)
-- **After:** Uses `DailySalesAggregate` (30-day lookback, same as Analytics)
-- **Result:** Inventory status now matches Analytics exactly
+#### 3. Return to Supplier UI in Batch Management
+- **File:** `src/app/admin/inventory/[id]/batches/batch-audit-client.tsx`
+- Added "Return to Supplier" button (Undo2 icon) in batch table actions
+- Button highlighted orange for expired batches
+- AlertDialog with supplier name and reason fields
+- Shows expiry warning for expired batches
+- Proper validation and toast notifications
 
-#### 2. Cleaner Stock Column (`src/app/admin/inventory/products-table.tsx`)
+---
+
+## [Earlier on 2026-01-11]
+
+### UI/UX Improvements: Batch Restock Dialog & Products Table
+
+#### 1. Removed Action Column from Products Table
+- **File:** `src/app/admin/inventory/products-table.tsx`
+- Removed the dropdown menu "Actions" column entirely
+- Cleaner table layout with focus on data
+
+#### 2. Redesigned Batch Restock Dialog (Fullscreen)
+- **File:** `src/app/admin/inventory/batch-restock-dialog.tsx`
+- **Fullscreen Layout:** Uses 95vw × 90vh for maximum screen utilization
+- **Two-Column Design:**
+  - **Left Panel (380px):** Product search with scrollable list
+    - Search by name or barcode
+    - Stock status badges (Out/Critical/Low)
+    - **Product images** in search results
+    - Click to add product instantly
+  - **Right Panel:** Delivery info + cart
+    - **Collapsible Delivery Information** section with toggle
+    - Full-height scrollable items list
+    - **Collapsible Notes** section with toggle
+    - Each item card with **product image**
+- **Collapsible Sections:**
+  - Delivery Information: Shows "Filled" badge when data entered
+  - Notes: Shows "Added" badge when notes exist
+  - Both can be collapsed to maximize products area
+- **Product Images:**
+  - Left panel: 40x40px thumbnails
+  - Cart items: 56x56px images with fallback Package icon
+- **Confirmation Modal:**
+  - Shows before batch processing
+  - Displays summary: products count, total units, estimated cost
+  - Shows supplier and reference if provided
+  - Warning about inventory level changes
+  - Prevents accidental submissions
+- **Fixed Scrolling Issues:** 
+  - Left panel: `overflow-y-auto` on product list
+  - Right panel: `overflow-y-auto` on items list
+  - No more needing to drag scrollbar
+- **Fixed Input Issues:**
+  - Quantity: Larger buttons (h-10) with proper input field
+  - Expiry Date: Calendar popover works correctly
+  - Cost Price: Full-width input field
+- **Better UX:**
+  - Items show line totals
+  - Header shows running totals (units, cost)
+
+---
+
+### NEW FEATURE: Batch Restock Dialog for Supplier Deliveries
+
+**Purpose:** Handle supplier deliveries where multiple different products arrive at once with a single receipt.
+
+#### New Files Created:
+- `src/app/admin/inventory/batch-restock-dialog.tsx` - Complete batch restock dialog component
+
+#### Components Added:
+1. **BatchRestockDialog** (`batch-restock-dialog.tsx`)
+   - Search and add multiple products to a single delivery
+   - Shared delivery info (supplier name, reference/invoice #, receipt image)
+   - Per-product fields: quantity, cost price, expiry date
+   - Totals summary (products, units, estimated cost)
+   - Product search with stock status badges
+
+2. **Server Action** (`src/actions/inventory.ts`)
+   - `batchRestockProducts()` function for atomic batch operations
+   - Single transaction for all products (all or nothing)
+   - Creates `InventoryBatch` records per product (FEFO tracking)
+   - Creates `StockMovement` records for each item
+   - Updates product expiry dates
+   - Comprehensive audit logging
+
+3. **UI Integration**
+   - Added "Batch Restock" button to inventory toolbar (Truck icon)
+   - Button triggers BatchRestockDialog
+   - Success toast with count of products and total units restocked
+
+#### Files Modified:
+- `src/app/admin/inventory/products-table.tsx` - Added Truck icon import, Batch Restock button, `onBatchRestockClick` prop
+- `src/app/admin/inventory/inventory-client.tsx` - Added batch restock state and dialog integration
+- `src/actions/inventory.ts` - Added `batchRestockProducts` function with `BatchRestockInput` interface
+
+---
+
+## [Previous] - 2026-01-11
+
+### CRITICAL FIX: Complete Data Sync Across All Stock Displays
+
+**Problem:** Different parts of the app showed conflicting stock status:
+- Inventory page: "Low Stock" for 555 Sardine
+- Analytics page: "Critical (2d left)" for same product
+- Dashboard Inventory Health Card: Different calculation
+- Top Nav badges: Different calculation
+
+**Root Cause:** Each component used different data sources:
+- Inventory: `TransactionItem` (7-day)
+- Analytics: `DailySalesAggregate` (30-day)
+- Dashboard: `TransactionItem` (7-day)
+- Nav: `TransactionItem` (7-day)
+
+**Solution:** Unified ALL stock calculations to use `DailySalesAggregate` (30-day lookback).
+
+#### 1. Product Actions (`src/actions/product.ts`)
+- Uses `DailySalesAggregate` with 30-day lookback
+- Added `Math.floor()` to match Analytics rounding (2.88 days → 2 days → CRITICAL)
+
+#### 2. Dashboard Inventory Health (`src/actions/dashboard.ts`)
+- Changed from `TransactionItem` to `DailySalesAggregate`
+- Now shows same critical/low counts as Analytics
+
+#### 3. Top Nav Badges (`src/actions/inventory.ts` + `src/components/kokonutui/top-nav.tsx`)
+- Changed from `TransactionItem` to `DailySalesAggregate`
+- **New:** Separate "critical" badge (out of stock + ≤2 days) with pulse animation
+- Shows breakdown: "X critical" (red) + "Y low stock" (orange)
+- Clicking navigates to filtered inventory view
+
+#### 4. Inventory Page Filter (`src/app/admin/inventory/products-table.tsx`)
+- Added "Critical (≤2d)" filter option
+- Supports URL params: `?status=critical`, `?status=low`, `?status=out`
+- Top nav badges deep-link to filtered view
+
+#### 5. Restock Table Alignment (`src/app/admin/analytics/analytics-dashboard.tsx`)
+- Split "Restock" column into separate "Rec" and "Add" columns
+- "Rec" column: Right-aligned quantity (fixed width)
+- "Add" column: Center-aligned button (fixed width)
+- Buttons now aligned in a clean column regardless of quantity length
+
+---
+
+### Previous: Inventory Status Sync
+
+**Earlier Fix (superseded by above):** Changed `getProducts()` to use `DailySalesAggregate` - the **exact same data source** as Analytics forecasting.
+
+#### Cleaner Stock Column
 - **Simplified layout:** Stock number + days of coverage below
 - **Removed clutter:** No more ROP/Auto badges inline
 - **Color-coded text:** Red for critical, orange for low, default for healthy
 - **Tooltip:** Shows velocity and coverage details on hover
 
-#### 3. Cleaner Action Column (`src/app/admin/inventory/products-table.tsx`)
+#### Cleaner Action Column
 - **Renamed from "Smart Tip" to "Action"** (clearer purpose)
 - **Badge style matches Analytics:** Same colors and format
-- **Clean labels:**
-  - "Critical Restock" - Out of stock
-  - "Critical (Xd left)" - ≤2 days supply
-  - "Restock (Xd left)" - 2-7 days supply
-  - "Maintain" - Healthy
-  - "Slow Mover" - Dead stock
-
-#### 4. Status Alignment
-| Product | Before | After (Matches Analytics) |
-|---------|--------|---------------------------|
-| 555 Sardine (150 units, 52/day) | "In Stock" | "Critical" (2d left) |
-| 7-up 1.5L (13 units, 51.3/day) | "In Stock" | "Critical" (<1d left) |
-| Ajinomoto (99 units, 45.7/day) | "In Stock" | "Critical" (2d left) |
-| Alaska Condensada (16 units, 52/day) | "In Stock" | "Critical" (<1d left) |
 
 ---
 
