@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useCallback, useEffect } from "react";
 import Papa from "papaparse";
-import { Upload, FileText, AlertCircle, CheckCircle2, X, Loader2 } from "lucide-react";
+import { Upload, FileText, AlertCircle, CheckCircle2, X, Loader2, Database } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { importSalesCsvOptimized, getImportProgress, type CsvSaleRow } from "@/actions/sales";
+import { backfillSalesAggregates } from "@/actions/settings";
 
 interface ImportSalesDialogProps {
   open: boolean;
@@ -314,6 +315,15 @@ export function ImportSalesDialog({
               : "."
           }`
         );
+
+        // Automatically sync analytics data after successful import
+        toast.info("Syncing analytics data...", { icon: <Database className="h-4 w-4 animate-pulse" /> });
+        const backfillResult = await backfillSalesAggregates();
+        if (backfillResult.success) {
+          toast.success(`Analytics synced: ${backfillResult.daysProcessed} days, ${backfillResult.recordsCreated.toLocaleString()} product records`);
+        } else {
+          toast.warning("Import succeeded but analytics sync failed. You can manually sync from Settings.");
+        }
 
         onSuccess();
 

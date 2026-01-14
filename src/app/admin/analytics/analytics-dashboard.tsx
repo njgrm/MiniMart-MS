@@ -1496,7 +1496,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
       </div>
       
       {/* AI Assistant */}
-      <AIAssistant />
+ 
     </TooltipProvider>
   );
 }
@@ -2192,19 +2192,56 @@ function ForecastingTable({
                       <SortButton field="velocity">Avg. Daily Sales</SortButton>
                     </TableHead>
                     <TableHead className="h-10 bg-muted/30 text-center w-[100px]">
-                      <SortButton field="demand"><span className="font-bold text-foreground">Forecasted</span></SortButton>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="cursor-help">
+                            <SortButton field="demand"><span className="font-bold text-foreground">Forecasted</span></SortButton>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
+                          <p className="text-xs font-medium mb-1">7-Day Demand Forecast</p>
+                          <p className="text-xs text-muted-foreground">
+                            Predicted total units to be sold over the next 7 days based on 
+                            Weighted Moving Average (WMA) of historical sales, adjusted for 
+                            seasonality and active promotional events.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableHead>
                     <TableHead className="h-10 bg-muted/30 w-[100px]">
                       <SortButton field="urgency">Action</SortButton>
                     </TableHead>
                     <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[70px] text-right">
-                      Rec
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help">Rec</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
+                          <p className="text-xs font-medium mb-1">Recommended Order Quantity</p>
+                          <p className="text-xs text-muted-foreground">
+                            Suggested units to order to maintain 7 days of stock plus safety buffer. 
+                            Calculated as: (Daily Velocity × 7 days) + Reorder Level − Current Stock. 
+                            Capped at 14 days supply to prevent over-ordering.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableHead>
                     <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[60px] text-center">
                       Add
                     </TableHead>
                     <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider text-right w-[100px]">
-                      Est. Cost
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help">Est. Cost</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
+                          <p className="text-xs font-medium mb-1">Estimated Restock Cost</p>
+                          <p className="text-xs text-muted-foreground">
+                            Total cost to order the recommended quantity: Cost Price × Recommended Qty. 
+                            Use this to budget your purchase orders and manage cash flow.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2257,10 +2294,10 @@ function ForecastingTable({
                       />
                     </TableCell>
                     <TableCell className="text-right font-mono py-2 text-foreground text-sm">
-                      <VelocityWithTrend velocity={item.velocity7Day} predicted={item.predictedDemand} />
+                      <VelocityWithTrend velocity={item.velocity7Day || 0} predicted={item.predictedDemand || 0} />
                     </TableCell>
                     <TableCell className="text-center font-mono font-bold py-2 text-foreground text-sm">
-                      {item.predictedDemand}
+                      {isNaN(item.predictedDemand) ? "—" : item.predictedDemand}
                     </TableCell>
                     <TableCell className="py-2">
                       <Tooltip>
@@ -2322,7 +2359,9 @@ function ForecastingTable({
                       </Tooltip>
                     </TableCell>
                     <TableCell className="py-2 text-right">
-                      <span className="font-mono font-bold text-sm text-foreground">{item.recommendedQty}</span>
+                      <span className="font-mono font-bold text-sm text-foreground">
+                        {isNaN(item.recommendedQty) ? "—" : item.recommendedQty}
+                      </span>
                     </TableCell>
                     <TableCell className="py-2 text-center">
                       <Button
@@ -2344,7 +2383,10 @@ function ForecastingTable({
                       </Button>
                     </TableCell>
                     <TableCell className="text-right py-2 font-mono text-xs text-muted-foreground">
-                      ₱{(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}
+                      {isNaN(item.costPrice * item.recommendedQty) 
+                        ? "—" 
+                        : `₱${(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`
+                      }
                     </TableCell>
                   </TableRow>
                 ))

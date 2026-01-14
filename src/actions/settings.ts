@@ -223,6 +223,95 @@ export async function getAggregationStatus(): Promise<{
   }
 }
 
+/**
+ * Full backfill of DailySalesAggregate from transaction history.
+ * This processes all completed transactions and populates the aggregate table.
+ * Automatically called after CSV import for analytics accuracy.
+ * 
+ * @returns Progress info about the backfill operation
+ */
+export async function backfillSalesAggregates(): Promise<{
+  success: boolean;
+  message: string;
+  daysProcessed: number;
+  recordsCreated: number;
+  error?: string;
+}> {
+  try {
+    // Get the date range of transactions
+    const txnRange = await prisma.transaction.aggregate({
+      _min: { created_at: true },
+      _max: { created_at: true },
+      where: { status: "COMPLETED" }
+    });
+    
+    if (!txnRange._min.created_at || !txnRange._max.created_at) {
+      return {
+        success: true,
+        message: "No completed transactions found to aggregate",
+        daysProcessed: 0,
+        recordsCreated: 0
+      };
+    }
+    
+    // Backfill the last 90 days (or from earliest transaction if newer)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const ninetyDaysAgo = new Date(today);
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    
+    const startDate = txnRange._min.created_at > ninetyDaysAgo 
+      ? new Date(txnRange._min.created_at)
+      : ninetyDaysAgo;
+    
+    const endDate = txnRange._max.created_at < today
+      ? new Date(txnRange._max.created_at)
+      : today;
+    
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    
+    // Count days to process
+    const dayCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    let daysProcessed = 0;
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      await aggregateDailySales(new Date(currentDate));
+      daysProcessed++;
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Get final count
+    const recordsCreated = await prisma.dailySalesAggregate.count();
+    
+    // Revalidate analytics pages
+    revalidatePath("/admin/analytics");
+    revalidatePath("/dashboard");
+    
+    return {
+      success: true,
+      message: `Successfully processed ${daysProcessed} days of sales data`,
+      daysProcessed,
+      recordsCreated
+    };
+  } catch (error) {
+    console.error("[settings] Error backfilling aggregates:", error);
+    return {
+      success: false,
+      message: "Failed to backfill sales aggregates",
+      daysProcessed: 0,
+      recordsCreated: 0,
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
+}
+
+
+
+
 
 
 

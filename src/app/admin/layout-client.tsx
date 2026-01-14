@@ -31,6 +31,9 @@ interface AdminLayoutClientProps {
 export default function AdminLayoutClient({ children, user, pendingOrdersCount = 0 }: AdminLayoutClientProps) {
   const pathname = usePathname();
   const isPosPage = pathname === "/admin/pos";
+  // Main reports page should scroll normally, only individual report pages need special handling
+  const isReportPage = pathname?.startsWith("/admin/reports/") && pathname !== "/admin/reports";
+  const isReportsIndex = pathname === "/admin/reports";
 
   return (
     <SessionProvider 
@@ -55,13 +58,14 @@ export default function AdminLayoutClient({ children, user, pendingOrdersCount =
             {/* Page Content */}
             <main
               className={cn(
-                "flex-1 overflow-auto",
-                isPosPage ? "p-0 bg-background" : "p-4 md:p-6 bg-[#f5f3ef] dark:bg-muted/30"
+                "flex-1",
+                (isPosPage || isReportPage) ? "overflow-hidden" : "overflow-auto",
+                (isPosPage || isReportPage) ? "p-0 bg-[#f5f3ef] dark:bg-muted/30" : "p-4 md:p-6 bg-[#f5f3ef] dark:bg-muted/30"
               )}
             >
               <div className={cn(
                 "h-full flex flex-col",
-                isPosPage && "overflow-hidden"
+                (isPosPage || isReportPage) && "overflow-hidden"
               )}>
                 {children}
               </div>

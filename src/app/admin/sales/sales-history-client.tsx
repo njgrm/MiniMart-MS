@@ -14,6 +14,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Filter,
+  Database,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +37,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TransactionSheet } from "@/components/sales/transaction-sheet";
 import { ImportSalesDialog } from "@/components/sales/import-sales-dialog";
 import {
@@ -42,6 +50,7 @@ import {
   type SalesHistoryResult,
   type DateRange,
 } from "@/actions/sales";
+import { backfillSalesAggregates, getAggregationStatus } from "@/actions/settings";
 
 interface SalesHistoryClientProps {
   initialData: SalesHistoryResult;
@@ -64,6 +73,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Track which receipt to auto-open from URL params
   const [autoOpenReceipt, setAutoOpenReceipt] = useState<string | null>(null);
@@ -190,6 +200,26 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     toast.success("CSV exported successfully");
   };
 
+  // Handle analytics sync
+  const handleSyncAnalytics = async () => {
+    setIsSyncing(true);
+    toast.info("Syncing analytics data...");
+    
+    try {
+      const result = await backfillSalesAggregates();
+      if (result.success) {
+        toast.success(`Analytics synced: ${result.daysProcessed} days, ${result.recordsCreated.toLocaleString()} product records`);
+        router.refresh();
+      } else {
+        toast.error(result.error || "Failed to sync analytics");
+      }
+    } catch (error) {
+      toast.error("Failed to sync analytics data");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   // Check if filters are active
   const hasActiveFilters = !!searchQuery || selectedRange !== "all";
 
@@ -269,12 +299,36 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
         {/* Results Count Only */}
         <div className="flex items-center gap-2 h-10 px-3 rounded-md bg-muted/30 border border-border/40">
           <Filter className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">{data.totalCount}</span>
+          <span className="text-sm font-medium text-foreground">{data.totalCount.toLocaleString()}</span>
           <span className="text-xs text-muted-foreground">Sales</span>
         </div>
 
         {/* Separator */}
         <div className="h-8 w-px bg-border mx-1" />
+
+        {/* Sync Analytics */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                onClick={handleSyncAnalytics}
+                disabled={isSyncing}
+                className="h-10 gap-1.5"
+              >
+                {isSyncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Database className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Sync Analytics</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Rebuild analytics aggregates from transaction data</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         {/* Import CSV */}
         <Button
@@ -403,9 +457,9 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
           {/* Left: Showing info + Rows per page */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span>
-              Showing <span className="font-medium text-foreground">{data.totalCount > 0 ? ((currentPage - 1) * pageSize) + 1 : 0}</span> to{" "}
-              <span className="font-medium text-foreground">{Math.min(currentPage * pageSize, data.totalCount)}</span> of{" "}
-              <span className="font-medium text-foreground">{data.totalCount}</span> transactions
+              Showing <span className="font-medium text-foreground">{data.totalCount > 0 ? ((currentPage - 1) * pageSize + 1).toLocaleString() : 0}</span> to{" "}
+              <span className="font-medium text-foreground">{Math.min(currentPage * pageSize, data.totalCount).toLocaleString()}</span> of{" "}
+              <span className="font-medium text-foreground">{data.totalCount.toLocaleString()}</span> transactions
             </span>
             <div className="flex items-center gap-2">
               <span className="text-xs">Rows per page</span>
@@ -507,12 +561,11 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
                     <Button
                       key={page}
                       variant={currentPage === page ? "default" : "outline"}
-                      size="icon"
-                      className="h-8 w-8"
+                      className="h-8 min-w-8 px-2 text-xs"
                       onClick={() => handlePageChange(page)}
                       disabled={isPending}
                     >
-                      {page}
+                      {page.toLocaleString()}
                     </Button>
                   )
                 );

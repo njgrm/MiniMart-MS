@@ -137,12 +137,14 @@ function generateWMAWeights(days: number): number[] {
 function calculateWMA(values: number[], weights: number[]): number {
   if (values.length === 0) return 0;
   
-  const effectiveWeights = weights.slice(0, values.length);
+  // Only use up to the number of weights available (typically 30 days)
+  const effectiveValues = values.slice(0, weights.length);
+  const effectiveWeights = weights.slice(0, effectiveValues.length);
   const normalizedWeights = normalizeWeights(effectiveWeights);
   
   let sum = 0;
-  for (let i = 0; i < values.length; i++) {
-    sum += values[i] * normalizedWeights[i];
+  for (let i = 0; i < effectiveValues.length; i++) {
+    sum += effectiveValues[i] * normalizedWeights[i];
   }
   
   return sum;

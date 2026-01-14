@@ -1283,26 +1283,26 @@ export async function getDemandForecastData(
       }
     }
     
-    // Get historical sales data (quantity)
-    const transactionItems = await prisma.transactionItem.findMany({
+    // Get historical sales data from DailySalesAggregate (quantity-based)
+    // This is much faster than querying TransactionItem directly
+    const dailyAggregates = await prisma.dailySalesAggregate.findMany({
       where: {
-        transaction: {
-          created_at: { gte: historyStart, lt: today },
-          status: "COMPLETED",
-        },
+        date: { gte: historyStart, lt: today },
         ...(productId ? { product_id: productId } : {}),
       },
       select: {
-        quantity: true,
-        transaction: { select: { created_at: true } },
+        date: true,
+        quantity_sold: true,
+        product_id: true,
       },
+      orderBy: { date: "asc" },
     });
     
     // Aggregate historical by day (quantities)
     const historicalMap = new Map<string, number>();
-    for (const item of transactionItems) {
-      const dateKey = format(item.transaction.created_at, "yyyy-MM-dd");
-      historicalMap.set(dateKey, (historicalMap.get(dateKey) ?? 0) + item.quantity);
+    for (const agg of dailyAggregates) {
+      const dateKey = format(agg.date, "yyyy-MM-dd");
+      historicalMap.set(dateKey, (historicalMap.get(dateKey) ?? 0) + agg.quantity_sold);
     }
     
     // Get active events for the forecast period
@@ -1525,6 +1525,8 @@ export async function getDemandForecastData(
 /**
  * Get smart business insights based on current sales velocity and stock levels.
  * Returns up to 4 prioritized insights for the analytics dashboard.
+ * 
+ * Uses DailySalesAggregate for performance instead of TransactionItem.
  */
 export async function getSmartInsights(): Promise<Insight[]> {
   try {
@@ -1554,79 +1556,84 @@ export async function getSmartInsights(): Promise<Insight[]> {
       },
     });
     
-    // Get sales for last 14 days (this week + last week for velocity comparison)
-    const recentSales = await prisma.transactionItem.findMany({
+    // Get sales for last 14 days from DailySalesAggregate (this week + last week for velocity comparison)
+    const recentAggregates = await prisma.dailySalesAggregate.findMany({
       where: {
-        transaction: {
-          status: "COMPLETED",
-          created_at: { gte: last14Days },
-        },
+        date: { gte: last14Days, lt: today },
       },
       select: {
         product_id: true,
-        quantity: true,
-        transaction: {
-          select: {
-            created_at: true,
-            total_amount: true,
-          },
-        },
+        quantity_sold: true,
+        date: true,
+        revenue: true,
       },
     });
     
-    // Calculate this month's revenue vs last month (same day range)
-    const thisMonthTransactions = await prisma.transaction.aggregate({
+    // Get the ACTUAL last sale date for each product (not limited to 14 days)
+    // This prevents the "27 years" bug for products that haven't sold recently
+    const lastSaleDates = await prisma.dailySalesAggregate.groupBy({
+      by: ["product_id"],
+      _max: {
+        date: true,
+      },
       where: {
-        status: "COMPLETED",
-        created_at: {
+        quantity_sold: { gt: 0 },
+      },
+    });
+    
+    // Calculate this month's revenue vs last month (same day range) from DailySalesAggregate
+    const thisMonthAggregates = await prisma.dailySalesAggregate.aggregate({
+      where: {
+        date: {
           gte: thisMonthStart,
           lte: today,
         },
       },
-      _sum: { total_amount: true },
+      _sum: { revenue: true },
     });
     
     // Last month up to the same day
     const lastMonthSameDay = new Date(lastMonthStart);
     lastMonthSameDay.setDate(Math.min(dayOfMonth, new Date(lastMonthStart.getFullYear(), lastMonthStart.getMonth() + 1, 0).getDate()));
     
-    const lastMonthTransactions = await prisma.transaction.aggregate({
+    const lastMonthAggregates = await prisma.dailySalesAggregate.aggregate({
       where: {
-        status: "COMPLETED",
-        created_at: {
+        date: {
           gte: lastMonthStart,
           lte: lastMonthSameDay,
         },
       },
-      _sum: { total_amount: true },
+      _sum: { revenue: true },
     });
     
-    // Build velocity data for each product
+    // Build a map of actual last sale dates for each product
+    const lastSaleDateMap = new Map<number, Date>();
+    for (const record of lastSaleDates) {
+      if (record._max.date) {
+        lastSaleDateMap.set(record.product_id, record._max.date);
+      }
+    }
+    
+    // Build velocity data for each product from aggregated data
     const velocityMap = new Map<number, {
       thisWeek: number;
       lastWeek: number;
-      lastSaleDate: Date | null;
     }>();
     
-    for (const sale of recentSales) {
-      const productId = sale.product_id;
-      const saleDate = sale.transaction.created_at;
+    for (const agg of recentAggregates) {
+      const productId = agg.product_id;
+      const saleDate = agg.date;
       const isThisWeek = saleDate >= last7Days;
       
       const existing = velocityMap.get(productId) || {
         thisWeek: 0,
         lastWeek: 0,
-        lastSaleDate: null,
       };
       
       if (isThisWeek) {
-        existing.thisWeek += sale.quantity;
+        existing.thisWeek += agg.quantity_sold;
       } else {
-        existing.lastWeek += sale.quantity;
-      }
-      
-      if (!existing.lastSaleDate || saleDate > existing.lastSaleDate) {
-        existing.lastSaleDate = saleDate;
+        existing.lastWeek += agg.quantity_sold;
       }
       
       velocityMap.set(productId, existing);
@@ -1637,7 +1644,8 @@ export async function getSmartInsights(): Promise<Insight[]> {
       const sales = velocityMap.get(product.product_id);
       const thisWeekQty = sales?.thisWeek ?? 0;
       const lastWeekQty = sales?.lastWeek ?? 0;
-      const lastSaleDate = sales?.lastSaleDate ?? null;
+      // Use the actual last sale date from our separate query, not limited to 14 days
+      const lastSaleDate = lastSaleDateMap.get(product.product_id) ?? null;
       
       const dailyVelocity = thisWeekQty / 7;
       const weeklyVelocity = thisWeekQty;
@@ -1675,8 +1683,8 @@ export async function getSmartInsights(): Promise<Insight[]> {
     // Generate insights
     const insights = generateBusinessInsights({
       velocityData,
-      thisMonthRevenue: Number(thisMonthTransactions._sum.total_amount ?? 0),
-      lastMonthSameDayRevenue: Number(lastMonthTransactions._sum.total_amount ?? 0),
+      thisMonthRevenue: Number(thisMonthAggregates._sum.revenue ?? 0),
+      lastMonthSameDayRevenue: Number(lastMonthAggregates._sum.revenue ?? 0),
     });
     
     // Return default insight if no insights generated

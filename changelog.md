@@ -4,7 +4,365 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ---
 
-## [Unreleased] - 2026-01-11
+## [Unreleased] - 2026-01-16
+
+### Next.js Configuration Fix
+- **Fixed:** `next.config.ts` now includes all external image hostnames from products.csv
+- Added 15+ domains to `images.remotePatterns` including:
+  - marilenminimart.com, imartgrocersph.com, shopmetro.ph, shopsuki.ph
+  - store.iloilosupermart.com, static.wixstatic.com, i0.wp.com
+  - ddmmw-assets.s3.ap-southeast-1.amazonaws.com, sigemart.com
+  - scontent.filo3-1.fna.fbcdn.net, ph-test-11.slatic.net
+- Prevents runtime error when navigating to POS with product images
+
+### Analytics Dashboard Data Sync & Bug Fixes
+
+#### Fixed NaN Values in Forecasting Table (`src/lib/forecasting.ts`)
+- **Problem:** Most products showed NaN for Forecasted, Recommended, and Est. Cost columns
+- **Root Cause:** WMA calculation had off-by-one error when data exceeded 30 days
+  - `WMA_WEIGHTS` has 30 elements (indices 0-29)
+  - When `values.length = 31`, the loop accessed `normalizedWeights[30]` which was `undefined`
+  - `value * undefined = NaN`, which propagated to all dependent calculations
+- **Solution:** Cap values array to weights length before calculation:
+  ```typescript
+  const effectiveValues = values.slice(0, weights.length);
+  const effectiveWeights = weights.slice(0, effectiveValues.length);
+  ```
+- Added defensive NaN handling in UI (shows "—" instead of NaN)
+
+#### Added Tooltips for Forecast Table Columns (`src/app/admin/analytics/analytics-dashboard.tsx`)
+- **Forecasted column:** Explains 7-day demand forecast using WMA with seasonality adjustment
+- **Rec column:** Explains recommended order quantity calculation with 7-day target + safety buffer
+- **Est. Cost column:** Explains cost calculation for budgeting purchase orders
+
+#### Intelligence Feed Now Uses DailySalesAggregate (`src/app/admin/analytics/actions.ts`)
+- **Problem:** `getSmartInsights()` was querying `TransactionItem` directly, not synced with pre-aggregated data
+- **Solution:** Updated to query `DailySalesAggregate` instead:
+  - Velocity calculations now use `dailySalesAggregate.quantity_sold`
+  - Monthly revenue comparisons use `dailySalesAggregate.revenue`
+  - Much faster query performance (pre-aggregated vs raw transactions)
+
+#### Fixed "27 Years No Sales" Bug
+- **Problem:** Products without recent sales showed "No sales for Over 27 years" (9999 days default)
+- **Root Cause:** Last sale date was only queried from last 14 days of aggregates
+- **Solution:** Added separate query to get actual last sale date for each product:
+  ```typescript
+  const lastSaleDates = await prisma.dailySalesAggregate.groupBy({
+    by: ["product_id"],
+    _max: { date: true },
+    where: { quantity_sold: { gt: 0 } },
+  });
+  ```
+- Now correctly shows days since actual last sale from full history
+
+#### Demand Forecast Card Requires Backfill
+- **Issue:** Demand Forecast card shows no data if `DailySalesAggregate` table is empty
+- **Solution:** Run the backfill script to populate aggregates from transaction history:
+  ```bash
+  npx tsx scripts/backfill-aggregates.ts
+  ```
+- This populates the last 90 days of sales data into the aggregates table
+
+### Reports Layout Fixes
+
+#### Main Reports Page Now Scrolls (`src/app/admin/layout-client.tsx`)
+- **Problem:** Reports index page (`/admin/reports`) couldn't scroll to see all report cards
+- **Solution:** Distinguished between main reports page and individual report pages:
+  - `isReportPage = pathname?.startsWith("/admin/reports/") && pathname !== "/admin/reports"`
+  - Main reports page now uses normal `overflow-auto` like other pages
+  - Individual report pages keep `overflow-hidden` for sticky header + single scroll
+
+#### Fixed Background Color
+- **Problem:** Report pages used `bg-background` which is not the design standard
+- **Solution:** Changed to `bg-[#f5f3ef] dark:bg-muted/30` to match other pages
+
+### Reports Module Complete Redesign
+
+#### ReportShell Component Rewrite (`src/components/reports/report-shell.tsx`)
+- **Pattern:** Now follows POS page layout pattern (full-height, no padding)
+- **Layout Structure:**
+  - Full-height container with `overflow-hidden`
+  - Control bar: `shrink-0 bg-card border-b shadow-sm`
+  - Scrollable content: `flex-1 overflow-auto p-4 md:p-6 space-y-4`
+- **Header:** Uses Shadcn Card with CardHeader/CardTitle/CardDescription
+- **Design Tokens:** All components now use proper tokens (`bg-card`, `text-foreground`, `text-muted-foreground`)
+- **ReportSummaryCard:** Updated with proper `tabular-nums font-mono` for numeric values
+
+#### Design Token Standardization (All Report Client Pages)
+- **Replaced:** `bg-[#F8F6F1]` → `bg-card`
+- **Replaced:** `text-[#2d1b1a]` → `text-foreground`
+- **Replaced:** `bg-[#FAFAF9]` → `bg-background`
+- **Replaced:** `hover:bg-[#F5F3EE]` → `hover:bg-muted/30`
+- **Table Headers:** Now use `bg-muted/50` for consistent styling
+- **Table Rows:** Use `bg-card/50 hover:bg-muted/30`
+- **Numbers:** Added `tabular-nums` class for proper numeric alignment
+
+#### Updated Files:
+- `src/components/reports/report-shell.tsx` - Complete rewrite
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+- `src/app/admin/reports/z-read/z-read-client.tsx`
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+- `src/app/admin/reports/sales-category/sales-category-client.tsx`
+- `src/app/admin/reports/spoilage/spoilage-client.tsx`
+
+---
+
+## [Unreleased] - 2026-01-15
+
+### Reports Module UI/UX Overhaul
+
+#### 1. Print Preview Mode (`src/components/reports/report-shell.tsx`)
+- **Problem:** Kiosk Mode causes silent printing without dialog - users can't preview or Save as PDF
+- **Solution:** Added fullscreen "Preview Mode" overlay with:
+  - Dark backdrop with centered white "paper" preview
+  - Floating control bar: "Exit Preview" and "Print Now" buttons
+  - Shows exactly what will print before committing
+  - Preview controls hidden during actual print via CSS
+- New "Preview" button in toolbar (Eye icon) triggers preview mode
+
+#### 2. ReportShell Sticky Header Fix (`src/components/reports/report-shell.tsx`)
+- **Root Cause:** Parent layout applies `p-4 md:p-6` padding, sticky header sat inside this padding creating a gap
+- **Solution:** Wrap entire ReportShell in negative margin container (`-m-4 md:-m-6`) to break out of parent padding
+- Sticky toolbar now uses `z-20` and `px-4 md:px-6` internal padding
+- Report content section has `px-4 md:px-6 py-6 bg-[#FAFAF9]` for proper spacing
+- Header now sits flush against top navigation bar with no gaps
+
+#### 3. Design System Color Enforcement (All Report Pages)
+- **Forbidden:** Pure white (`#FFFFFF`, `bg-white`), emerald-600 for success
+- **Page Background:** `bg-[#FAFAF9]` (Stone-50 / Warm White)
+- **Table/Card Surfaces:** `bg-[#F8F6F1]` (Soft Off-White)
+- **Primary Text:** `text-[#2d1b1a]` (Dark Coffee Brown)
+- **Success/Stock:** `#2EAFC5` (Teal) - replaces emerald-600
+- **Warning:** `#F1782F` (Orange) - replaces amber-600
+- **Danger:** `#AC0F16` (Deep Red) - replaces red-600
+- Export/Preview buttons use `bg-[#F8F6F1]` with `border-stone-300`
+- Updated `ReportSummaryCard` variants to use design system colors
+- Fixed status badges in Velocity, Profit Margin reports
+- Fixed profit text colors in Z-Read, Sales by Category reports
+
+#### 4. VelocityReportClient Refactored with Tanstack Table (`src/app/admin/reports/velocity/velocity-client.tsx`)
+- Complete rewrite using `@tanstack/react-table`
+- Added sorting: Status, Days Left, Capital Tied Up columns
+- Added filtering: Status dropdown, Category dropdown
+- Added DataTablePagination component (10 items per page)
+- Status badges use design system colors (Teal for healthy, Orange for slow, Red for dead)
+
+#### 4. New Report: Z-Read History (`src/app/admin/reports/z-read/`)
+- Created `page.tsx` (Server Component) + `z-read-client.tsx` (Client Component)
+- Tanstack Table with columns: Date, Transactions, Gross Sales, Voids, Net Profit, Cash, GCash, Closed By
+- Sorting enabled on all numeric columns
+- DataTablePagination with 10 items per page
+
+#### 5. New Report: Profit Margin Analysis (`src/app/admin/reports/profit-margin/`)
+- Created `page.tsx` (Server Component) + `profit-margin-client.tsx` (Client Component)
+- Sorted by margin_percent ascending (lowest margins first - needs attention)
+- Visual margin progress bar with color coding (red <20%, orange <35%, teal ≥35%)
+- Category filter dropdown
+- DataTablePagination with 10 items per page
+
+#### 6. New Report: Sales by Category (`src/app/admin/reports/sales-category/`)
+- Created `page.tsx` (Server Component) + `sales-category-client.tsx` (Client Component)
+- Aggregates 30-day sales data by product category
+- Revenue share progress bar visualization
+- Sorting on all columns (Revenue, Units, Profit, Margin)
+- DataTablePagination with 10 items per page
+
+#### 7. Server Action Fix: `getSalesByCategory()` (`src/actions/reports.ts`)
+- Fixed TypeScript errors from attempting to use non-existent `product` relation on `DailySalesAggregate`
+- Changed from `include: { product }` to product_id lookup via map
+- Corrected field name from `agg.cogs` to `agg.cost`
+
+---
+
+## [2026-01-14]
+
+### Wholesale Product Categories & Analytics Sync Automation
+
+#### 1. Category Separation: Soda vs Softdrinks Case (`scripts/products.csv`, `scripts/generate_history_v3.py`)
+- **Soda Category:** Individual bottles (295ml, 500ml, 1L, 1.5L) - retail customers
+- **Softdrinks Case Category:** Case/bundle items only - wholesale/vendor customers
+- Updated `PRODUCTS` list with proper category assignments
+- Added `wholesale_only: True` flag to 8 case/bundle products
+
+#### 2. Wholesale Products Now Generate Sales (`scripts/generate_history_v3.py`)
+- Added 8 wholesale-only products to the generator:
+  - Coke Swakto 195ml (1 Case) - ₱125
+  - Royal Swakto 195ml (1 Case) - ₱120
+  - Sprite Swakto 195ml (1 Case) - ₱120
+  - Mountain Dew 290ml (1 Case) - ₱252
+  - Juicy Lemon 355ml (1 Bundle) - ₱145
+  - Coke 1L (1 Case) - ₱345
+  - Sprite 1L (1 Case) - ₱330
+  - Royal 1L (1 Case) - ₱330
+
+#### 3. Smart Product Selection by Customer Profile (`scripts/generate_history_v3.py`)
+- **SNACKER/HOUSEHOLD:** Only retail products (excludes `wholesale_only` items)
+- **VENDOR:** Includes both retail bulk AND wholesale case/bundle products
+- Wholesale products have 3x selection weight for VENDOR profile
+- Case products use smaller qty (1-3 cases) vs retail bulk (3-12 units)
+
+#### 4. Automatic Analytics Sync After Import (`src/components/sales/import-sales-dialog.tsx`)
+- After successful CSV import, automatically calls `backfillSalesAggregates()`
+- Shows progress toast: "Syncing analytics data..."
+- Shows completion toast with days/records processed
+- Eliminates need for manual terminal command
+
+#### 5. Manual "Sync Analytics" Button (`src/app/admin/sales/sales-history-client.tsx`)
+- Added **Sync Analytics** button to Sales History toolbar (next to Import CSV)
+- Shows database icon, changes to spinner while syncing
+- Tooltip explains: "Rebuild analytics aggregates from transaction data"
+- Can be used anytime without running terminal commands
+
+#### 6. New Server Action: `backfillSalesAggregates()` (`src/actions/settings.ts`)
+- Processes last 90 days of completed transactions
+- Populates `DailySalesAggregate` table for forecasting
+- Returns: `{ success, message, daysProcessed, recordsCreated }`
+- Automatically revalidates analytics pages after completion
+
+---
+
+## [Unreleased] - 2026-01-14
+
+### Sales History UI Improvements
+
+#### 1. Dynamic Date Range in Generator (`scripts/generate_history_v3.py`)
+- Changed `END_DATE` from hardcoded `2026-01-03` to `datetime.now()`
+- Generator now automatically simulates up to the current date when run
+
+#### 2. Number Formatting in Sales History (`src/app/admin/sales/sales-history-client.tsx`)
+- Added `toLocaleString()` formatting for transaction counts
+- KPI chip now shows "108,153 Sales" instead of "108153 Sales"
+- Pagination footer shows "Showing 1 to 20 of 108,153 transactions"
+
+#### 3. Pagination Button Width Fix (`src/app/admin/sales/sales-history-client.tsx`)
+- Changed from fixed `w-8` to `min-w-8 px-2` for page number buttons
+- 4+ digit page numbers (e.g., "5,408") now display properly without cramping
+- Added `toLocaleString()` to page numbers for comma formatting
+
+#### 4. Restock Recommendations Fix
+- **Root Cause:** `DailySalesAggregate` table was empty after CSV import
+- **Solution:** Ran `npx tsx scripts/backfill-aggregates.ts` to populate 3,440 records
+- Backfill covers last 90 days of transaction data for velocity calculations
+- After backfill, restock recommendations should show actual daily sales velocity
+
+---
+
+### Realistic Sales Transaction Generator (`scripts/generate_history_v3.py`)
+
+Complete overhaul of the sales history generator to produce realistic consumer purchase patterns.
+
+#### Problem Statement
+- Previous generator produced only ~2,000 large bulk transactions
+- All transactions were ₱2,500-₱30,000 (vendor-scale), missing typical retail patterns
+- Customer profile distribution was not being applied correctly
+
+#### Solution: Transaction-Count-Driven Generation
+
+**1. Updated Customer Profile Ranges:**
+| Profile | Transactions | Items/Tx | Ticket Range | Qty/Item |
+|---------|-------------|----------|--------------|----------|
+| SNACKER (70%) | ~74,000 | 1-2 | ₱15-150 | 1 |
+| HOUSEHOLD (20%) | ~21,000 | 3-8 | ₱300-1,500 | 1-2 |
+| VENDOR (10%) | ~10,000 | 5-15 | ₱1,500-8,000 | 3-12 |
+
+**2. New Transaction Count Logic:**
+- Base: 110 transactions/day × 734 days = ~80,000+ transactions
+- Added `BASE_DAILY_TRANSACTIONS` constant (110)
+- `get_daily_transaction_count()` applies seasonality/holiday multipliers
+
+**3. Improved Product Selection:**
+- Snackers prefer cheap items (₱7-30 sodas, snacks)
+- Separate product pools by price tier (cheap/mid/expensive)
+- No duplicate products within single transaction
+- Proper quantity caps per profile
+
+**4. Results (106,583 transactions generated):**
+- SNACKER: 74,451 tx (69.9%), Avg ₱37.84/tx
+- HOUSEHOLD: 21,511 tx (20.2%), Avg ₱432.36/tx
+- VENDOR: 10,621 tx (10.0%), Avg ₱4,559.78/tx
+
+---
+
+## [2026-01-13]
+
+### Sales Simulation & Inventory Data Improvements
+
+#### 1. Hero Product Boost Reduction (`scripts/generate_history_v3.py`)
+- Reduced Lucky Me Pancit Canton hero_boost from **10.0 → 3.0**
+- Previously hero product dominated ~40% of sales, now balanced at ~15%
+- More realistic sales distribution across product catalog
+
+#### 2. Product Pool Distribution Fix (`scripts/generate_history_v3.py`)
+- Updated weighted_pool logic to ensure ALL products participate in sales
+- Each product now appears at least once before boost duplicates are added
+- Dead stock (UFC Ketchup) still correctly excluded via `never_sell: True`
+
+#### 3. Warehouse-Level Stock Quantities (`scripts/products.csv`)
+- Updated all stock levels to realistic warehouse quantities (45-800 units)
+- **Sachets/high-turnover items:** 550-800 units (Milo, Downy, Joy sachets, Energen)
+- **500ml softdrinks:** 250-480 units
+- **1.5L softdrinks:** 130-220 units
+- **Case/Bundle wholesale:** 65-120 units
+- **Dairy products:** 150-320 units
+- **Canned goods:** 380-480 units
+- **Personal care:** 180-250 units
+- **Hero product (Lucky Me):** 750 units
+- **Dead stock (UFC Ketchup):** 45 units
+
+#### 4. Realistic Expiry Dates by Category (`scripts/products.csv`)
+- **Softdrinks:** 2027 (6-12 months shelf life)
+- **Dairy (Evap/Condensed):** 2026-2027 (shorter shelf life)
+- **Canned Goods:** 2028 (2-3 year shelf life)
+- **Snacks/Instant Noodles:** 2026 (3-8 months)
+- **Personal Care:** 2028-2029 (long shelf life)
+- **Household chemicals:** 2028 (long shelf life)
+
+---
+
+## [2026-01-12]
+
+### Reports Module: "Digital First, Paper Ready"
+
+Implements the automated reporting objective from thesis documentation. Replaces manual logbooks with interactive, printable, and exportable reports.
+
+#### 1. Report Server Actions (`src/actions/reports.ts`)
+- **Spoilage & Wastage Report:** Queries StockMovement for DAMAGE, SUPPLIER_RETURN types with estimated loss calculations
+- **Inventory Velocity Report:** Identifies Dead Stock (0 sales in 30 days) vs Fast Movers using DailySalesAggregate
+- **Z-Read History:** Daily closure summaries with gross sales, payment breakdown, void tracking
+- **Profit Margin Analysis:** Cost vs retail price comparison with margin status classification
+- All reports include typed interfaces and summary aggregations
+
+#### 2. Reports Gallery Page (`src/app/admin/reports/page.tsx`)
+- Grid layout with grouped report cards
+- **Categories:** Sales & Financial, Inventory Health, Audit & Security
+- Card components with icons, descriptions, and badges
+- Links to 9 report types (Spoilage, Velocity, Z-Read, Profit Margin, etc.)
+- "Digital First, Paper Ready" banner explaining the approach
+
+#### 3. Report Shell Component (`src/components/reports/report-shell.tsx`)
+- Reusable wrapper for all printable reports
+- **Print Mode:** CSS @media print rules hide sidebar/nav, optimize for A4
+- **Excel Export:** Built-in ExcelJS integration with formatted headers
+- **Metadata Header:** Title, date range, generated by, store name
+- **Helper Components:** `ReportSummaryCard`, `ReportSection`
+
+#### 4. Spoilage Report (`src/app/admin/reports/spoilage/`)
+- Server component page with client interactivity
+- Date range picker for filtering
+- Summary cards: Total Incidents, Units Lost, Estimated Loss
+- Breakdown by movement type (Damage, Supplier Return)
+- Detailed table with product info, reason, and logged by
+
+#### 5. Velocity Report (`src/app/admin/reports/velocity/`)
+- Dead Stock vs Fast Movers analysis
+- Status filters: Dead Stock, Slow Mover, Moderate, Fast Mover
+- Capital efficiency analysis with at-risk percentage
+- Days of supply calculations
+- Recommendations panel for dead stock action items
+
+---
+
+## [2026-01-11]
 
 ### Return to Supplier Feature for Batch Management
 
@@ -30,8 +388,6 @@ All notable changes to Christian Minimart POS System will be documented in this 
 - Proper validation and toast notifications
 
 ---
-
-## [Earlier on 2026-01-11]
 
 ### UI/UX Improvements: Batch Restock Dialog & Products Table
 

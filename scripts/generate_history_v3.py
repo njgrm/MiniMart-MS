@@ -27,7 +27,7 @@ import math
 # =============================================================================
 
 START_DATE = datetime(2024, 1, 1)
-END_DATE = datetime(2026, 1, 3)  # Current date
+END_DATE = datetime.now().replace(hour=23, minute=59, second=59)  # Current date (dynamic)
 
 OUTPUT_FILE = "sales_history_v3.csv"
 
@@ -38,31 +38,50 @@ BUSINESS_HOURS_START = 8   # 8:00 AM
 BUSINESS_HOURS_END = 19    # 7:00 PM
 
 # Customer Profile Distribution
+# SNACKER: Quick purchases - single item like a soda or snack (70% of transactions)
+# HOUSEHOLD: Weekly grocery run - multiple items (20% of transactions)
+# VENDOR: Bulk reseller - large quantity orders (10% of transactions)
 CUSTOMER_PROFILES = {
-    "SNACKER": {"weight": 0.70, "items_range": (1, 3), "ticket_range": (20, 300)},
-    "HOUSEHOLD": {"weight": 0.20, "items_range": (5, 10), "ticket_range": (500, 2000)},
-    "VENDOR": {"weight": 0.10, "items_range": (10, 25), "ticket_range": (2000, 10000)},
+    "SNACKER": {"weight": 0.70, "items_range": (1, 2), "ticket_range": (15, 150), "qty_per_item": (1, 1)},
+    "HOUSEHOLD": {"weight": 0.20, "items_range": (3, 8), "ticket_range": (300, 1500), "qty_per_item": (1, 2)},
+    "VENDOR": {"weight": 0.10, "items_range": (5, 15), "ticket_range": (1500, 8000), "qty_per_item": (3, 12)},
 }
 
+# Base daily transaction count (will be adjusted by multipliers)
+# ~110 transactions/day × 730 days = ~80,300 transactions over 2 years
+BASE_DAILY_TRANSACTIONS = 110
+
 # Product catalog (matching Christian Minimart actual database)
+# Categories: SODA (individual bottles), SOFTDRINKS_CASE (wholesale only - case/bundle)
 PRODUCTS = [
-    # SODA/SOFTDRINKS - Single serve and bottles
+    # SODA - Individual bottles (retail customers: snackers, household)
     {"barcode": "544900000099", "name": "Coca-Cola Mismo 295ml", "brand": "Coca-Cola", "category": "SODA", "base_retail": 20.00, "base_cost": 18.00},
-    {"barcode": "480198112005", "name": "Sprite 500ml", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 25.00, "base_cost": 22.50},
-    {"barcode": "480198112010", "name": "Royal Tru Orange 500ml", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 25.00, "base_cost": 22.50},
-    {"barcode": "480198112000", "name": "Coke 500ml", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 25.00, "base_cost": 22.50},
-    {"barcode": "480392525114", "name": "Mountain Dew 500ml", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 22.00, "base_cost": 20.00},
-    {"barcode": "480392525110", "name": "Pepsi 500ml", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 22.00, "base_cost": 20.00},
-    {"barcode": "480198111607", "name": "Coke 1.5L", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 60.00, "base_cost": 54.00},
-    {"barcode": "480198118062", "name": "Sprite 1.5L", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 60.00, "base_cost": 54.00},
-    {"barcode": "480191198062", "name": "Royal Tru Orange 1.5L", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 60.00, "base_cost": 54.00},
-    {"barcode": "480392515114", "name": "Mountain Dew 1.5L", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 55.00, "base_cost": 50.00},
-    {"barcode": "480392515110", "name": "Pepsi 1.5L", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 55.00, "base_cost": 50.00},
-    {"barcode": "480198111664", "name": "Coke Zero 1.5L", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 60.00, "base_cost": 54.00},
-    {"barcode": "480392515112", "name": "7-up 1.5L", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 55.00, "base_cost": 50.00},
-    {"barcode": "480198109722", "name": "Royal Tru Strawberry 1.5L", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 60.00, "base_cost": 54.00},
-    {"barcode": "480392515116", "name": "Mirinda Orange 1.5L", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 60.00, "base_cost": 54.00},
-    {"barcode": "480198111696", "name": "Coke Light", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 65.00, "base_cost": 58.50},
+    {"barcode": "480198112005", "name": "Sprite 500ml", "brand": "Coca-Cola", "category": "SODA", "base_retail": 25.00, "base_cost": 22.50},
+    {"barcode": "480198112010", "name": "Royal Tru Orange 500ml", "brand": "Coca-Cola", "category": "SODA", "base_retail": 25.00, "base_cost": 22.50},
+    {"barcode": "480198112000", "name": "Coke 500ml", "brand": "Coca-Cola", "category": "SODA", "base_retail": 25.00, "base_cost": 22.50},
+    {"barcode": "480392525114", "name": "Mountain Dew 500ml", "brand": "Pepsi", "category": "SODA", "base_retail": 22.00, "base_cost": 20.00},
+    {"barcode": "480392525110", "name": "Pepsi 500ml", "brand": "Pepsi", "category": "SODA", "base_retail": 22.00, "base_cost": 20.00},
+    {"barcode": "480198111607", "name": "Coke 1.5L", "brand": "Coca-Cola", "category": "SODA", "base_retail": 60.00, "base_cost": 54.00},
+    {"barcode": "480198118062", "name": "Sprite 1.5L", "brand": "Coca-Cola", "category": "SODA", "base_retail": 60.00, "base_cost": 54.00},
+    {"barcode": "480191198062", "name": "Royal Tru Orange 1.5L", "brand": "Coca-Cola", "category": "SODA", "base_retail": 60.00, "base_cost": 54.00},
+    {"barcode": "480392515114", "name": "Mountain Dew 1.5L", "brand": "Pepsi", "category": "SODA", "base_retail": 55.00, "base_cost": 50.00},
+    {"barcode": "480392515110", "name": "Pepsi 1.5L", "brand": "Pepsi", "category": "SODA", "base_retail": 55.00, "base_cost": 50.00},
+    {"barcode": "480198111664", "name": "Coke Zero 1.5L", "brand": "Coca-Cola", "category": "SODA", "base_retail": 60.00, "base_cost": 54.00},
+    {"barcode": "480392515112", "name": "7-up 1.5L", "brand": "Pepsi", "category": "SODA", "base_retail": 55.00, "base_cost": 50.00},
+    {"barcode": "480198109722", "name": "Royal Tru Strawberry 1.5L", "brand": "Coca-Cola", "category": "SODA", "base_retail": 60.00, "base_cost": 54.00},
+    {"barcode": "480392515116", "name": "Mirinda Orange 1.5L", "brand": "Pepsi", "category": "SODA", "base_retail": 60.00, "base_cost": 54.00},
+    {"barcode": "480198111696", "name": "Coke Light 1.5L", "brand": "Coca-Cola", "category": "SODA", "base_retail": 65.00, "base_cost": 58.50},
+    
+    # SOFTDRINKS CASE - Wholesale only (VENDOR profile purchases these by case/bundle)
+    # These have wholesale_price instead of retail_price, qty represents cases not individual bottles
+    {"barcode": "480198112717", "name": "Coke Swakto 195ml (1 Case)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 125.00, "base_cost": 112.00, "wholesale_only": True},
+    {"barcode": "480198112720", "name": "Royal Swakto 195ml (1 Case)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 125.00, "base_cost": 112.00, "wholesale_only": True},
+    {"barcode": "480198102719", "name": "Sprite Swakto 195ml (1 Case)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 125.00, "base_cost": 112.00, "wholesale_only": True},
+    {"barcode": "480392513032", "name": "Mountain Dew 290ml (1 Case)", "brand": "Pepsi", "category": "SOFTDRINKS_CASE", "base_retail": 200.00, "base_cost": 180.00, "wholesale_only": True},
+    {"barcode": "480374937310", "name": "Coke 1L (1 Case)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 350.00, "base_cost": 315.00, "wholesale_only": True},
+    {"barcode": "480611352020", "name": "Juicy Lemon 237 ml (1 Bundle)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 141.00, "base_cost": 127.00, "wholesale_only": True},
+    {"barcode": "480732471900", "name": "Sprite 1L (1 Case)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 350.00, "base_cost": 315.00, "wholesale_only": True},
+    {"barcode": "542353276241", "name": "Royal 1L (1 Case)", "brand": "Coca-Cola", "category": "SOFTDRINKS_CASE", "base_retail": 350.00, "base_cost": 315.00, "wholesale_only": True},
     
     # BEVERAGES (affected by summer seasonality)  
     {"barcode": "955600121722", "name": "Milo 22g Sachet", "brand": "Nestle", "category": "BEVERAGES", "base_retail": 12.00, "base_cost": 10.50},
@@ -109,9 +128,9 @@ PRODUCTS = [
     # This is intentionally excluded from normal selection - only exists in database
     {"barcode": "480004210014", "name": "UFC Premium Banana Ketchup 320g", "brand": "UFC", "category": "DEAD_STOCK", "base_retail": 65.00, "base_cost": 58.00, "never_sell": True},
     
-    # HERO PRODUCT: Product with extremely high velocity (for testing hero product insight)
-    # This product gets a 10x boost in selection probability
-    {"barcode": "489310100015", "name": "Lucky Me Pancit Canton with Kalamnsi 60g", "brand": "Lucky Me", "category": "INSTANT_NOODLES", "base_retail": 12.50, "base_cost": 11.00, "hero_boost": 10.0},
+    # HERO PRODUCT: Product with higher velocity (for testing hero product insight)
+    # This product gets a 3x boost in selection probability (toned down from 10x)
+    {"barcode": "489310100015", "name": "Lucky Me Pancit Canton with Kalamnsi 60g", "brand": "Lucky Me", "category": "INSTANT_NOODLES", "base_retail": 12.50, "base_cost": 11.00, "hero_boost": 3.0},
 ]
 
 # Brands that run manufacturer campaigns
@@ -413,83 +432,130 @@ def select_customer_profile() -> str:
 
 def get_products_for_profile(profile: str, date: datetime, campaigns: list[BrandCampaign], 
                              promos: list[StorePromo]) -> list[dict]:
-    """Select products appropriate for the customer profile"""
+    """Select products appropriate for the customer profile with realistic quantities"""
     config = CUSTOMER_PROFILES[profile]
     min_items, max_items = config["items_range"]
     target_min, target_max = config["ticket_range"]
+    min_qty, max_qty = config["qty_per_item"]
     
     # Adjust target for inflation
     inflation = get_inflation_factor(date)
     target_min *= inflation
     target_max *= inflation
     
+    # Determine how many distinct product types this customer will buy
     num_items = random.randint(min_items, max_items)
     selected_items = []
     current_total = 0
     
     # Create a pool of products with their inflated prices
-    # Filter out "never_sell" products (dead stock test scenario)
+    # Filter based on profile type:
+    # - SNACKER/HOUSEHOLD: Only retail products (exclude wholesale_only)
+    # - VENDOR: All products including wholesale_only (case/bundle purchases)
     product_pool = []
+    wholesale_pool = []  # Separate pool for case/bundle products (VENDOR only)
+    
     for p in PRODUCTS:
         if p.get("never_sell", False):
             continue  # Skip dead stock products entirely
+        
         retail, cost = get_inflated_prices(p, date)
-        product_pool.append({**p, "retail_price": retail, "cost_price": cost})
+        product_with_prices = {**p, "retail_price": retail, "cost_price": cost}
+        
+        if p.get("wholesale_only", False):
+            # Case/bundle products go to wholesale pool (VENDOR only)
+            wholesale_pool.append(product_with_prices)
+        else:
+            # Regular retail products
+            product_pool.append(product_with_prices)
+    
+    # Separate products by price tier for more realistic selection
+    cheap_products = [p for p in product_pool if p["retail_price"] <= 30]
+    mid_products = [p for p in product_pool if 30 < p["retail_price"] <= 80]
+    expensive_products = [p for p in product_pool if p["retail_price"] > 80]
     
     # Create weighted selection for hero products
-    # Products with hero_boost get added multiple times to increase selection probability
     weighted_pool = []
     for p in product_pool:
-        hero_boost = int(p.get("hero_boost", 1))  # Default boost is 1 (no boost)
-        for _ in range(hero_boost):
+        hero_boost = int(p.get("hero_boost", 1))
+        weighted_pool.append(p)
+        for _ in range(hero_boost - 1):
             weighted_pool.append(p)
     
-    # Shuffle for randomness
-    random.shuffle(weighted_pool)
+    # Snackers prefer cheap items (sodas, snacks, instant noodles)
+    if profile == "SNACKER":
+        # 80% chance of picking cheap items, 20% mid-range
+        # Exclude wholesale_only products
+        selection_pool = cheap_products * 4 + mid_products if cheap_products else weighted_pool
+    elif profile == "HOUSEHOLD":
+        # Mix of all price tiers, exclude wholesale_only
+        selection_pool = cheap_products * 2 + mid_products * 2 + expensive_products
+    else:  # VENDOR
+        # Vendors buy BOTH retail products in bulk AND wholesale case/bundle products
+        # Give strong preference to wholesale products (cases/bundles) - 60% of selection
+        selection_pool = weighted_pool + (wholesale_pool * 3)  # 3x weight for wholesale
     
-    for _ in range(num_items * 3):  # Try multiple times to reach target
-        if len(selected_items) >= num_items and current_total >= target_min:
+    # Add hero products to selection pool
+    for p in product_pool:
+        if p.get("hero_boost", 1) > 1:
+            for _ in range(int(p["hero_boost"])):
+                selection_pool.append(p)
+    
+    random.shuffle(selection_pool)
+    
+    # Select exactly num_items products (or fewer if budget exceeded)
+    attempts = 0
+    max_attempts = num_items * 5
+    
+    while len(selected_items) < num_items and attempts < max_attempts:
+        attempts += 1
+        
+        if not selection_pool:
             break
             
-        product = random.choice(weighted_pool)  # Use weighted pool for hero product boost
+        product = random.choice(selection_pool)
         retail = product["retail_price"]
         
-        # Skip if would exceed budget for snackers
-        if profile == "SNACKER" and current_total + retail > target_max:
-            continue
-            
         # Determine quantity based on profile
-        if profile == "SNACKER":
-            qty = 1
-        elif profile == "HOUSEHOLD":
-            qty = random.randint(1, 3)
-        else:  # VENDOR - bulk buying
-            qty = random.randint(5, 20)
+        # For wholesale products (cases), qty is number of cases (smaller qty)
+        if product.get("wholesale_only", False):
+            qty = random.randint(1, 3)  # 1-3 cases per order
+        else:
+            qty = random.randint(min_qty, max_qty)
         
-        # Check for campaigns/promos to boost certain items
+        # Check for campaigns/promos - slight quantity boost
         in_campaign, _ = is_within_campaign(date, campaigns, product["brand"])
         in_promo, _ = is_within_store_promo(date, promos, product["barcode"])
         
-        # Boost quantity for items on promo
-        if in_campaign or in_promo:
-            qty = int(qty * 1.5)
+        if (in_campaign or in_promo) and profile != "SNACKER":
+            qty = min(qty + 1, max_qty + 2)  # Small boost, capped
         
         item_total = retail * qty
         
-        # For vendors, cap at max ticket
-        if profile == "VENDOR" and current_total + item_total > target_max:
+        # Check if adding this would exceed budget
+        if current_total + item_total > target_max:
+            # For snackers, just skip expensive items
+            if profile == "SNACKER":
+                continue
+            # For others, reduce quantity to fit
             qty = max(1, int((target_max - current_total) / retail))
+            if qty <= 0:
+                continue
             item_total = retail * qty
         
-        if qty > 0:
-            selected_items.append({
-                **product,
-                "quantity": qty,
-                "subtotal": round(item_total, 2),
-                "cost_total": round(product["cost_price"] * qty, 2),
-            })
-            current_total += item_total
+        # Avoid duplicates - check if product already selected
+        if any(item["barcode"] == product["barcode"] for item in selected_items):
+            continue
         
+        selected_items.append({
+            **product,
+            "quantity": qty,
+            "subtotal": round(item_total, 2),
+            "cost_total": round(product["cost_price"] * qty, 2),
+        })
+        current_total += item_total
+        
+        # Stop if we've exceeded max budget
         if current_total >= target_max:
             break
     
@@ -500,19 +566,14 @@ def get_products_for_profile(profile: str, date: datetime, campaigns: list[Brand
 # Daily Transaction Generator
 # =============================================================================
 
-def generate_daily_transactions(
-    date: datetime,
-    campaigns: list[BrandCampaign],
-    promos: list[StorePromo],
-    holidays: list[Holiday]
-) -> list[dict]:
-    """Generate all transactions for a single day with customer profiles"""
+def get_daily_transaction_count(date: datetime, holidays: list[Holiday]) -> int:
+    """
+    Calculate the number of transactions for a given day.
+    Base: ~110 transactions/day, adjusted by seasonality and day-of-week.
+    """
+    base_count = BASE_DAILY_TRANSACTIONS
     
-    transactions = []
-    daily_revenue = 0
-    target_revenue = get_daily_revenue_target(date)
-    
-    # Apply seasonality to target
+    # Apply seasonality
     seasonality = get_seasonality_multiplier(date, "")
     dow_mult = get_day_of_week_multiplier(date)
     
@@ -520,25 +581,40 @@ def generate_daily_transactions(
     in_holiday, holiday = is_within_holiday(date, holidays)
     holiday_mult = holiday.multiplier if in_holiday else 1.0
     
-    adjusted_target = target_revenue * seasonality * dow_mult * holiday_mult
+    # Payday boost (more customers on payday)
+    payday_mult = get_payday_multiplier(date)
     
-    # Add randomness to daily target (±10%)
-    adjusted_target *= random.uniform(0.9, 1.1)
+    # Calculate adjusted count with some randomness (±15%)
+    adjusted_count = base_count * seasonality * dow_mult * holiday_mult * payday_mult
+    adjusted_count *= random.uniform(0.85, 1.15)
+    
+    return max(50, int(adjusted_count))  # Minimum 50 transactions per day
+
+
+def generate_daily_transactions(
+    date: datetime,
+    campaigns: list[BrandCampaign],
+    promos: list[StorePromo],
+    holidays: list[Holiday]
+) -> list[dict]:
+    """
+    Generate all transactions for a single day with realistic customer profiles.
+    Uses transaction-count-driven approach for realistic volume.
+    """
+    
+    transactions = []
+    
+    # Check for holidays
+    in_holiday, holiday = is_within_holiday(date, holidays)
+    
+    # Calculate how many transactions to generate today
+    target_transactions = get_daily_transaction_count(date, holidays)
     
     transaction_id_base = date.strftime("%Y%m%d")
-    tx_counter = 1
     
-    while daily_revenue < adjusted_target:
-        # Select customer profile
+    for tx_counter in range(1, target_transactions + 1):
+        # Select customer profile based on weighted distribution
         profile = select_customer_profile()
-        
-        # Apply payday multiplier for household shoppers
-        if profile == "HOUSEHOLD":
-            payday_mult = get_payday_multiplier(date)
-            if payday_mult > 1.0 and random.random() < 0.3:  # 30% more household shoppers on payday
-                pass  # Keep the household profile
-            elif random.random() < 0.5:
-                profile = "SNACKER"  # Otherwise might switch to snacker
         
         # Get products for this customer
         items = get_products_for_profile(profile, date, campaigns, promos)
@@ -553,12 +629,15 @@ def generate_daily_transactions(
         # Generate transaction time
         tx_time = generate_transaction_time(date)
         
-        # Payment method
-        payment = random.choice(PAYMENT_METHODS)
+        # Payment method - snackers more likely to use cash
+        if profile == "SNACKER":
+            payment = random.choices(["CASH", "GCASH"], weights=[0.8, 0.2], k=1)[0]
+        else:
+            payment = random.choice(PAYMENT_METHODS)
         
         transaction_id = f"TX-{transaction_id_base}-{tx_counter:04d}"
         
-        # Create transaction record
+        # Create transaction record for each item
         for item in items:
             # Check for events affecting this item
             in_campaign, campaign = is_within_campaign(date, campaigns, item["brand"])
@@ -599,13 +678,6 @@ def generate_daily_transactions(
                 "event_name": event_name,
                 "inflation_factor": round(get_inflation_factor(date), 4),
             })
-        
-        daily_revenue += tx_total
-        tx_counter += 1
-        
-        # Safety cap to prevent infinite loops
-        if tx_counter > 2000:
-            break
     
     return transactions
 
@@ -648,10 +720,12 @@ def generate_all_sales() -> tuple[list[dict], list, list, list]:
     
     # Generate daily sales
     print("\n⏳ Generating daily sales data...")
+    print(f"   📊 Target: ~{BASE_DAILY_TRANSACTIONS} transactions/day")
     current_date = START_DATE
     total_days = (END_DATE - START_DATE).days
     
     day_count = 0
+    total_tx_count = 0
     while current_date <= END_DATE:
         daily_transactions = generate_daily_transactions(
             current_date,
@@ -661,15 +735,19 @@ def generate_all_sales() -> tuple[list[dict], list, list, list]:
         )
         all_sales.extend(daily_transactions)
         
+        # Count unique transactions
+        unique_tx_ids = set(t["transaction_id"] for t in daily_transactions)
+        total_tx_count += len(unique_tx_ids)
+        
         day_count += 1
-        if day_count % 30 == 0:
+        if day_count % 60 == 0:
             progress = (day_count / total_days) * 100
             daily_rev = sum(t["subtotal"] for t in daily_transactions)
-            print(f"   📊 Day {day_count}/{total_days} ({progress:.0f}%) - {current_date.strftime('%Y-%m-%d')} - Revenue: ₱{daily_rev:,.2f}")
+            print(f"   📊 Day {day_count}/{total_days} ({progress:.0f}%) - {current_date.strftime('%Y-%m-%d')} - Tx: {len(unique_tx_ids)} - Revenue: ₱{daily_rev:,.2f}")
         
         current_date += timedelta(days=1)
     
-    print(f"\n✅ Generated {len(all_sales):,} sales records across {day_count} days")
+    print(f"\n✅ Generated {len(all_sales):,} line items across {total_tx_count:,} transactions over {day_count} days")
     
     return all_sales, all_campaigns, all_promos, all_holidays
 
@@ -780,26 +858,34 @@ def print_summary_stats(sales: list[dict]):
     total_cost = sum(s["cost_total"] for s in sales)
     total_profit = sum(s["profit"] for s in sales)
     total_units = sum(s["quantity"] for s in sales)
+    total_transactions = len(set(s["transaction_id"] for s in sales))
     
     print("\n" + "-" * 70)
-    print(f"💰 Total Revenue (3 Years): ₱{total_revenue:,.2f}")
+    print(f"💰 Total Revenue: ₱{total_revenue:,.2f}")
+    print(f"🧾 Total Transactions: {total_transactions:,}")
     print(f"📦 Total Units Sold: {total_units:,}")
     print(f"💵 Total COGS: ₱{total_cost:,.2f}")
     print(f"📈 Total Profit: ₱{total_profit:,.2f}")
     print(f"📊 Average Margin: {(total_profit/total_revenue)*100:.1f}%")
+    print(f"🛒 Average Transaction Value: ₱{total_revenue/total_transactions:,.2f}")
     
-    # Customer profile breakdown
-    print("\n👥 Customer Profile Breakdown:")
-    by_profile = defaultdict(lambda: {"count": 0, "revenue": 0})
+    # Customer profile breakdown - by transactions
+    print("\n👥 Customer Profile Breakdown (by Transactions):")
+    
+    # Group sales by transaction to get accurate counts
+    tx_by_profile = defaultdict(set)
+    revenue_by_profile = defaultdict(float)
     for s in sales:
-        profile = s["customer_type"]
-        by_profile[profile]["count"] += 1
-        by_profile[profile]["revenue"] += s["subtotal"]
+        tx_by_profile[s["customer_type"]].add(s["transaction_id"])
+        revenue_by_profile[s["customer_type"]] += s["subtotal"]
     
     for profile in ["SNACKER", "HOUSEHOLD", "VENDOR"]:
-        data = by_profile[profile]
-        pct = (data["revenue"] / total_revenue * 100) if total_revenue > 0 else 0
-        print(f"   - {profile}: {data['count']:,} items, ₱{data['revenue']:,.2f} ({pct:.1f}% of revenue)")
+        tx_count = len(tx_by_profile[profile])
+        tx_pct = (tx_count / total_transactions * 100) if total_transactions > 0 else 0
+        rev = revenue_by_profile[profile]
+        rev_pct = (rev / total_revenue * 100) if total_revenue > 0 else 0
+        avg_ticket = rev / tx_count if tx_count > 0 else 0
+        print(f"   - {profile}: {tx_count:,} transactions ({tx_pct:.0f}%), ₱{rev:,.2f} revenue ({rev_pct:.1f}%), Avg ₱{avg_ticket:.2f}/tx")
     
     # Inflation impact
     print("\n💹 Inflation Impact:")

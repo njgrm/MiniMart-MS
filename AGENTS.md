@@ -58,9 +58,9 @@
 * **Functional Programming:** Avoid classes. Use functional components and hooks.
 * **Typing:** Strict TypeScript. No `any`. Use interfaces/types for all props and data models.
 * **Naming:**
-    * Variables: Descriptive with auxiliary verbs (`isLoading`, `hasError`, `canSubmit`).
-    * Files: Kebab-case (`components/product-card.tsx`).
-    * Directories: Kebab-case (`app/admin/sales-history`).
+    * Variables: Descriptive with auxiliary verbs (`isLoading`, `hasError`, `canSubmit`).
+    * Files: Kebab-case (`components/product-card.tsx`).
+    * Directories: Kebab-case (`app/admin/sales-history`).
 
 ### Next.js Patterns
 * **RSC First:** Use React Server Components for data fetching. Only use `'use client'` for interactive components.
@@ -70,8 +70,8 @@
 ### State Management
 * **Server State:** Rely on `revalidatePath` and RSC refresh for server data.
 * **Client State:** Use **Zustand** stores (`lib/store/*.ts`) for:
-    * `useCartStore`: Managing the active POS transaction.
-    * `useSettingsStore`: UI preferences.
+    * `useCartStore`: Managing the active POS transaction.
+    * `useSettingsStore`: UI preferences.
 
 ---
 
@@ -89,12 +89,12 @@
 
 ### C. Sales History & Analytics
 * **Forecasting:** Use **Proportional Forecasting**.
-    * 7 Days History -> 7 Days Forecast.
-    * 30 Days History -> 14 Days Forecast.
-    * 90 Days History -> 30 Days Forecast.
+    * 7 Days History -> 7 Days Forecast.
+    * 30 Days History -> 14 Days Forecast.
+    * 90 Days History -> 30 Days Forecast.
 * **Restock Logic:**
-    * **Dynamic ROP:** Reorder Points = `(Daily Velocity * Lead Time) + Safety Buffer`.
-    * **Budgeting:** Always show "Total Recommended Order Value" to check cash flow.
+    * **Dynamic ROP:** Reorder Points = `(Daily Velocity * Lead Time) + Safety Buffer`.
+    * **Budgeting:** Always show "Total Recommended Order Value" to check cash flow.
 
 ### D. Audit Logs
 * **Scope:** Track **EVERY** Create, Update, Delete action (Inventory, Products, Orders).
@@ -104,14 +104,15 @@
 
 ## 6. Development Workflow (Methodology)
 
-1.  **System 2 Thinking:** Analyze requirements first. Identify the "Reference Implementation" to mimic style.
-2.  **Implementation:**
-    * **Step 1:** Schema/DB changes (`prisma/schema.prisma`).
-    * **Step 2:** Server Actions & Zod Validations (with Audit Logging).
-    * **Step 3:** UI Components (referencing Design System tokens).
-3.  **Review:** Check against the **Reference Implementations** (e.g., "Does this look like the Analytics page?").
-4.  **Error Handling:** Use Shadcn `toast` for user feedback.
+1.  **System 2 Thinking:** Analyze requirements first. Identify the "Reference Implementation" to mimic style.
+2.  **Implementation:**
+    * **Step 1:** Schema/DB changes (`prisma/schema.prisma`).
+    * **Step 2:** Server Actions & Zod Validations (with Audit Logging).
+    * **Step 3:** UI Components (referencing Design System tokens).
+3.  **Review:** Check against the **Reference Implementations** (e.g., "Does this look like the Analytics page?").
+4.  **Error Handling:** Use Shadcn `toast` for user feedback.
+5.  **Post-Task Advisory (Crucial):**
+    * Update `changelog.md`.
+    * **Suggest Next Steps:** After summarizing the task, explicitly list **1-3 concrete next steps**. These should be suggestions to improve performance, fix technical debt, or add logical features related to what was just built. **Do not simply wait for the next prompt; propose the path forward.**
 
-Always write changes in changelog.md after each task finished
-
-Prompts may include emojis, make sure to use icons from lucide-react instead and find the closest match.
+*Note: Prompts may include emojis; ensure you use icons from `lucide-react` instead and find the closest match in the code.*
