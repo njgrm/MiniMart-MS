@@ -4,6 +4,671 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ---
 
+## [Unreleased] - 2026-01-15
+
+### Reports Module UI/UX Enhancement (Phase 11) - Control Logic & Data Fixes
+
+**Verdict:** Added date range filtering, fixed data bugs, improved typography for Peso sign.
+
+#### 1. Date Range Control (Z-Read/Daily Sales Log)
+
+**New Feature:** `DateRangePicker` in toolbar
+- Default range: "This Month" (1st of current month to Today)
+- NOT "All Time" to avoid performance issues
+- Reactivity: Changing date range re-fetches summary cards AND table data
+- Print/Export: Date range included in PDF header ("Report Period: Jan 1, 2026 - Jan 15, 2026")
+- Loading indicator in toolbar during data fetch
+
+**Files Modified:**
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Added `DateRangePicker`, `useTransition` for loading state
+- `src/app/admin/reports/z-read/page.tsx` - Changed prop from `data` to `initialData`
+- `src/components/reports/report-shell.tsx` - Added `toolbarContent` and `isLoading` props
+
+#### 2. Dead Stock Bug Fix
+
+**Bug:** "Unknown Product" displayed in Dead Stock Alert card
+**Root Cause:** Query used `p.name` instead of `p.product_name`
+**Fix:** `src/actions/reports.ts` line 1083 - Changed to `productName: p.product_name`
+
+#### 3. Closed By Column Capitalization
+
+**Before:** "admin" (lowercase)
+**After:** "Admin" (capitalized)
+**Implementation:** Added `capitalizeWords()` helper function
+
+#### 4. Peso Sign Typography
+
+**Design Principle:** Bold Peso signs look bad when paired with bold numbers
+**Fix:** Peso sign (₱) uses `font-normal` weight while numbers remain bold
+**Applied to:**
+- Today's Snapshot (Gross Sales, Cash, GCash, Est. Profit)
+- Dead Stock Alert (capital tied values)
+- Profit Trend (7-Day Total)
+- Spoilage & Loss (monthly value)
+- Z-Read table (all currency columns)
+
+**Implementation Pattern:**
+```tsx
+<span className="font-normal">₱</span>{amount.toLocaleString()}
+```
+
+#### 5. Print Layout Enhancement
+
+**Date Range in Header:** PDF prints now include:
+- "Report Period: Jan 1, 2026 - Jan 15, 2026 | Generated on..."
+- Provides context for which period the report covers
+
+#### 6. Files Modified
+- `src/app/admin/reports/z-read/z-read-client.tsx` - DateRangePicker, capitalizeWords, formatPeso
+- `src/app/admin/reports/z-read/page.tsx` - Initial data uses "This Month" range
+- `src/components/reports/report-shell.tsx` - toolbarContent slot, dateRange in print
+- `src/actions/reports.ts` - Fixed productName bug
+- `src/app/admin/reports/page.tsx` - formatPeso helper, applied to all currency values
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 10) - Animated Sorting & Final Polish
+
+**Verdict:** Implemented animated sorting indicators, fixed layout padding, and containerized tables for production-ready reports.
+
+#### 1. Animated Sorting Indicators (Global Feature)
+
+**New Component:** `src/components/ui/sortable-header.tsx`
+- Uses Framer Motion for smooth icon transitions
+- ChevronUp (ascending), ChevronDown (descending), ChevronsUpDown (unsorted)
+- Spring animation with opacity/y-axis transition
+- Applied to ALL sortable tables system-wide
+
+**Applied to:**
+- Inventory Products Table (`src/app/admin/inventory/products-table.tsx`)
+- Daily Sales Log (Z-Read) Table
+- Profit Margin Analysis Table
+- Sales by Category Table
+- Inventory Velocity Table
+- Spoilage & Wastage Table
+- Expiry Tracker Table
+
+#### 2. Layout & Padding Fixes
+
+**Problem:** Nested sidebar and toolbar appeared "sunk in" with incorrect padding
+**Solution:**
+- Removed negative margins from `layout-client.tsx`
+- Adjusted `AdminLayoutClient` to properly handle report page layout
+- Reports Shell page now uses same `ReportsLayoutClient` as individual pages
+
+#### 3. Summary Card Sizing (Z-Read)
+
+**Grid Layout:** Changed to `grid grid-cols-4 gap-4`
+- Gross Sales: `col-span-2` (wider card, `text-3xl` value)
+- Profit: `col-span-2` (wider card, `text-3xl` value)
+- Days Tracked: `col-span-1` (compact)
+- Transactions: `col-span-1` (compact)
+
+#### 4. Table Containerization
+
+**Problem:** Tables merged visually with page container
+**Solution:** 
+- Tables now wrapped in `Card` component within `ReportShell`
+- Creates distinct visual separation (matches Inventory golden standard)
+- Table header row uses `bg-muted/50` for clear column demarcation
+
+#### 5. Header Card Removal
+
+**Removed from ALL report pages:**
+- Redundant header card with title/description/"Admin" badge
+- Title now in toolbar beside navigation
+- Description in toolbar after `|` separator
+- Cleaner, denser layout
+
+#### 6. Files Modified/Created
+- `src/components/ui/sortable-header.tsx` - **NEW** animated sorting component
+- `src/components/reports/report-shell.tsx` - Card wrapper for tables, re-exports SortableHeader
+- `src/app/admin/inventory/products-table.tsx` - Uses new SortableHeader
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Summary card sizing, SortableHeader
+- `src/app/admin/reports/*/[all-clients].tsx` - SortableHeader integration
+- `src/app/admin/reports/layout-client.tsx` - Fixed padding/margins
+- `src/app/admin/layout-client.tsx` - Report page layout handling
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 9) - Visual Consistency & Table Standards
+
+**Verdict:** Fixed sidebar consistency, removed redundant cards, standardized tables to Inventory golden pattern.
+
+#### 1. Sidebar Consistency
+
+**Reports Shell Page:**
+- Sidebar now matches individual report pages exactly
+- Same positioning (next to main sidebar)
+- Same styling and navigation links
+- Added toolbar with title + description
+
+**Individual Report Pages:**
+- Sidebar and toolbar remain consistent across all reports
+- "All Reports" back button matches "Dashboard" button style
+
+#### 2. Removed Redundant Info Cards
+
+**Before:** Each report had a header card showing:
+- Title + Icon
+- Description
+- "Admin" badge
+- "Christian Minimart" badge
+
+**After:** This card is removed from ALL report pages. Information is now:
+- Title: In toolbar
+- Description: In toolbar (after `|` separator)
+
+#### 3. Table Design - Inventory Golden Standard
+
+**Applied to Z-Read and all report tables:**
+- All headers: LEFT-aligned with `-ml-4` offset
+- All data cells: LEFT-aligned
+- Header style: `uppercase text-[11px] font-semibold tracking-wider`
+- Uses `ArrowUpDown` icon for sortable columns
+- Proper `px-4` cell padding for consistent spacing
+- Removed all `text-right` alignment from numeric columns
+
+**Specific fixes:**
+- TXN column: No longer floating far from Date
+- Gross Sales, Profit, Cash, GCash: All LEFT-aligned (was RIGHT)
+- Headers sit directly above data (visual separation)
+
+#### 4. Summary Card Sizing (Z-Read)
+
+- Days Tracked: Smaller card (`col-span-1`)
+- Transactions: Smaller card (`col-span-1`)
+- Gross Sales: Shows full value (₱3,419,266.50)
+- Profit: Shows full value (₱344,746.32)
+
+#### 5. Files Modified
+- `src/app/admin/reports/page.tsx` - Added sidebar + toolbar, matches individual pages
+- `src/app/admin/reports/layout-client.tsx` - Updated wrapper for reports shell
+- `src/components/reports/report-shell.tsx` - Removed header card, description in toolbar
+- `src/app/admin/reports/z-read/z-read-client.tsx` - LEFT-aligned tables, sizing fix
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 8) - Brutally Honest Fixes
+
+**Verdict:** Fixed all UI/UX issues identified in brutal audit for production-ready ERP.
+
+#### 1. Reports Shell - Complete Overhaul
+
+**Today's Snapshot Redesign:**
+- Removed dark/disconnected background
+- Now uses standard card style (`bg-[#F8F6F1]`) matching app theme
+- Dark text for numbers, brand color only for header icon
+- Integrates visually with rest of dashboard
+
+**Sidebar Navigation:**
+- **ADDED** sidebar to Reports Shell page (was only on drill-down pages)
+- Users can now see all report links immediately without clicking
+- Links: Daily Sales, Profit Margin, Sales by Category, Velocity, Spoilage, Expiry, Audit Log, Users, Stock
+
+**Text Sizing Fixed:**
+- Increased sub-headers from `text-[10px]` to `text-xs` (12px)
+- Labels like "LAST 7 DAYS REVENUE" and "TOP CATEGORIES" now readable
+
+**Ghost Buttons:**
+- Changed Export/View buttons from `variant="outline"` to `variant="ghost"`
+- Buttons now blend into cards (no white background "stickers")
+
+**Data Formatting:**
+- `formatCategoryName()` helper converts database names to Title Case
+- `SOFTDRINKS_CASE` → "Softdrinks Case"
+- `SODA` → "Soda"
+
+**Dead Stock Card Fixed:**
+- Product names now render properly (was showing rank only)
+- Shows "1. Product Name ... ₱Value" format
+
+#### 2. Daily Sales Log (Z-Read) - Accounting & Logic Fixes
+
+**Number Formatting:**
+- `formatCurrency()` helper for proper K/M notation
+- **Rule:** >1M uses "M" (e.g., ₱3.42M), >1K uses "K" (e.g., ₱344.7K)
+- Fixed confusing "3419.3K" → now "₱3.42M"
+
+**Table Alignment:**
+- All numeric headers now RIGHT-ALIGNED
+- Headers align directly above data columns
+- Creates clean vertical lines for scanning
+
+**Date Sorting Bug Fixed:**
+- Records now pre-sorted by date DESC (newest first)
+- `sortedRecords = [...data.records].sort((a, b) => new Date(b.date) - new Date(a.date))`
+- Wed Jan 14 → Tue Jan 13 → Mon Jan 12 (chronologically correct)
+
+**Admin Column:**
+- Removed Avatar bubbles (visual noise)
+- Shows text names: "admin", "John D." (truncated if >8 chars)
+- Better for audit purposes and scanning
+
+#### 3. Files Modified
+- `src/app/admin/reports/page.tsx` - Added sidebar, redesigned snapshot, ghost buttons
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Number formatting, alignment, sorting, text names
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 7) - Logic Audit & Production Fixes
+
+**Verdict:** Fixed "Fake Data" patterns and logic issues identified in ERP audit.
+
+#### 1. Reports Shell - Logic & Density Fixes
+
+**Today's Snapshot Redesign:**
+- Removed solid brown background (was "off-putting")
+- New light, modern design with subtle dot pattern
+- Metric cards with frosted glass effect (`bg-white/60`)
+- Est. Profit highlighted in teal accent color
+
+**Recharts Sparklines:**
+- Replaced CSS-based bars with actual Recharts AreaChart
+- Revenue and Profit curves now show DIFFERENT patterns (not mirrored)
+- Smooth gradient fills with proper scaling
+- Client component extracted to `src/components/reports/mini-sparkline.tsx`
+
+**Segmented Inventory Health Bar:**
+- Replaced single progress bar with 3-segment bar (Fast/Slow/Dead)
+- **Minimum width enforced (5%)** for small segments so Dead Stock is always visible
+- Color-coded legend: Teal=Fast, Orange=Slow, Red=Dead
+
+**Dead Stock Card:**
+- Now shows Top 3 items (not just 1)
+- Numbered list with capital value for each
+- "Total at risk" sum displayed at bottom
+
+**Action Buttons:**
+- Changed from text links to distinct icon buttons (`variant="outline" size="icon"`)
+- Export button disabled (grayed) when nothing to export (e.g., zero spoilage)
+
+#### 2. Z-Read Report → "Daily Sales Log" (Accounting Logic Fixes)
+
+**Renamed Report:**
+- Changed from "Z-Read History" to "Daily Sales Log"
+- Updated title, description, and export filename
+
+**Fixed Trend Calculation:**
+- **Before:** All trends showed ~35% (Date Range Mismatch bug)
+- **After:** Uses "Same Period Previous Month" comparison (Jan 1-14 vs Dec 18-31)
+- Trend label now shows "vs previous 14 days" for clarity
+- Each metric now has independent trend percentage
+
+**Conditional Voids Column:**
+- **If totalVoids === 0:** Column hidden entirely (saves horizontal space)
+- Section description shows "No voids recorded" note
+- Excel export also excludes void columns when not needed
+
+#### 3. Files Modified/Created
+- `src/app/admin/reports/page.tsx` - Complete redesign with all fixes
+- `src/components/reports/mini-sparkline.tsx` - New client component for Recharts
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Fixed trends, conditional columns
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 6) - "Command Center" Transformation
+
+**Verdict:** Transformed Reports from "Pretty Links" to "High-Utility Dashboard" meeting professional ERP standards.
+
+#### 1. Reports Shell → Live Dashboard (`src/app/admin/reports/page.tsx`)
+
+**Today's Snapshot Hero Section:**
+- Full-width dark gradient card at top showing live Z-Read data
+- Displays: Gross Sales, Transactions, Cash, GCash, Est. Profit
+- Trend indicator (e.g., "▲ 8% vs same day last week")
+- Date badge and "Full Report" quick action button
+
+**Widgetized Report Cards:**
+- **Sales Trend Widget:** CSS sparkline showing last 7 days revenue + Top 3 categories list
+- **Profit Margin Widget:** CSS sparkline showing last 7 days profit + avg margin display
+- **Spoilage Widget:** Loss amount with "Zero loss!" badge when applicable
+- **Inventory Velocity Widget:** Health progress bar + Fast/Slow/Dead breakdown
+- **Dead Stock Widget:** Top 3 items by capital at risk
+- **Expiry Tracker Widget:** Critical count (≤7 days) with alert indicator
+
+**Footer Actions:**
+- Removed "Click to view report" text (redundant)
+- Added `[Export]` and `[View]` buttons in card footer
+
+#### 2. Z-Read Report Analytical Upgrades (`src/app/admin/reports/z-read/z-read-client.tsx`)
+
+**Summary Cards with Trend Indicators:**
+- Added trend badges (▲/▼ XX%) showing period-over-period comparison
+- Each metric now answers "Compared to what?"
+- Values formatted as K/M for readability (e.g., ₱3596.9K)
+
+**Table Data Visualization:**
+- **Data Bars:** Gross Sales column has subtle colored background bars proportional to value
+- Highest sales days visually "pop out" instantly
+- **Voids Column:** Zero values show faint gray dash `—`, non-zero in bold red badge
+- **User Avatars:** Replaced repetitive "admin" text with colored avatar circles (initials)
+- Reduced column widths for denser data display
+
+#### 3. New Server Action (`src/actions/reports.ts`)
+
+**getEnhancedDashboardData():**
+- Returns comprehensive data for live widgets:
+  - `todaySnapshot`: Live Z-Read data with same-day-last-week comparison
+  - `salesSparkline`: Last 7 days revenue/profit for sparklines
+  - `topCategories`: Top 3 categories by revenue
+  - `topDeadStock`: Top 3 dead stock items by capital tied
+  - `inventoryHealth`: Healthy/Dead/Slow/Fast breakdown
+  - `spoilageLossThisMonth`, `expiringCriticalCount`
+
+**Design Philosophy Applied:**
+- Every pixel earns its place
+- Numbers always have context (trends)
+- Empty columns de-emphasized
+- Visual scanning optimized with data bars and color coding
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 5) - Cards, Progress Bars & Table Fixes
+
+Addressed user feedback on card sizes, progress bar colors, and table overflow.
+
+#### 1. Reports Gallery Cards - Larger & Fill Space (`src/app/admin/reports/page.tsx`)
+
+**Expanded Card Design:**
+- Cards now use `min-h-[100px]` to fill more vertical space
+- Larger icons (6x6 instead of 5x5) with bigger padding (p-2.5)
+- Font size increased to `text-base` for titles
+- Two-line layout: Icon+Title row, then Metric/CTA row below
+- Rounded corners changed to `rounded-xl` for modern look
+- Cards without metrics show "Click to view report →" placeholder
+- Responsive grid: 1 column mobile, 2 columns tablet, 3 columns desktop
+
+#### 2. Progress Bars - Neutral Background (`src/components/ui/progress.tsx`)
+
+**Problem:** Orange accent color for progress bar background clashed with red primary indicator
+
+**Solution:**
+- Changed default background from `bg-secondary` to `bg-stone-200` (neutral)
+- Added `indicatorClassName` prop to customize indicator color per-use
+- Updated all report tables to use:
+  - `bg-stone-200` background (neutral gray)
+  - Dynamic indicator colors based on value (red/orange/blue/teal)
+
+**Files Updated:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+- `src/app/admin/reports/expiring/expiring-client.tsx`
+- `src/app/admin/reports/sales-category/sales-category-client.tsx`
+
+#### 3. Product Name Truncation - No Horizontal Scroll
+
+**Problem:** Long product names caused table horizontal overflow
+
+**Solution:**
+- Added `max-w-[200px]` container to product name cells
+- Applied `truncate` class to product names and category lines
+- Added `title` attribute to show full name on hover
+- Column width constrained to `size: 200` (down from 220)
+
+**Files Updated:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+- `src/app/admin/reports/spoilage/spoilage-client.tsx`
+- `src/app/admin/reports/expiring/expiring-client.tsx`
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 4) - Layout & Print Fixes
+
+Critical fixes for layout, scrolling, and print preview issues in the Reports module.
+
+#### 1. Reports Gallery Compact Redesign (Superseded by Phase 5)
+
+**Previous Changes:**
+- Removed page header (title "Reports" and subtitle)
+- Removed pinned reports section entirely
+- All 9 reports now in a dense 3x3 grid layout
+- Whole card is now clickable (not just small "Open" button)
+- Cards are compact with icon, title, and optional metric on one line
+- Removed "Export" button from cards (use Export in individual report toolbar)
+
+#### 2. Fixed Layout/Scrolling Issues
+
+**Problem:** Content had excess whitespace, sidebars not accounting for padding properly
+
+**Solution (`src/app/admin/reports/layout-client.tsx`):**
+- Changed `h-full` to `flex flex-1 min-h-0` for proper flex layout
+- Sidebar now uses `overflow-hidden` to prevent double scrollbars
+- Main content area properly fills available space
+
+**Solution (`src/components/reports/report-shell.tsx`):**
+- Changed `h-full` to `flex-1 min-h-0` for flex-based sizing
+- Reduced padding from `p-4` to `p-3` for denser layout
+- Reduced grid gaps from `gap-4` to `gap-3`
+
+#### 3. Fixed Print Preview Auto-Print Issue
+
+**Problem:** Print button immediately triggered browser's print dialog
+
+**Solution (`src/components/reports/report-shell.tsx`):**
+- Print preview now opens in popup window WITHOUT auto-calling `window.print()`
+- Added "🖨️ Print This Report" button in the preview window
+- User must manually click to print, allowing review first
+- Improved print CSS with proper table formatting
+- Removed Lucide icon dependencies in print (icons don't render in popup)
+
+#### 4. Removed Duplicate Print Button (`src/app/admin/reports/z-read/z-read-client.tsx`)
+
+**Problem:** "Print Official Ledger" button at bottom called `window.print()` directly
+
+**Solution:**
+- Removed duplicate print button from Z-Read client component
+- Print functionality is now only in ReportShell toolbar
+- Cleaned up unused Printer import
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 3) - "Command Center" Redesign
+
+Comprehensive refactor of the Reports module to transform it from a passive "Table of Contents" to an active "Command Center" with glanceable metrics and quick actions.
+
+#### 1. Reports Gallery Page Redesign (`src/app/admin/reports/page.tsx`)
+
+**Removed Fluff & Increased Density:**
+- Removed the "Digital First, Paper Ready" banner (too much vertical space)
+- Condensed descriptions to 1 line with tooltip on hover for full text
+- Moved global settings to a Settings cog icon in header
+
+**Glanceable Metrics (Hero Feature):**
+- Cards now show live metrics BEFORE clicking:
+  - **Z-Read Card:** Shows "Last Close: X hours ago"
+  - **Inventory Velocity Card:** Shows "Dead Stock: X items" in red
+  - **Spoilage Card:** Shows "This Month: ₱X loss" in red
+  - **Expiry Tracker Card:** Shows "Critical: X expiring soon" in orange
+- Metrics fetched via RSC with `<Suspense>` fallback skeletons
+
+**Quick Actions on Cards:**
+- Footer row with icon-only buttons: Open, Export
+- Reduces clicks for power users (Export directly triggers download)
+
+**Pinned Reports Section:**
+- Added "Pinned" section at top for favorite reports
+- Hardcoded Z-Read and Sales by Category as pinned (star icons)
+
+#### 2. New Dashboard Summary Server Action (`src/actions/reports.ts`)
+
+Added `getReportsDashboardSummary()` for lightweight metric fetching:
+- `deadStockCount`: Products with 0 sales in 30 days
+- `deadStockCapital`: Capital tied up in dead stock
+- `spoilageLossThisMonth`: Total loss from DAMAGE/SUPPLIER_RETURN this month
+- `lastZReadDate`: Most recent completed transaction timestamp
+- `expiringCriticalCount`: Batches expiring within 7 days
+
+Uses parallel queries via `Promise.all()` for fast loading.
+
+#### 3. Reports Layout with Sidebar Navigation
+
+**New Files:**
+- `src/app/admin/reports/layout.tsx` - Server component wrapper
+- `src/app/admin/reports/layout-client.tsx` - Client component with sidebar
+
+**Sidebar Features:**
+- Appears only on individual report pages (not on main gallery)
+- Lists all reports grouped by category (Sales, Inventory, Audit)
+- Active report highlighted with primary color
+- "Back to All Reports" button at top
+- "Reports Dashboard" button at bottom
+
+#### 4. Fixed Double Scrollbar Issue (`src/app/admin/layout-client.tsx`)
+
+**Problem:** Individual report pages had two scrollbars (main content + report shell)
+
+**Solution:** 
+- Detect individual report pages via pathname check
+- Apply `overflow-hidden` to main element for report pages
+- Let only ReportShell handle scrolling
+- Removed extra padding from report pages (handled by ReportShell)
+
+#### 5. Fixed Sticky Header Issue (`src/components/reports/report-shell.tsx`)
+
+**Problem:** Sticky toolbar had gap below top nav
+
+**Solution:**
+- Removed outer padding from ReportShell
+- Toolbar now spans full width, touches sidebar
+- Height reduced to h-11 for compact look
+- Content area has proper padding inside
+
+#### 6. Print Preview Popup Window
+
+**Problem:** Kiosk printing mode bypasses print dialog, no preview possible
+
+**Solution:**
+- New `openPrintPreview()` function opens a popup window
+- Window contains formatted HTML with proper print styles
+- Includes store header, report title, timestamp
+- Triggers `window.print()` after content loads
+- Users can preview, Save as PDF, or print
+
+#### 7. Bug Fixes
+
+- Fixed `InventoryBatch` queries to use `quantity` instead of non-existent `current_quantity`
+- Updated `ExpiringItem` interface and expiring report client to match
+- Fixed Excel export column mappings for expiring report
+
+#### Files Modified:
+- `src/app/admin/reports/page.tsx` - Complete rewrite as Command Center
+- `src/app/admin/reports/layout.tsx` - NEW: Layout wrapper
+- `src/app/admin/reports/layout-client.tsx` - NEW: Sidebar navigation
+- `src/actions/reports.ts` - Added dashboard summary action, fixed expiring report
+- `src/components/reports/report-shell.tsx` - Fixed sticky header, added print popup
+- `src/app/admin/layout-client.tsx` - Fixed double scrollbar
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Fixed quantity field name
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 2)
+
+Critical fixes based on user feedback addressing layout, styling, and functionality issues:
+
+#### Layout & Spacing Fixes
+- **Fixed Content Area Padding:** Removed negative margins from ReportShell that caused content to touch sidebar/top nav
+- **Proper Background Color:** Changed from pure white (`#FAFAF9`) to warm background (`#f5f3ef`) to maintain "Clean & Organic" aesthetic
+- **Fixed Overflow Issues:** Eliminated extra scrollable space below content area
+- **Z-Index Fix:** Top nav header now properly shows above content (z-30)
+
+#### Table Column Alignment Fixes
+- **SortableHeader Component:** Created new `SortableHeader` component for consistent column header alignment
+- **Replaced Button Headers:** Replaced `Button variant="ghost"` with inline button elements that align properly with cell content
+- **Fixed Width Columns:** Added explicit column widths (`size` property) to ensure header/cell alignment
+- **Consistent Typography:** All headers now use uppercase `text-[11px]` tracking-wide styling
+
+#### Excel Export Improvements
+- **Better Formatting:**
+  - Header row with dark background and white text
+  - Alternating row colors for readability
+  - Frozen header row for easier navigation
+  - Borders on all data cells
+- **Number Formatting:**
+  - Currency columns use `#,##0.00` format with thousands separator
+  - Percentage columns use `0.00%` format
+  - Integer columns use `#,##0` format
+- **Column Width:** Improved default widths with currency indicator in header (e.g., "Gross Sales (₱)")
+
+#### Print Preview Simplification
+- **Removed Modal Approach:** Removed confusing print preview modal that didn't work with kiosk printing
+- **Direct Print:** Print button now triggers `window.print()` directly
+- **Print Styles:** Clean print output with proper page breaks, hidden controls, and A4 formatting
+
+#### Files Modified
+- `src/app/admin/layout-client.tsx` - Fixed z-index and removed overflow-hidden
+- `src/components/reports/report-shell.tsx` - Complete rewrite with proper layout and SortableHeader
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Fixed table alignment
+- `src/app/admin/reports/velocity/velocity-client.tsx` - Fixed table alignment
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx` - Fixed table alignment
+- `src/app/admin/reports/sales-category/sales-category-client.tsx` - Fixed table alignment
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Fixed table alignment
+
+---
+
+### Reports Module UI/UX Enhancement (Phase 1)
+
+Comprehensive UI/UX improvements to the Reports module following design system guidelines and reference implementations from Analytics Dashboard and Inventory pages.
+
+#### 1. Reports Gallery Page Redesign (`src/app/admin/reports/page.tsx`)
+- **Toolbar-Style Header:** Replaced simple title with toolbar header featuring quick actions and metadata
+- **Digital First, Paper Ready Banner:** Added prominent banner explaining the report philosophy
+- **Enhanced Report Cards:** 
+  - Cards now use design system colors (`bg-card`, `text-foreground`)
+  - Improved hover effects with subtle shadow transitions
+  - Category badges with proper design token colors
+  - Consistent icon sizing and spacing
+- **Grouped Report Categories:** Clear visual separation between Sales & Financial, Inventory Health, and Audit & Security reports
+
+#### 2. ReportShell Component Enhancement (`src/components/reports/report-shell.tsx`)
+- **Proper Content Padding:** Content area now has proper spacing from sidebar and top nav
+- **Warm Background:** Uses `bg-[#f5f3ef]` for consistent "Clean & Organic" aesthetic
+- **Sticky Toolbar:** Toolbar stays fixed while content scrolls  
+- **SortableHeader Component:** Reusable component for consistent table header alignment
+- **Clean Print Styles:** Proper print output without modals
+
+#### 3. New Expiry Tracker Report (`src/app/admin/reports/expiring/`)
+- **Server Action:** `getExpiringProductsReport()` in `src/actions/reports.ts`
+  - Fetches products with upcoming expiry dates
+  - Calculates days until expiry with status classification
+  - Supports date range filtering
+- **Client Component:** Full Tanstack Table implementation
+  - Sortable columns: Product, Category, Expiry Date, Days Left, Stock, Status
+  - Status badges: Expired (red), Critical (orange), Warning (yellow), OK (teal)
+  - Date range picker for custom filtering
+  - Summary cards showing total expiring items by urgency level
+
+#### 4. Report Client Pages Polish (Design System Consistency)
+All report client pages updated for consistency:
+- `velocity-client.tsx` - Inventory Velocity Report
+- `z-read-client.tsx` - Z-Read History Report
+- `spoilage-client.tsx` - Spoilage & Wastage Report
+- `profit-margin-client.tsx` - Profit Margin Analysis Report
+- `sales-category-client.tsx` - Sales by Category Report
+
+**Common Updates:**
+- Badge styling updated to use design system colors
+- Sorting indicators now use ChevronUp/ChevronDown icons
+- Column headers have consistent hover states
+- Table rows use `hover:bg-muted/30` for subtle feedback
+- Numeric values use `tabular-nums font-mono` for alignment
+- All hardcoded colors replaced with design tokens
+
+#### Files Modified:
+- `src/app/admin/reports/page.tsx` - Gallery redesign
+- `src/components/reports/report-shell.tsx` - Shell enhancement
+- `src/actions/reports.ts` - New expiry tracker action
+- `src/app/admin/reports/expiring/page.tsx` - New report page
+- `src/app/admin/reports/expiring/expiring-client.tsx` - New client component
+- `src/app/admin/reports/velocity/velocity-client.tsx` - Polish
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Polish
+- `src/app/admin/reports/spoilage/spoilage-client.tsx` - Polish
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx` - Polish
+- `src/app/admin/reports/sales-category/sales-category-client.tsx` - Polish
+
+---
+
 ## [Unreleased] - 2026-01-16
 
 ### Next.js Configuration Fix

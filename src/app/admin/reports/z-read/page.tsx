@@ -2,17 +2,22 @@ import { Suspense } from "react";
 import { Receipt } from "lucide-react";
 import { getZReadHistory } from "@/actions/reports";
 import { ZReadReportClient } from "./z-read-client";
+import { startOfMonth } from "date-fns";
 
 export const metadata = {
-  title: "Z-Read History | Christian Minimart",
+  title: "Daily Sales Log | Christian Minimart",
   description: "Daily closure reports with sales breakdown",
 };
 
 export const dynamic = "force-dynamic";
 
 async function ZReadContent() {
-  const data = await getZReadHistory();
-  return <ZReadReportClient data={data} />;
+  // Default to "This Month" (1st of month to today)
+  const today = new Date();
+  const monthStart = startOfMonth(today);
+  
+  const data = await getZReadHistory({ from: monthStart, to: today });
+  return <ZReadReportClient initialData={data} />;
 }
 
 export default function ZReadPage() {

@@ -1,0 +1,98 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import {
+  Receipt,
+  TrendingUp,
+  BarChart3,
+  Activity,
+  Trash2,
+  CalendarClock,
+  FileText,
+  Users,
+  Archive,
+  ChevronLeft,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+// Report navigation links
+const reportLinks = [
+  { id: "z-read", title: "Daily Sales", href: "/admin/reports/z-read", icon: Receipt, category: "sales" },
+  { id: "profit-margin", title: "Profit Margin", href: "/admin/reports/profit-margin", icon: TrendingUp, category: "sales" },
+  { id: "sales-category", title: "Sales by Category", href: "/admin/reports/sales-category", icon: BarChart3, category: "sales" },
+  { id: "velocity", title: "Velocity", href: "/admin/reports/velocity", icon: Activity, category: "inventory" },
+  { id: "spoilage", title: "Spoilage", href: "/admin/reports/spoilage", icon: Trash2, category: "inventory" },
+  { id: "expiring", title: "Expiry", href: "/admin/reports/expiring", icon: CalendarClock, category: "inventory" },
+  { id: "audit-logs", title: "Audit Log", href: "/admin/audit-logs", icon: FileText, category: "audit", external: true },
+  { id: "user-activity", title: "Users", href: "/admin/reports/user-activity", icon: Users, category: "audit" },
+  { id: "stock-movements", title: "Stock", href: "/admin/reports/stock-movements", icon: Archive, category: "audit" },
+];
+
+const categoryColors: Record<string, string> = {
+  sales: "text-[#2EAFC5]",
+  inventory: "text-[#F1782F]",
+  audit: "text-stone-500",
+};
+
+export function ReportsLayoutClient({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isReportIndex = pathname === "/admin/reports";
+
+  // Main reports page - page.tsx has its own sidebar/toolbar
+  if (isReportIndex) {
+    return (
+      <div className=" h-full overflow-hidden">
+        {children}
+      </div>
+    );
+  }
+
+  // Individual report pages - show sidebar layout
+  return (
+    <div className="flex h-full overflow-hidden">
+      {/* Reports Sidebar Navigation - Hidden on mobile */}
+      <aside className="w-44 shrink-0 border-r border-stone-200/80 bg-card hidden lg:flex lg:flex-col">
+        {/* Back Button - Height matches toolbar h-12 */}
+        <div className="h-12 px-2 flex items-center border-b border-stone-200/80 shrink-0">
+          <Button variant="ghost" size="sm" asChild className="h-8 px-2 gap-1.5 text-xs w-full justify-start">
+            <Link href="/admin/reports">
+              <ChevronLeft className="h-4 w-4" />
+              All Reports
+            </Link>
+          </Button>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 overflow-auto py-1 px-1.5">
+          {reportLinks.map((link) => {
+            const Icon = link.icon;
+            const isActive = pathname === link.href || (link.external && pathname?.includes(link.id));
+            
+            return (
+              <Link
+                key={link.id}
+                href={link.href}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors mb-0.5",
+                  isActive 
+                    ? "bg-primary/10 text-primary font-medium" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <Icon className={cn("h-3.5 w-3.5 shrink-0", isActive ? "" : categoryColors[link.category])} />
+                <span className="truncate">{link.title}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+        {children}
+      </div>
+    </div>
+  );
+}

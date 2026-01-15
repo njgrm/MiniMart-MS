@@ -6,23 +6,28 @@ import {
   Printer,
   FileSpreadsheet,
   ArrowLeft,
-  Calendar,
-  User,
-  Building2,
-  Eye,
-  X,
+  Loader2,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import Link from "next/link";
 import ExcelJS from "exceljs";
+import { cn } from "@/lib/utils";
+
+// Re-export animated sortable header for use in report tables
+export { SortableHeader } from "@/components/ui/sortable-header";
 
 interface DateRangeDisplay {
   from: Date;
@@ -30,23 +35,25 @@ interface DateRangeDisplay {
 }
 
 interface ReportShellProps {
-  /** Report title displayed in header */
   title: string;
-  /** Optional subtitle/description */
   description?: string;
-  /** Date range for the report (optional) */
   dateRange?: DateRangeDisplay;
-  /** Username who generated the report */
   generatedBy?: string;
-  /** Store name (defaults to Christian Minimart) */
   storeName?: string;
-  /** Back button href (defaults to /admin/reports) */
   backHref?: string;
-  /** Children content (the actual report) */
   children: React.ReactNode;
-  /** Icon for the report header */
   icon?: React.ElementType;
-  /** Excel export configuration */
+  /** Custom content to render in the toolbar (e.g., date picker, filters) */
+  toolbarContent?: React.ReactNode;
+  /** Show loading indicator in toolbar */
+  isLoading?: boolean;
+  /** Summary data for print preview (avoids icon rendering issues) */
+  printSummary?: { label: string; value: string }[];
+  /** Full table data for print preview - ALL rows not just paginated */
+  printTableData?: {
+    headers: string[];
+    rows: (string | number)[][];
+  };
   excelExport?: {
     filename: string;
     sheetName: string;
@@ -58,13 +65,270 @@ interface ReportShellProps {
 }
 
 /**
+ * Extract clean text content from HTML, removing all SVG/icon elements
+ */
+function extractPrintableContent(element: HTMLElement): string {
+  const clone = element.cloneNode(true) as HTMLElement;
+  
+  // Remove all SVG elements (icons)
+  clone.querySelectorAll('svg').forEach(svg => svg.remove());
+  
+  // Remove print-hidden elements
+  clone.querySelectorAll('[data-print-hidden="true"], .print-hidden').forEach(el => el.remove());
+  
+  // Remove buttons (interactive elements)
+  clone.querySelectorAll('button').forEach(btn => btn.remove());
+  
+  // Get tables and format them properly
+  const tables = clone.querySelectorAll('table');
+  let tableHTML = '';
+  
+  tables.forEach(table => {
+    const rows = table.querySelectorAll('tr');
+    if (rows.length === 0) return;
+    
+    tableHTML += '<table>';
+    rows.forEach((row, rowIdx) => {
+      tableHTML += '<tr>';
+      const cells = row.querySelectorAll('th, td');
+      cells.forEach(cell => {
+        const tag = rowIdx === 0 ? 'th' : 'td';
+        // Get text content only, no icons
+        const text = cell.textContent?.trim() || '';
+        tableHTML += `<${tag}>${text}</${tag}>`;
+      });
+      tableHTML += '</tr>';
+    });
+    tableHTML += '</table>';
+  });
+  
+  return tableHTML;
+}
+
+/**
+ * Opens print preview in new window - kiosk-safe (no auto-print)
+ */
+function openPrintPreview(
+  title: string, 
+  storeName: string, 
+  contentRef: HTMLDivElement | null,
+  printSummary?: { label: string; value: string }[],
+  dateRange?: DateRangeDisplay,
+  printTableData?: { headers: string[]; rows: (string | number)[][] }
+) {
+  const printWindow = window.open("", "_blank", "width=900,height=700,scrollbars=yes,menubar=no,toolbar=no");
+  if (!printWindow) {
+    alert("Please allow popups to use print preview");
+    return;
+  }
+  
+  // Use provided full table data if available, otherwise fall back to DOM extraction
+  let tableContent = '';
+  if (printTableData && printTableData.rows.length > 0) {
+    // Render full table from data (ALL rows)
+    tableContent = '<table><thead><tr>';
+    printTableData.headers.forEach(h => {
+      tableContent += `<th>${h}</th>`;
+    });
+    tableContent += '</tr></thead><tbody>';
+    printTableData.rows.forEach(row => {
+      tableContent += '<tr>';
+      row.forEach(cell => {
+        tableContent += `<td>${cell}</td>`;
+      });
+      tableContent += '</tr>';
+    });
+    tableContent += '</tbody></table>';
+  } else if (contentRef) {
+    // Fall back to DOM extraction (paginated only)
+    tableContent = extractPrintableContent(contentRef);
+  }
+  
+  // Build date range string for header
+  const dateRangeStr = dateRange 
+    ? `Report Period: ${format(dateRange.from, "MMM d, yyyy")} - ${format(dateRange.to, "MMM d, yyyy")}`
+    : `Generated: ${format(new Date(), "MMM d, yyyy")}`;
+  
+  // Build summary section from provided data (avoids icon rendering issues)
+  let summaryHTML = '';
+  if (printSummary && printSummary.length > 0) {
+    summaryHTML = `
+      <div class="summary-cards">
+        ${printSummary.map(item => `
+          <div class="summary-card">
+            <div class="label">${item.label}</div>
+            <div class="value">${item.value}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${title} - ${storeName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Geist Sans', -apple-system, sans-serif;
+      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+      color: #2d1b1a;
+      background: white;
+    }
+    .header {
+      text-align: center;
+      padding: 20px 0;
+      border-bottom: 2px solid #2d1b1a;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #2d1b1a;
+    }
+    .header p { color: #666; font-size: 12px; margin-top: 4px; }
+    .report-info {
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #ddd;
+    }
+    .report-info h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+    .report-info .meta {
+      font-size: 11px;
+      color: #666;
+    }
+    .summary-cards {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .summary-card {
+      flex: 1;
+      min-width: 120px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: #f9f9f9;
+    }
+    .summary-card .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    .summary-card .value {
+      font-size: 18px;
+      font-weight: 700;
+      font-family: monospace;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 20px;
+    }
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    th {
+      background: #f5f5f5;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-size: 10px;
+      color: #555;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    tr:hover td { background: #f5f3ef; }
+    .footer {
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid #ddd;
+      text-align: center;
+      font-size: 9px;
+      color: #666;
+    }
+    .print-actions {
+      position: fixed;
+      top: 15px;
+      right: 15px;
+      display: flex;
+      gap: 8px;
+      z-index: 1000;
+    }
+    .print-btn {
+      padding: 10px 20px;
+      background: #AC0F16;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .print-btn:hover { background: #8a0c12; }
+    .close-btn {
+      padding: 10px 16px;
+      background: #666;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .close-btn:hover { background: #555; }
+    @media print {
+      .no-print, .print-actions { display: none !important; }
+      body { padding: 0; max-width: 100%; }
+      @page { size: A4; margin: 1cm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-actions no-print">
+    <button class="print-btn" onclick="window.print()">Print Report</button>
+    <button class="close-btn" onclick="window.close()">Close</button>
+  </div>
+  
+  <div class="header">
+    <h1>${storeName}</h1>
+    <p>Point of Sale System</p>
+  </div>
+  
+  <div class="report-info">
+    <h2>${title}</h2>
+    <p class="meta">${dateRangeStr} | Generated on ${format(new Date(), "MMMM d, yyyy 'at' h:mm a")}</p>
+  </div>
+  
+  ${summaryHTML}
+  
+  ${tableContent}
+  
+  <div class="footer">
+    <p>This is a computer-generated document. ${storeName} POS System</p>
+  </div>
+</body>
+</html>`;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
+/**
  * ReportShell - Wrapper component for all printable reports
- * 
- * Follows the Analytics Dashboard pattern:
- * - Full-height container with negative margins to break out of parent padding
- * - Sticky control bar at top (bg-card with shadow)
- * - Scrollable content area with proper padding
- * - Print-optimized layout
+ * Removed header info card - description now in toolbar
  */
 export function ReportShell({
   title,
@@ -75,20 +339,26 @@ export function ReportShell({
   backHref = "/admin/reports",
   children,
   icon: Icon,
+  toolbarContent,
+  isLoading = false,
+  printSummary,
+  printTableData,
   excelExport,
 }: ReportShellProps) {
   const reportRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
 
   const handlePrint = () => {
-    window.print();
+    openPrintPreview(title, storeName, reportRef.current, printSummary, dateRange, printTableData);
   };
 
   const handleExcelExport = async () => {
     if (!excelExport) return;
 
     setIsExporting(true);
+    setExportSuccess(false);
+    
     try {
       const { columns, rows } = await excelExport.getData();
 
@@ -98,48 +368,85 @@ export function ReportShell({
 
       const worksheet = workbook.addWorksheet(excelExport.sheetName);
 
-      // Add title row
+      // Title row
       worksheet.mergeCells(1, 1, 1, columns.length);
       const titleCell = worksheet.getCell(1, 1);
       titleCell.value = title;
       titleCell.font = { bold: true, size: 16 };
       titleCell.alignment = { horizontal: "center" };
 
-      // Add metadata row
+      // Store name row
       worksheet.mergeCells(2, 1, 2, columns.length);
-      const metaCell = worksheet.getCell(2, 1);
+      const storeCell = worksheet.getCell(2, 1);
+      storeCell.value = storeName;
+      storeCell.font = { size: 11 };
+      storeCell.alignment = { horizontal: "center" };
+
+      // Metadata row
+      worksheet.mergeCells(3, 1, 3, columns.length);
+      const metaCell = worksheet.getCell(3, 1);
       const dateStr = dateRange
         ? `${format(dateRange.from, "MMM d, yyyy")} - ${format(dateRange.to, "MMM d, yyyy")}`
         : format(new Date(), "MMM d, yyyy");
       metaCell.value = `Generated: ${dateStr} | By: ${generatedBy}`;
-      metaCell.font = { italic: true, size: 10 };
+      metaCell.font = { italic: true, size: 10, color: { argb: "FF666666" } };
       metaCell.alignment = { horizontal: "center" };
 
-      // Empty row
       worksheet.addRow([]);
 
-      // Header row
       worksheet.columns = columns.map((col) => ({
         header: col.header,
         key: col.key,
         width: col.width || 15,
       }));
 
-      // Style header row (row 4)
-      const headerRow = worksheet.getRow(4);
-      headerRow.font = { bold: true };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE8E4E0" },
-      };
+      const headerRow = worksheet.getRow(5);
+      headerRow.values = columns.map((col) => col.header);
+      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4A4A4A" } };
+      headerRow.alignment = { horizontal: "center", vertical: "middle" };
+      headerRow.height = 25;
 
-      // Add data rows starting from row 5
-      rows.forEach((row) => {
-        worksheet.addRow(row);
+      rows.forEach((row, index) => {
+        const dataRow = worksheet.addRow(row);
+        if (index % 2 === 0) {
+          dataRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F3EF" } };
+        }
+        dataRow.eachCell((cell, colNumber) => {
+          const colDef = columns[colNumber - 1];
+          const value = cell.value;
+          if (typeof value === "number") {
+            if (colDef?.key.includes("sales") || colDef?.key.includes("profit") || 
+                colDef?.key.includes("cost") || colDef?.key.includes("revenue") ||
+                colDef?.key.includes("price") || colDef?.key.includes("amount")) {
+              cell.numFmt = "#,##0.00";
+            } else if (colDef?.key.includes("margin") || colDef?.key.includes("percent")) {
+              cell.numFmt = "0.00%";
+            } else {
+              cell.numFmt = "#,##0";
+            }
+            cell.alignment = { horizontal: "left" };
+          } else {
+            cell.alignment = { horizontal: "left" };
+          }
+        });
       });
 
-      // Generate and download
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber >= 5) {
+          row.eachCell((cell) => {
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE0E0E0" } },
+              left: { style: "thin", color: { argb: "FFE0E0E0" } },
+              bottom: { style: "thin", color: { argb: "FFE0E0E0" } },
+              right: { style: "thin", color: { argb: "FFE0E0E0" } },
+            };
+          });
+        }
+      });
+
+      worksheet.views = [{ state: "frozen", xSplit: 0, ySplit: 5, activeCell: "A6" }];
+
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -150,6 +457,9 @@ export function ReportShell({
       a.download = `${excelExport.filename}_${format(new Date(), "yyyy-MM-dd")}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+      
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 2000);
     } catch (error) {
       console.error("Excel export failed:", error);
     } finally {
@@ -158,236 +468,108 @@ export function ReportShell({
   };
 
   return (
-    <>
-      {/* Print Styles */}
-      <style jsx global>{`
-        @media print {
-          nav, aside, header, .print-hidden, [data-print-hidden="true"] {
-            display: none !important;
-          }
-          body, html {
-            background: white !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          main, .print-content {
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .print-only {
-            display: block !important;
-          }
-          .preview-controls {
-            display: none !important;
-          }
-          @page {
-            size: A4;
-            margin: 1cm;
-          }
-          table {
-            page-break-inside: auto;
-          }
-          tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
-          }
-          thead {
-            display: table-header-group;
-          }
-        }
-        @media screen {
-          .print-only {
-            display: none !important;
-          }
-        }
-      `}</style>
-
-      {/* Preview Mode Overlay */}
-      {previewMode && (
-        <div className="fixed inset-0 z-50 bg-muted/80 flex flex-col print:bg-white">
-          <div className="preview-controls bg-card border-b px-6 py-3 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-3">
-              <Eye className="h-5 w-5 text-muted-foreground" />
-              <span className="font-medium text-foreground">Print Preview</span>
-              <span className="text-muted-foreground text-sm">
-                — This is exactly what will print
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPreviewMode(false)}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Exit Preview
-              </Button>
-              <Button
-                size="sm"
-                onClick={handlePrint}
-                className="bg-[#AC0F16] hover:bg-[#8a0c12]"
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Print Now
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-8 flex justify-center">
-            <div className="bg-white shadow-2xl rounded-sm w-full max-w-4xl min-h-[297mm] print:shadow-none print:rounded-none">
-              <div className="p-8 print:p-0">
-                <div className="text-center mb-6 border-b pb-4">
-                  <h1 className="text-xl font-bold">{storeName}</h1>
-                  <p className="text-sm text-muted-foreground">Point of Sale System</p>
-                </div>
-                <div className="mb-6 border rounded-lg p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <h2 className="text-lg font-bold">{title}</h2>
-                      {description && (
-                        <p className="text-sm text-muted-foreground mt-1">{description}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                      {dateRange && (
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="h-3 w-3" />
-                          {format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1.5">
-                        <User className="h-3 w-3" />
-                        {generatedBy}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-6">{children}</div>
-                <div className="mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
-                  <p>Generated on {format(new Date(), "MMMM d, yyyy 'at' h:mm a")} | {storeName} POS System</p>
-                  <p className="mt-1">This is a computer-generated document.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Layout - Following POS page pattern (no padding from parent) */}
-      <div className="flex flex-col h-full overflow-hidden">
-        {/* Sticky Control Bar - flush with top nav */}
-        <div
-          className="shrink-0 z-20 bg-card border-b px-4 md:px-6 py-3 shadow-sm print-hidden"
-          data-print-hidden="true"
-        >
-          <div className="flex items-center justify-between gap-3">
-            {/* Left: Back button & Title */}
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" asChild className="gap-2">
-                <Link href={backHref}>
-                  <ArrowLeft className="h-4 w-4" />
-                  <span className="hidden sm:inline">Back to Reports</span>
-                </Link>
-              </Button>
-              <div className="h-6 w-px bg-border hidden sm:block" />
-              <div className="flex items-center gap-2">
-                {Icon && <Icon className="h-5 w-5 text-[#2EAFC5]" />}
-                <h1 className="font-semibold text-foreground">{title}</h1>
-              </div>
-            </div>
-            
-            {/* Right: Actions */}
-            <div className="flex items-center gap-2">
-              {excelExport && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExcelExport}
-                  disabled={isExporting}
-                  className="gap-2"
-                >
-                  <FileSpreadsheet className="h-4 w-4" />
-                  <span className="hidden sm:inline">{isExporting ? "Exporting..." : "Export"}</span>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Toolbar - Title + Description */}
+      <div className="shrink-0 bg-card border-b border-stone-200/80 h-12 flex items-center justify-between px-4">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" asChild className="h-7 w-7 p-0 lg:hidden">
+                  <Link href={backHref}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </Link>
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPreviewMode(true)}
-                className="gap-2"
-              >
-                <Eye className="h-4 w-4" />
-                <span className="hidden sm:inline">Preview</span>
-              </Button>
-              <Button size="sm" onClick={handlePrint} className="gap-2">
-                <Printer className="h-4 w-4" />
-                <span className="hidden sm:inline">Print</span>
-              </Button>
-            </div>
+              </TooltipTrigger>
+              <TooltipContent>Back to Reports</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {Icon && (
+              <div className="p-1 rounded bg-[#2EAFC5]/10 shrink-0">
+                <Icon className="h-3.5 w-3.5 text-[#2EAFC5]" />
+              </div>
+            )}
+            <h1 className="font-semibold text-sm text-foreground shrink-0">{title}</h1>
+            {description && (
+              <>
+                <span className="text-stone-300 hidden sm:inline">|</span>
+                <span className="text-xs text-muted-foreground truncate hidden sm:inline">{description}</span>
+              </>
+            )}
           </div>
         </div>
-
-        {/* Scrollable Content Area */}
-        <div
-          ref={reportRef}
-          className="flex-1 overflow-auto p-4 md:p-6 space-y-4 print:p-0 print-content"
-        >
-          {/* Report Header Card */}
-          <Card className="shadow-sm print:shadow-none print:border">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    {Icon && <Icon className="h-5 w-5 text-[#2EAFC5] print:hidden" />}
-                    {title}
-                  </CardTitle>
-                  {description && (
-                    <CardDescription className="mt-1">{description}</CardDescription>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {dateRange && (
-                    <Badge variant="outline" className="gap-1.5">
-                      <Calendar className="h-3 w-3" />
-                      {format(dateRange.from, "MMM d")} - {format(dateRange.to, "MMM d, yyyy")}
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="gap-1.5">
-                    <User className="h-3 w-3" />
-                    {generatedBy}
-                  </Badge>
-                  <Badge variant="outline" className="gap-1.5 print:hidden">
-                    <Building2 className="h-3 w-3" />
-                    {storeName}
-                  </Badge>
-                </div>
-              </div>
-            </CardHeader>
-          </Card>
-
-          {/* Report Body - Children */}
-          {children}
-
-          {/* Print-only Footer */}
-          <div className="print-only mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
-            <p>Generated on {format(new Date(), "MMMM d, yyyy 'at' h:mm a")} | {storeName} POS System</p>
-            <p className="mt-1">This is a computer-generated document.</p>
-          </div>
+        
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Loading indicator */}
+          {isLoading && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="hidden sm:inline">Loading...</span>
+            </div>
+          )}
+          
+          {/* Custom toolbar content (e.g., date picker) */}
+          {toolbarContent}
+          
+          {excelExport && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExcelExport}
+                    disabled={isExporting}
+                    className={cn("h-7 gap-1 text-xs", exportSuccess && "border-[#2EAFC5] text-[#2EAFC5]")}
+                  >
+                    {isExporting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : exportSuccess ? (
+                      <CheckCircle className="h-3.5 w-3.5" />
+                    ) : (
+                      <FileSpreadsheet className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">{isExporting ? "..." : exportSuccess ? "Done" : "Export"}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Export to Excel</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" onClick={handlePrint} className="h-7 gap-1 text-xs bg-[#AC0F16] hover:bg-[#8a0c12]">
+                  <Printer className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Print</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open print preview</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
-    </>
+
+      {/* Scrollable Content - No header card */}
+      <div ref={reportRef} className="flex-1 overflow-auto bg-[#f5f3ef]">
+        <div className="p-4 space-y-4 max-w-[1600px] mx-auto">
+          {children}
+        </div>
+      </div>
+    </div>
   );
 }
 
 /**
- * ReportSummaryCard - Compact metric card for report summaries
- * Uses proper design system tokens
+ * ReportSummaryCard - Larger metric card with more detail
  */
 interface ReportSummaryCardProps {
   label: string;
   value: string | number;
+  subtitle?: string;
   icon?: React.ElementType;
   variant?: "default" | "success" | "warning" | "danger";
   className?: string;
@@ -396,40 +578,51 @@ interface ReportSummaryCardProps {
 export function ReportSummaryCard({
   label,
   value,
+  subtitle,
   icon: Icon,
   variant = "default",
   className,
 }: ReportSummaryCardProps) {
   const variantStyles = {
-    default: "",
+    default: "border-stone-200/80 bg-card",
     success: "border-[#2EAFC5]/30 bg-[#2EAFC5]/5",
     warning: "border-[#F1782F]/30 bg-[#F1782F]/5",
-    danger: "border-destructive/30 bg-destructive/5",
+    danger: "border-[#AC0F16]/30 bg-[#AC0F16]/5",
   };
 
   const iconStyles = {
-    default: "text-muted-foreground",
+    default: "text-muted-foreground bg-stone-100",
+    success: "text-[#2EAFC5] bg-[#2EAFC5]/10",
+    warning: "text-[#F1782F] bg-[#F1782F]/10",
+    danger: "text-[#AC0F16] bg-[#AC0F16]/10",
+  };
+
+  const valueStyles = {
+    default: "text-foreground",
     success: "text-[#2EAFC5]",
     warning: "text-[#F1782F]",
-    danger: "text-destructive",
+    danger: "text-[#AC0F16]",
   };
 
   return (
-    <Card className={`shadow-sm ${variantStyles[variant]} ${className ?? ""}`}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
+    <Card className={cn("shadow-sm h-full", variantStyles[variant], className)}>
+      <CardContent className="p-4 h-full flex flex-col justify-center">
+        <div className="flex items-start gap-3">
           {Icon && (
-            <div className="print:hidden">
-              <Icon className={`h-5 w-5 ${iconStyles[variant]}`} />
+            <div className={cn("p-2.5 rounded-lg shrink-0", iconStyles[variant])}>
+              <Icon className="h-5 w-5" />
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium truncate">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">
               {label}
             </p>
-            <p className="text-xl font-bold text-foreground tabular-nums font-mono">
+            <p className={cn("text-2xl font-bold tabular-nums font-mono", valueStyles[variant])}>
               {value}
             </p>
+            {subtitle && (
+              <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+            )}
           </div>
         </div>
       </CardContent>
@@ -438,7 +631,7 @@ export function ReportSummaryCard({
 }
 
 /**
- * ReportSection - Groups related content within a report
+ * ReportSection - Groups related content
  */
 interface ReportSectionProps {
   title: string;
@@ -449,19 +642,21 @@ interface ReportSectionProps {
 
 export function ReportSection({ title, description, children, action }: ReportSectionProps) {
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
+    <Card className="shadow-sm border-stone-200/80 bg-card">
+      <CardHeader className="py-3 px-4 border-b border-stone-100">
+        <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-base">{title}</CardTitle>
+            <CardTitle className="text-sm font-semibold">{title}</CardTitle>
             {description && (
-              <CardDescription>{description}</CardDescription>
+              <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
             )}
           </div>
-          {action && <div className="print:hidden">{action}</div>}
+          {action}
         </div>
       </CardHeader>
-      <CardContent className="pt-0">{children}</CardContent>
+      <CardContent className="p-0">
+        {children}
+      </CardContent>
     </Card>
   );
 }

@@ -31,9 +31,12 @@ interface AdminLayoutClientProps {
 export default function AdminLayoutClient({ children, user, pendingOrdersCount = 0 }: AdminLayoutClientProps) {
   const pathname = usePathname();
   const isPosPage = pathname === "/admin/pos";
-  // Main reports page should scroll normally, only individual report pages need special handling
-  const isReportPage = pathname?.startsWith("/admin/reports/") && pathname !== "/admin/reports";
-  const isReportsIndex = pathname === "/admin/reports";
+  // Check if this is a print preview page (should be full screen, no padding)
+  const isPrintPreview = pathname?.includes("/print");
+  // All report pages (including index) need special handling
+  const isReportsPage = pathname?.startsWith("/admin/reports");
+  // Pages that manage their own scroll
+  const needsOverflowHidden = isPosPage || isReportsPage;
 
   return (
     <SessionProvider 
@@ -46,29 +49,35 @@ export default function AdminLayoutClient({ children, user, pendingOrdersCount =
         {/* Main flex container - full viewport */}
         <div className="flex h-screen w-full bg-background">
           {/* Motion Sidebar - auto-expands on hover (desktop) / hamburger (mobile) */}
-          <AppSidebarMotion pendingOrdersCount={pendingOrdersCount} />
+          {!isPrintPreview && <AppSidebarMotion pendingOrdersCount={pendingOrdersCount} />}
           
           {/* Main content area - grows to fill remaining space */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
             {/* Top Navigation */}
-            <header className="h-14 shrink-0 border-b border-border bg-card z-10">
-              <TopNav user={user} />
-            </header>
+            {!isPrintPreview && (
+              <header className="h-14 shrink-0 border-b border-border bg-card z-30">
+                <TopNav user={user} />
+              </header>
+            )}
             
-            {/* Page Content */}
+            {/* Page Content - Use relative/absolute pattern for strict height containment */}
             <main
               className={cn(
-                "flex-1",
-                (isPosPage || isReportPage) ? "overflow-hidden" : "overflow-auto",
-                (isPosPage || isReportPage) ? "p-0 bg-[#f5f3ef] dark:bg-muted/30" : "p-4 md:p-6 bg-[#f5f3ef] dark:bg-muted/30"
+                "flex-1 relative",
+                // Padding: none for POS/reports, normal for other pages
+                (isPosPage || isReportsPage) ? "p-0" : "p-4 md:p-6",
+                !needsOverflowHidden && "overflow-auto",
+                isPrintPreview ? "bg-white" : "bg-[#f5f3ef] dark:bg-muted/30"
               )}
             >
-              <div className={cn(
-                "h-full flex flex-col",
-                (isPosPage || isReportPage) && "overflow-hidden"
-              )}>
-                {children}
-              </div>
+              {/* Absolute positioned wrapper for report pages to enforce height */}
+              {needsOverflowHidden ? (
+                <div className="absolute inset-0 flex flex-col overflow-hidden">
+                  {children}
+                </div>
+              ) : (
+                children
+              )}
             </main>
           </div>
         </div>

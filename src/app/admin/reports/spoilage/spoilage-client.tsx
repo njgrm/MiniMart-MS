@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useMemo, useTransition } from "react";
 import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
+import Link from "next/link";
 import {
   Trash2,
   Undo2,
@@ -12,6 +13,7 @@ import {
   Calendar,
   Search,
   RefreshCw,
+  Boxes,
 } from "lucide-react";
 import {
   Table,
@@ -120,13 +122,44 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
     }),
   };
 
+  // Print table data - ALL rows for print preview
+  const printTableData = useMemo(() => {
+    const headers = ["Date", "Product", "Category", "Type", "Qty Lost", "Est. Loss", "Reason"];
+    const rows = filteredItems.map(item => [
+      format(item.logged_at, "MMM d"),
+      item.product_name,
+      item.category,
+      movementTypeLabels[item.movement_type]?.label || item.movement_type,
+      `-${item.quantity_lost}`,
+      `₱${item.estimated_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      item.reason || "—",
+    ]);
+    return { headers, rows };
+  }, [filteredItems]);
+
+  // Print summary for clean print preview (no icons)
+  const printSummary = [
+    { label: "Total Incidents", value: data.summary.total_items.toString() },
+    { label: "Units Lost", value: data.summary.total_units_lost.toLocaleString() },
+    { label: "Estimated Loss", value: `₱${data.summary.total_estimated_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+    { label: "Report Period", value: dateRange?.from ? `${format(dateRange.from, "MMM d")} - ${format(dateRange.to!, "MMM d")}` : "30 Days" },
+  ];
+
+  // Calculate derived values
+  const avgLossPerIncident = data.summary.total_items > 0
+    ? data.summary.total_estimated_loss / data.summary.total_items
+    : 0;
+
   return (
     <ReportShell
       title="Spoilage & Wastage Report"
       description="Track stock losses from damage, expiry, and supplier returns. Critical for loss prevention and FEFO validation."
+      icon={Trash2}
       dateRange={dateRange?.from && dateRange?.to ? { from: dateRange.from, to: dateRange.to } : undefined}
       generatedBy="Admin"
       excelExport={excelExport}
+      printSummary={printSummary}
+      printTableData={printTableData}
     >
       {/* Filters - Screen Only */}
       <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
@@ -148,29 +181,33 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
         </Button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Summary Cards - Larger with subtitles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <ReportSummaryCard
           label="Total Incidents"
           value={data.summary.total_items}
+          subtitle={data.summary.total_items > 0 ? `Avg ₱${avgLossPerIncident.toLocaleString(undefined, { maximumFractionDigits: 0 })}/incident` : "No incidents recorded"}
           icon={AlertTriangle}
-          variant="warning"
+          variant={data.summary.total_items > 0 ? "warning" : "default"}
         />
         <ReportSummaryCard
           label="Units Lost"
           value={data.summary.total_units_lost.toLocaleString()}
+          subtitle="Stock removed from inventory"
           icon={Package}
-          variant="danger"
+          variant={data.summary.total_units_lost > 0 ? "danger" : "default"}
         />
         <ReportSummaryCard
           label="Estimated Loss"
           value={`₱${data.summary.total_estimated_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          subtitle="Based on cost prices"
           icon={DollarSign}
-          variant="danger"
+          variant={data.summary.total_estimated_loss > 0 ? "danger" : "success"}
         />
         <ReportSummaryCard
           label="Report Period"
           value={dateRange?.from ? format(dateRange.from, "MMM d") + " - " + format(dateRange.to!, "MMM d") : "30 Days"}
+          subtitle={`${data.items.length} records found`}
           icon={Calendar}
         />
       </div>
@@ -232,7 +269,11 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
               {filteredItems.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No spoilage or wastage records found for this period.
+                    <div className="flex flex-col items-center gap-2">
+                      <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                      <p>No spoilage or wastage records found for this period.</p>
+                      <p className="text-xs">This is a good sign!</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -242,9 +283,15 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
                       {format(item.logged_at, "MMM d")}
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <p className="font-medium text-foreground">{item.product_name}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="max-w-[200px]">
+                        <Link 
+                          href={`/admin/inventory/${item.product_id}`}
+                          className="font-medium text-foreground hover:text-primary hover:underline block truncate"
+                          title={item.product_name}
+                        >
+                          {item.product_name}
+                        </Link>
+                        <p className="text-xs text-muted-foreground truncate">
                           {item.category}
                           {item.barcode && ` • ${item.barcode}`}
                         </p>

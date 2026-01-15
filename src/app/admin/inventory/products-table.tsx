@@ -18,7 +18,6 @@ import {
   type RowSelectionState,
 } from "@tanstack/react-table";
 import {
-  ArrowUpDown,
   MoreHorizontal,
   Pencil,
   Archive,
@@ -44,6 +43,7 @@ import {
   Snowflake,
   Truck,
 } from "lucide-react";
+import { SortableHeader } from "@/components/ui/sortable-header";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -226,14 +226,9 @@ export function ProductsTable({
       {
         accessorKey: "product_name",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
-          >
+          <SortableHeader column={column}>
             Name
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => (
           <div className="text-sm font-medium text-foreground truncate max-w-[200px]">
@@ -270,14 +265,9 @@ export function ProductsTable({
       {
         accessorKey: "retail_price",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
-          >
+          <SortableHeader column={column}>
             Retail
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("retail_price"));
@@ -294,14 +284,9 @@ export function ProductsTable({
       {
         accessorKey: "wholesale_price",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
-          >
+          <SortableHeader column={column}>
             Wholesale
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const amount = parseFloat(row.getValue("wholesale_price"));
@@ -318,14 +303,9 @@ export function ProductsTable({
       {
         accessorKey: "current_stock",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
-          >
+          <SortableHeader column={column}>
             Stock
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const stock = row.getValue("current_stock") as number;
@@ -565,15 +545,10 @@ export function ProductsTable({
       {
         accessorKey: "nearest_expiry_date",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4 h-8 uppercase text-[11px] font-semibold tracking-wider"
-          >
-            <CalendarClock className="mr-1.5 h-3 w-3" />
+          <SortableHeader column={column}>
+            <CalendarClock className="h-3 w-3 mr-1" />
             Expiry
-            <ArrowUpDown className="ml-2 h-3 w-3" />
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const expiryDate = row.original.nearest_expiry_date;

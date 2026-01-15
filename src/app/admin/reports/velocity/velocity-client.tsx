@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
+import Link from "next/link";
 import {
   useReactTable,
   getCoreRowModel,
@@ -22,9 +23,7 @@ import {
   Zap,
   Search,
   Filter,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
+  Boxes,
 } from "lucide-react";
 import {
   Table,
@@ -36,7 +35,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -48,6 +46,7 @@ import {
   ReportShell,
   ReportSummaryCard,
   ReportSection,
+  SortableHeader,
 } from "@/components/reports/report-shell";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import {
@@ -123,11 +122,21 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
     () => [
       {
         accessorKey: "product_name",
-        header: "Product",
+        header: () => (
+          <div className="font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Product
+          </div>
+        ),
         cell: ({ row }) => (
-          <div>
-            <p className="font-medium text-foreground">{row.original.product_name}</p>
-            <p className="text-xs text-muted-foreground">
+          <div className="max-w-[200px]">
+            <Link 
+              href={`/admin/inventory/${row.original.product_id}`}
+              className="font-medium text-foreground hover:text-primary hover:underline block truncate"
+              title={row.original.product_name}
+            >
+              {row.original.product_name}
+            </Link>
+            <p className="text-xs text-muted-foreground truncate">
               {row.original.category}
               {row.original.barcode && ` • ${row.original.barcode}`}
             </p>
@@ -142,27 +151,15 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
             (product.barcode?.toLowerCase().includes(searchLower) ?? false)
           );
         },
+        size: 200,
       },
       {
         accessorKey: "status",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-              className="-ml-3 h-8 hover:bg-transparent"
-            >
-              Status
-              {column.getIsSorted() === "asc" ? (
-                <ArrowUp className="ml-2 h-4 w-4" />
-              ) : column.getIsSorted() === "desc" ? (
-                <ArrowDown className="ml-2 h-4 w-4" />
-              ) : (
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              )}
-            </Button>
-          );
-        },
+        header: ({ column }) => (
+          <SortableHeader column={column}>
+            Status
+          </SortableHeader>
+        ),
         cell: ({ row }) => {
           const config = statusConfig[row.original.status];
           const StatusIcon = config.icon;
@@ -176,58 +173,63 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         sortingFn: (rowA, rowB) => {
           return statusConfig[rowA.original.status].order - statusConfig[rowB.original.status].order;
         },
+        size: 130,
       },
       {
         accessorKey: "current_stock",
-        header: () => <div className="text-right">Stock</div>,
-        cell: ({ row }) => (
-          <div className="text-right font-mono">{row.original.current_stock}</div>
+        header: () => (
+          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Stock
+          </div>
         ),
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums">{row.original.current_stock.toLocaleString()}</div>
+        ),
+        size: 80,
       },
       {
         accessorKey: "units_sold_30d",
-        header: () => <div className="text-right">Sold (30d)</div>,
-        cell: ({ row }) => (
-          <div className="text-right font-mono">{row.original.units_sold_30d}</div>
+        header: () => (
+          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Sold (30d)
+          </div>
         ),
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums">{row.original.units_sold_30d.toLocaleString()}</div>
+        ),
+        size: 90,
       },
       {
         accessorKey: "daily_velocity",
-        header: () => <div className="text-right">Velocity</div>,
-        cell: ({ row }) => (
-          <div className="text-right font-mono">{row.original.daily_velocity}/day</div>
+        header: () => (
+          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Velocity
+          </div>
         ),
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums">{row.original.daily_velocity}/day</div>
+        ),
+        size: 90,
       },
       {
         accessorKey: "days_of_supply",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-              className="-ml-3 h-8 hover:bg-transparent"
-            >
-              <span className="text-right">Days Left</span>
-              {column.getIsSorted() === "asc" ? (
-                <ArrowUp className="ml-2 h-4 w-4" />
-              ) : column.getIsSorted() === "desc" ? (
-                <ArrowDown className="ml-2 h-4 w-4" />
-              ) : (
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              )}
-            </Button>
-          );
-        },
+        header: ({ column }) => (
+          <div className="text-right">
+            <SortableHeader column={column} className="justify-end">
+              Days Left
+            </SortableHeader>
+          </div>
+        ),
         cell: ({ row }) => {
           const days = row.original.days_of_supply;
           return (
-            <div className="text-right font-mono">
+            <div className="text-right font-mono tabular-nums">
               {days >= 999 ? (
-                <span className="text-red-600">∞</span>
+                <span className="text-[#AC0F16]">∞</span>
               ) : (
                 <span
                   className={
-                    days > 90 ? "text-red-600" : days > 30 ? "text-orange-600" : ""
+                    days > 90 ? "text-[#AC0F16]" : days > 30 ? "text-[#F1782F]" : ""
                   }
                 >
                   {days}d
@@ -236,36 +238,31 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
             </div>
           );
         },
+        size: 100,
       },
       {
         accessorKey: "capital_tied",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-              className="-ml-3 h-8 hover:bg-transparent"
-            >
-              <span className="text-right">Capital</span>
-              {column.getIsSorted() === "asc" ? (
-                <ArrowUp className="ml-2 h-4 w-4" />
-              ) : column.getIsSorted() === "desc" ? (
-                <ArrowDown className="ml-2 h-4 w-4" />
-              ) : (
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-              )}
-            </Button>
-          );
-        },
+        header: ({ column }) => (
+          <div className="text-right">
+            <SortableHeader column={column} className="justify-end">
+              Capital
+            </SortableHeader>
+          </div>
+        ),
         cell: ({ row }) => (
-          <div className="text-right font-mono">
+          <div className="text-right font-mono tabular-nums">
             ₱{row.original.capital_tied.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </div>
         ),
+        size: 120,
       },
       {
         accessorKey: "last_sale_date",
-        header: "Last Sale",
+        header: () => (
+          <div className="font-medium text-muted-foreground uppercase text-[11px] tracking-wide print:hidden">
+            Last Sale
+          </div>
+        ),
         cell: ({ row }) => (
           <div className="text-sm text-muted-foreground print:hidden">
             {row.original.last_sale_date
@@ -273,7 +270,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
               : "Never"}
           </div>
         ),
-        meta: { className: "print:hidden" },
+        size: 90,
       },
     ],
     []
@@ -310,6 +307,22 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
     },
   });
 
+  // Print table data - ALL rows for print preview
+  const printTableData = useMemo(() => {
+    const headers = ["Product", "Category", "Status", "Stock", "Sold (30d)", "Velocity", "Days Left", "Capital"];
+    const rows = filteredData.map(item => [
+      item.product_name,
+      item.category,
+      statusConfig[item.status].label,
+      item.current_stock.toLocaleString(),
+      item.units_sold_30d.toLocaleString(),
+      `${item.daily_velocity}/day`,
+      item.days_of_supply >= 999 ? "∞" : `${item.days_of_supply}d`,
+      `₱${item.capital_tied.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+    ]);
+    return { headers, rows };
+  }, [filteredData]);
+
   // Excel export configuration
   const excelExport = {
     filename: "inventory_velocity_report",
@@ -324,9 +337,9 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         { header: "Units Sold (30d)", key: "units_sold_30d", width: 15 },
         { header: "Daily Velocity", key: "daily_velocity", width: 12 },
         { header: "Days of Supply", key: "days_of_supply", width: 12 },
-        { header: "Cost Price", key: "cost_price", width: 12 },
-        { header: "Retail Price", key: "retail_price", width: 12 },
-        { header: "Capital Tied", key: "capital_tied", width: 12 },
+        { header: "Cost Price (₱)", key: "cost_price", width: 12 },
+        { header: "Retail Price (₱)", key: "retail_price", width: 12 },
+        { header: "Capital Tied (₱)", key: "capital_tied", width: 14 },
         { header: "Last Sale", key: "last_sale_date", width: 12 },
       ],
       rows: filteredData.map((item) => ({
@@ -350,8 +363,10 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
     <ReportShell
       title="Inventory Velocity Report"
       description="Identify Dead Stock (0 sales in 30 days) vs Fast Movers. Critical for Dynamic ROP optimization and capital efficiency."
+      icon={Activity}
       generatedBy="Admin"
       excelExport={excelExport}
+      printTableData={printTableData}
     >
       {/* Filters - Screen Only */}
       <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
@@ -396,7 +411,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <ReportSummaryCard
           label="Dead Stock Items"
-          value={data.summary.dead_stock_count}
+          value={data.summary.dead_stock_count.toLocaleString()}
           icon={Snowflake}
           variant="danger"
         />
@@ -408,13 +423,13 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         />
         <ReportSummaryCard
           label="Slow Movers"
-          value={data.summary.slow_mover_count}
+          value={data.summary.slow_mover_count.toLocaleString()}
           icon={TrendingDown}
           variant="warning"
         />
         <ReportSummaryCard
           label="Fast Movers"
-          value={data.summary.fast_mover_count}
+          value={data.summary.fast_mover_count.toLocaleString()}
           icon={Zap}
           variant="success"
         />
@@ -422,8 +437,8 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
 
       {/* Capital Analysis */}
       <ReportSection title="Capital Efficiency Analysis">
-        <div className="bg-card rounded-lg p-4 border print:border-gray-300 print:bg-white">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-muted-foreground mb-1">Total Capital Tied in Inventory</p>
               <p className="text-2xl font-bold font-mono text-foreground tabular-nums">
@@ -432,7 +447,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground mb-1">At-Risk Capital (Dead + Slow)</p>
-              <p className="text-2xl font-bold font-mono text-red-600">
+              <p className="text-2xl font-bold font-mono text-[#AC0F16] tabular-nums">
                 ₱{(data.summary.dead_stock_capital + data.summary.slow_mover_capital).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>
             </div>
@@ -447,9 +462,10 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
                         100
                       : 0
                   }
-                  className="flex-1 h-3"
+                  className="flex-1 h-3 bg-stone-200"
+                  indicatorClassName="bg-[#AC0F16]"
                 />
-                <span className="text-lg font-mono font-bold">
+                <span className="text-lg font-mono font-bold tabular-nums">
                   {data.summary.total_capital_tied > 0
                     ? Math.round(
                         ((data.summary.dead_stock_capital + data.summary.slow_mover_capital) /
@@ -471,43 +487,55 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         description={`${table.getFilteredRowModel().rows.length} products`}
       >
         <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="h-10">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
-                    No products match your filters.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className="print:text-sm bg-background hover:bg-muted/30"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
+                    {headerGroup.headers.map((header) => (
+                      <TableHead 
+                        key={header.id} 
+                        className="h-11"
+                        style={{ width: header.column.getSize() }}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                        <p>No products match your filters.</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className="print:text-sm hover:bg-muted/30"
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell 
+                          key={cell.id}
+                          style={{ width: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
 
         {/* Pagination */}
@@ -519,18 +547,18 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
       {/* Recommendations - Screen Only */}
       <div className="print-hidden" data-print-hidden="true">
         <ReportSection title="Recommendations">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="bg-[#F1782F]/10 border border-[#F1782F]/30 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+              <AlertTriangle className="h-5 w-5 text-[#F1782F] mt-0.5" />
               <div className="space-y-2">
-                <p className="font-medium text-amber-800">Action Items for Dead Stock</p>
-                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                <p className="font-medium text-[#F1782F]">Action Items for Dead Stock</p>
+                <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
                   <li>Consider running promotions or bundling dead stock items</li>
                   <li>Review pricing strategy for slow-moving products</li>
                   <li>Adjust reorder levels to prevent overstocking</li>
                   <li>
                     Capital tied in dead stock:{" "}
-                    <strong>
+                    <strong className="font-mono">
                       ₱{data.summary.dead_stock_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </strong>
                   </li>

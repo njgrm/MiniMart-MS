@@ -38,6 +38,8 @@ const segmentMap: Record<string, string> = {
   pos: "Point of Sale",
   inventory: "Inventory",
   orders: "Orders",
+  "z-read": "Daily Sales",
+  reports: "Reports",
 };
 
 function toLabel(segment: string) {

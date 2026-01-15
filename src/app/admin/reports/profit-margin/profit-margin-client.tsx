@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   useReactTable,
   getCoreRowModel,
@@ -13,17 +14,14 @@ import {
 } from "@tanstack/react-table";
 import {
   TrendingUp,
-  TrendingDown,
   AlertTriangle,
   DollarSign,
   Search,
   Filter,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   Percent,
   AlertCircle,
   CheckCircle,
+  Boxes,
 } from "lucide-react";
 import {
   Table,
@@ -35,7 +33,6 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -47,6 +44,7 @@ import {
   ReportShell,
   ReportSummaryCard,
   ReportSection,
+  SortableHeader,
 } from "@/components/reports/report-shell";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
@@ -117,11 +115,21 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
     () => [
       {
         accessorKey: "product_name",
-        header: "Product",
+        header: () => (
+          <div className="font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Product
+          </div>
+        ),
         cell: ({ row }) => (
-          <div>
-            <p className="font-medium text-foreground">{row.original.product_name}</p>
-            <p className="text-xs text-muted-foreground">
+          <div className="max-w-[200px]">
+            <Link 
+              href={`/admin/inventory/${row.original.product_id}`}
+              className="font-medium text-foreground hover:text-primary hover:underline block truncate"
+              title={row.original.product_name}
+            >
+              {row.original.product_name}
+            </Link>
+            <p className="text-xs text-muted-foreground truncate">
               {row.original.category}
               {row.original.barcode && ` • ${row.original.barcode}`}
             </p>
@@ -136,55 +144,63 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
             (item.barcode?.toLowerCase().includes(searchLower) ?? false)
           );
         },
+        size: 200,
       },
       {
         accessorKey: "cost_price",
-        header: () => <div className="text-right">Cost</div>,
+        header: () => (
+          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Cost
+          </div>
+        ),
         cell: ({ row }) => (
-          <div className="text-right font-mono">
+          <div className="text-right font-mono tabular-nums">
             ₱{row.original.cost_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </div>
         ),
+        size: 100,
       },
       {
         accessorKey: "retail_price",
-        header: () => <div className="text-right">Retail</div>,
+        header: () => (
+          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Retail
+          </div>
+        ),
         cell: ({ row }) => (
-          <div className="text-right font-mono">
+          <div className="text-right font-mono tabular-nums">
             ₱{row.original.retail_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </div>
         ),
+        size: 100,
       },
       {
         accessorKey: "margin_percent",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-3 h-8 hover:bg-transparent"
-          >
-            <Percent className="mr-1 h-4 w-4" />
+          <SortableHeader column={column}>
+            <Percent className="h-3.5 w-3.5" />
             Margin
-            {column.getIsSorted() === "asc" ? (
-              <ArrowUp className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <ArrowDown className="ml-2 h-4 w-4" />
-            ) : (
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            )}
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const margin = row.original.margin_percent;
-          const config = statusConfig[row.original.status];
+          // Determine indicator color based on margin
+          const indicatorColor = margin < 0
+            ? "bg-[#AC0F16]"
+            : margin < 10
+            ? "bg-[#F1782F]"
+            : margin < 25
+            ? "bg-blue-500"
+            : "bg-[#2EAFC5]";
           return (
             <div className="flex items-center gap-2">
               <Progress
                 value={Math.max(0, Math.min(100, margin))}
-                className="w-16 h-2"
+                className="w-16 h-2 bg-stone-200"
+                indicatorClassName={indicatorColor}
               />
               <span
-                className={`font-mono font-medium ${
+                className={`font-mono tabular-nums font-medium ${
                   margin < 0
                     ? "text-[#AC0F16]"
                     : margin < 10
@@ -199,24 +215,14 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
             </div>
           );
         },
+        size: 140,
       },
       {
         accessorKey: "status",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-3 h-8 hover:bg-transparent"
-          >
+          <SortableHeader column={column}>
             Status
-            {column.getIsSorted() === "asc" ? (
-              <ArrowUp className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <ArrowDown className="ml-2 h-4 w-4" />
-            ) : (
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            )}
-          </Button>
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const config = statusConfig[row.original.status];
@@ -231,37 +237,34 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         sortingFn: (rowA, rowB) => {
           return statusConfig[rowA.original.status].order - statusConfig[rowB.original.status].order;
         },
+        size: 120,
       },
       {
         accessorKey: "units_sold_30d",
-        header: () => <div className="text-right">Sold (30d)</div>,
-        cell: ({ row }) => (
-          <div className="text-right font-mono">{row.original.units_sold_30d}</div>
+        header: () => (
+          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+            Sold (30d)
+          </div>
         ),
+        cell: ({ row }) => (
+          <div className="text-right font-mono tabular-nums">{row.original.units_sold_30d.toLocaleString()}</div>
+        ),
+        size: 90,
       },
       {
         accessorKey: "total_profit_30d",
         header: ({ column }) => (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-3 h-8 hover:bg-transparent"
-          >
-            <span className="text-right">Profit (30d)</span>
-            {column.getIsSorted() === "asc" ? (
-              <ArrowUp className="ml-2 h-4 w-4" />
-            ) : column.getIsSorted() === "desc" ? (
-              <ArrowDown className="ml-2 h-4 w-4" />
-            ) : (
-              <ArrowUpDown className="ml-2 h-4 w-4" />
-            )}
-          </Button>
+          <div className="text-right">
+            <SortableHeader column={column} className="justify-end">
+              Profit (30d)
+            </SortableHeader>
+          </div>
         ),
         cell: ({ row }) => {
           const profit = row.original.total_profit_30d;
           return (
             <div
-              className={`text-right font-mono font-medium ${
+              className={`text-right font-mono tabular-nums font-medium ${
                 profit < 0 ? "text-[#AC0F16]" : "text-[#2EAFC5]"
               }`}
             >
@@ -269,6 +272,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
             </div>
           );
         },
+        size: 130,
       },
     ],
     []
@@ -298,6 +302,22 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
     },
   });
 
+  // Print table data - ALL rows for print preview
+  const printTableData = useMemo(() => {
+    const headers = ["Product", "Category", "Cost", "Retail", "Margin %", "Status", "Sold (30d)", "Profit (30d)"];
+    const rows = filteredData.map(item => [
+      item.product_name,
+      item.category,
+      `₱${item.cost_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      `₱${item.retail_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      `${item.margin_percent.toFixed(1)}%`,
+      statusConfig[item.status].label,
+      item.units_sold_30d.toLocaleString(),
+      `₱${item.total_profit_30d.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+    ]);
+    return { headers, rows };
+  }, [filteredData]);
+
   // Excel export configuration
   const excelExport = {
     filename: "profit_margin_analysis",
@@ -307,13 +327,13 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         { header: "Product", key: "product_name", width: 30 },
         { header: "Category", key: "category", width: 15 },
         { header: "Barcode", key: "barcode", width: 15 },
-        { header: "Cost Price", key: "cost_price", width: 12 },
-        { header: "Retail Price", key: "retail_price", width: 12 },
-        { header: "Margin Amount", key: "margin_amount", width: 12 },
+        { header: "Cost Price (₱)", key: "cost_price", width: 14 },
+        { header: "Retail Price (₱)", key: "retail_price", width: 14 },
+        { header: "Margin Amount (₱)", key: "margin_amount", width: 14 },
         { header: "Margin %", key: "margin_percent", width: 10 },
         { header: "Status", key: "status", width: 12 },
         { header: "Units Sold (30d)", key: "units_sold_30d", width: 15 },
-        { header: "Profit (30d)", key: "total_profit_30d", width: 12 },
+        { header: "Profit (30d) (₱)", key: "total_profit_30d", width: 14 },
       ],
       rows: filteredData.map((item) => ({
         product_name: item.product_name,
@@ -322,7 +342,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         cost_price: item.cost_price,
         retail_price: item.retail_price,
         margin_amount: item.margin_amount,
-        margin_percent: item.margin_percent,
+        margin_percent: item.margin_percent / 100, // For percentage formatting
         status: statusConfig[item.status].label,
         units_sold_30d: item.units_sold_30d,
         total_profit_30d: item.total_profit_30d,
@@ -334,8 +354,10 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
     <ReportShell
       title="Profit Margin Analysis"
       description="Compare cost vs retail price, identify low-margin products needing repricing. Sorted by margin % (lowest first)."
+      icon={TrendingUp}
       generatedBy="Admin"
       excelExport={excelExport}
+      printTableData={printTableData}
     >
       {/* Filters - Screen Only */}
       <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
@@ -380,13 +402,13 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <ReportSummaryCard
           label="Negative Margin"
-          value={data.summary.negative_margin_count}
+          value={data.summary.negative_margin_count.toLocaleString()}
           icon={AlertCircle}
           variant="danger"
         />
         <ReportSummaryCard
           label="Low Margin (<10%)"
-          value={data.summary.low_margin_count}
+          value={data.summary.low_margin_count.toLocaleString()}
           icon={AlertTriangle}
           variant="warning"
         />
@@ -405,12 +427,12 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
 
       {/* Alert for problematic margins */}
       {(data.summary.negative_margin_count > 0 || data.summary.low_margin_count > 0) && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 print-hidden" data-print-hidden="true">
+        <div className="bg-[#F1782F]/10 border border-[#F1782F]/30 rounded-lg p-4 print-hidden" data-print-hidden="true">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-[#F1782F] mt-0.5" />
             <div>
-              <p className="font-medium text-amber-800">Pricing Issues Detected</p>
-              <p className="text-sm text-amber-700 mt-1">
+              <p className="font-medium text-[#F1782F]">Pricing Issues Detected</p>
+              <p className="text-sm text-muted-foreground mt-1">
                 {data.summary.negative_margin_count > 0 && (
                   <span>
                     <strong>{data.summary.negative_margin_count}</strong> products are selling below cost.{" "}
@@ -434,43 +456,55 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         description={`${table.getFilteredRowModel().rows.length} products`}
       >
         <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id} className="h-10">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
-                    No products match your filters.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className="print:text-sm bg-background hover:bg-muted/30"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </TableCell>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
+                    {headerGroup.headers.map((header) => (
+                      <TableHead 
+                        key={header.id} 
+                        className="h-11"
+                        style={{ width: header.column.getSize() }}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
                     ))}
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                        <p>No products match your filters.</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className="print:text-sm hover:bg-muted/30"
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell 
+                          key={cell.id}
+                          style={{ width: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
 
         {/* Pagination */}
