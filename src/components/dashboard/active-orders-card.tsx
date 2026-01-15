@@ -215,7 +215,7 @@ export function ActiveOrdersCard({ incomingOrders: initialOrders, className }: A
   };
 
   return (
-    <div className={cn("bg-card rounded-xl border flex flex-col overflow-hidden", className)}>
+    <div className={cn("bg-card rounded-xl border flex flex-col overflow-hidden max-h-[400px]", className)}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b shrink-0">
         <div className="flex items-center gap-2">

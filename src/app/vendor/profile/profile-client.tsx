@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { updateVendorProfile } from "@/actions/vendor";
 import { uploadImageRaw } from "@/actions/upload";
-import { signOut } from "next-auth/react";
+import { logout } from "@/actions/auth";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -162,7 +162,9 @@ export function VendorProfileClient({ customer }: VendorProfileClientProps) {
   };
 
   const handleLogout = async () => {
-    await signOut({ callbackUrl: "/login" });
+    // Use the server action for proper audit logging
+    await logout(customer.name, "vendor");
+    router.push("/login");
   };
 
   // Menu item component for consistent styling

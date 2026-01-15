@@ -13,6 +13,7 @@ import {
   History,
   BarChart3,
   FileText,
+  Building2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -61,6 +62,11 @@ const navItems: NavItem[] = [
     href: "/admin/inventory",
     label: "Inventory",
     icon: Package,
+  },
+  {
+    href: "/admin/suppliers",
+    label: "Suppliers",
+    icon: Building2,
   },
   {
     href: "/admin/sales",

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { signOut } from "next-auth/react";
 import { SessionProvider } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { Toaster } from "sonner";
@@ -48,6 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/ui/notification-bell";
+import { logout } from "@/actions/auth";
 import logoFull from "../../../assets/christian_minimart_logo_words.png";
 import logoFullDark from "../../../assets/christian_minimart_logo_dark_words.png";
 
@@ -86,6 +86,7 @@ const navItems = [
 
 function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -108,7 +109,9 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
   };
 
   const handleLogout = async () => {
-    await signOut({ callbackUrl: "/login" });
+    // Use the server action for proper audit logging
+    await logout(user?.name || "Vendor", "vendor");
+    router.push("/login");
   };
 
   return (

@@ -54,8 +54,12 @@ export interface GroupedOrders {
 /**
  * Get all incoming orders (non-completed, non-cancelled)
  * Sorted by oldest first (FIFO)
+ * Also auto-cancels orders older than 48 hours
  */
 export async function getIncomingOrders(): Promise<GroupedOrders> {
+  // Auto-cancel expired orders first (fire and forget, don't block main query)
+  autoCancelExpiredOrders(48).catch(console.error);
+
   const orders = await prisma.order.findMany({
     where: {
       status: {
@@ -783,6 +787,97 @@ export async function markOrderItemUnavailable(
       success: false,
       error: error instanceof Error ? error.message : "Failed to update order",
     };
+  }
+}
+
+// ============================================================================
+// Auto-Cancel Expired Orders
+// ============================================================================
+
+/**
+ * Auto-cancel orders that have been pending for more than the specified hours
+ * Called during getIncomingOrders or via scheduled task
+ * 
+ * @param hoursThreshold - Hours after which orders should be auto-cancelled (default: 48)
+ * @returns Number of orders cancelled
+ */
+export async function autoCancelExpiredOrders(hoursThreshold: number = 48): Promise<{
+  success: boolean;
+  cancelledCount: number;
+  cancelledOrderIds: number[];
+}> {
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - hoursThreshold);
+
+    // Find orders older than threshold that are still active
+    const expiredOrders = await prisma.order.findMany({
+      where: {
+        order_date: { lt: cutoffDate },
+        status: { in: ["PENDING", "PREPARING", "READY"] },
+      },
+      include: {
+        items: {
+          select: { product_id: true, quantity: true },
+        },
+        customer: {
+          select: { name: true },
+        },
+      },
+    });
+
+    if (expiredOrders.length === 0) {
+      return { success: true, cancelledCount: 0, cancelledOrderIds: [] };
+    }
+
+    const cancelledOrderIds: number[] = [];
+
+    // Cancel each expired order and release allocated stock
+    await prisma.$transaction(async (tx) => {
+      for (const order of expiredOrders) {
+        // Update order status
+        await tx.order.update({
+          where: { order_id: order.order_id },
+          data: { status: "CANCELLED" },
+        });
+
+        // Release allocated stock
+        for (const item of order.items) {
+          await tx.inventory.update({
+            where: { product_id: item.product_id },
+            data: { allocated_stock: { decrement: item.quantity } },
+          });
+        }
+
+        cancelledOrderIds.push(order.order_id);
+      }
+    });
+
+    // Log auto-cancellations
+    for (const order of expiredOrders) {
+      await logOrderCancel(
+        "System",
+        order.order_id,
+        Number(order.total_amount),
+        order.customer?.name,
+        `Auto-cancelled: Order exceeded ${hoursThreshold} hour threshold`
+      );
+    }
+
+    // Revalidate paths
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin");
+    revalidatePath("/vendor/history");
+    revalidatePath("/vendor");
+
+    return {
+      success: true,
+      cancelledCount: cancelledOrderIds.length,
+      cancelledOrderIds,
+    };
+  } catch (error) {
+    console.error("Failed to auto-cancel expired orders:", error);
+    return { success: false, cancelledCount: 0, cancelledOrderIds: [] };
   }
 }
 

@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { format, subDays, isBefore, startOfMonth } from "date-fns"
+import { format, subDays, subMonths, startOfYear, isSameDay, isBefore, startOfMonth } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
@@ -14,19 +15,38 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-interface DateRangePickerProps {
+interface DateRangePickerWithPresetsProps {
   date: DateRange | undefined
   onDateChange: (date: DateRange | undefined) => void
   className?: string
   align?: "start" | "center" | "end"
 }
 
-export function DateRangePicker({
+// Preset date ranges for reports pages
+const presets = [
+  { label: "30 Days", getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
+  { label: "90 Days", getValue: () => ({ from: subDays(new Date(), 90), to: new Date() }) },
+  { label: "This Year", getValue: () => ({ from: startOfYear(new Date()), to: new Date() }) },
+];
+
+// Helper to check if a preset is currently active
+function isPresetActive(preset: { getValue: () => DateRange }, date: DateRange | undefined): boolean {
+  if (!date?.from || !date?.to) return false;
+  const presetValue = preset.getValue();
+  if (!presetValue.from || !presetValue.to) return false;
+  return isSameDay(date.from, presetValue.from) && isSameDay(date.to, presetValue.to);
+}
+
+/**
+ * DateRangePicker with preset badges for reports pages
+ * Use this in individual report pages that need quick date selection
+ */
+export function DateRangePickerWithPresets({
   date,
   onDateChange,
   className,
   align = "start",
-}: DateRangePickerProps) {
+}: DateRangePickerWithPresetsProps) {
   // Independent month states for each calendar
   const [leftMonth, setLeftMonth] = React.useState<Date>(
     date?.from ? startOfMonth(date.from) : startOfMonth(subDays(new Date(), 30))
@@ -73,6 +93,33 @@ export function DateRangePicker({
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
+      {/* Quick Preset Badges */}
+      <div className="hidden sm:flex items-center gap-1">
+        {presets.map((preset) => {
+          const isActive = isPresetActive(preset, date);
+          return (
+            <Badge
+              key={preset.label}
+              variant={isActive ? "default" : "outline"}
+              className={cn(
+                "cursor-pointer transition-colors text-xs px-2 py-1",
+                isActive 
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                  : "hover:bg-primary hover:text-primary-foreground"
+              )}
+              onClick={() => {
+                const newRange = preset.getValue();
+                onDateChange(newRange);
+                setLeftMonth(startOfMonth(newRange.from));
+                setRightMonth(startOfMonth(newRange.to));
+              }}
+            >
+              {preset.label}
+            </Badge>
+          );
+        })}
+      </div>
+      
       <Popover>
         <PopoverTrigger asChild>
           <Button

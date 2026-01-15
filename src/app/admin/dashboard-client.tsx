@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DateRange } from "react-day-picker";
-import { subDays, subMonths, startOfMonth, endOfMonth, startOfDay, endOfDay, format } from "date-fns";
+import { subDays, subMonths, startOfMonth, endOfMonth, startOfDay, endOfDay, startOfYear, endOfYear, format } from "date-fns";
 import {
   IconTrendingUp,
   IconTrendingDown,
@@ -127,8 +127,12 @@ export function DashboardClient({
     { label: "Yesterday", getRange: () => ({ from: startOfDay(subDays(new Date(), 1)), to: endOfDay(subDays(new Date(), 1)) }) },
     { label: "Last 7 days", getRange: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
     { label: "Last 30 days", getRange: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
+    { label: "Last 90 days", getRange: () => ({ from: subDays(new Date(), 90), to: new Date() }) },
+    { label: "Last 6 months", getRange: () => ({ from: subMonths(new Date(), 6), to: new Date() }) },
     { label: "This month", getRange: () => ({ from: startOfMonth(new Date()), to: endOfDay(new Date()) }) },
     { label: "Last month", getRange: () => ({ from: startOfMonth(subMonths(new Date(), 1)), to: endOfMonth(subMonths(new Date(), 1)) }) },
+    { label: "2026", getRange: () => ({ from: startOfYear(new Date(2026, 0, 1)), to: endOfYear(new Date(2026, 0, 1)) }) },
+    { label: "2025", getRange: () => ({ from: startOfYear(new Date(2025, 0, 1)), to: endOfYear(new Date(2025, 0, 1)) }) },
   ];
   
   // Fetch custom stats when date range changes
@@ -365,7 +369,7 @@ export function DashboardClient({
             variant="outline"
             size="sm"
             className="h-8 px-3 gap-1.5"
-            onClick={() => router.push("/admin/sales/financial")}
+            onClick={() => router.push("/admin/reports")}
           >
             <IconChartBar className="size-3.5 text-[#AC0F16]" />
             <span className="hidden lg:inline text-xs">Reports</span>

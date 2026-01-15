@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
   useReactTable,
@@ -18,12 +19,16 @@ import {
   AlertCircle,
   DollarSign,
   Search,
-  Filter,
   XCircle,
   Timer,
   Boxes,
   TrendingUp,
   TrendingDown,
+  Undo2,
+  MoreHorizontal,
+  ExternalLink,
+  Package,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Table,
@@ -34,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -43,6 +49,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ReportShell,
   SortableHeader,
 } from "@/components/reports/report-shell";
@@ -50,6 +63,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
 import { type ExpiringReportResult, type ExpiringItem } from "@/actions/reports";
+import { markBatchForReturn, confirmBatchesReturned } from "@/actions/inventory";
+import { BatchReturnDialog } from "./batch-return-dialog";
+import { PickupConfirmDialog } from "./pickup-confirm-dialog";
+import { toast } from "sonner";
 import Link from "next/link";
 
 // Helper function to format category name from SNAKE_CASE to Title Case
@@ -155,15 +172,71 @@ const urgencyConfig: Record<
     progressColor: "bg-[#2EAFC5]",
     order: 3,
   },
+  advise_return: {
+    label: "Advise Return (≤45d)",
+    color: "text-stone-500",
+    icon: CalendarClock,
+    badgeClass: "bg-stone-100 text-stone-600 border-stone-300",
+    progressColor: "bg-stone-400",
+    order: 4,
+  },
 };
 
 export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
+  const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([
     { id: "days_until_expiry", desc: false },
   ]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  
+  // Batch return dialog state
+  const [batchReturnOpen, setBatchReturnOpen] = useState(false);
+  // Pre-selected item for single-batch return
+  const [preSelectedBatchId, setPreSelectedBatchId] = useState<number | null>(null);
+  // Pickup confirmation dialog state
+  const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
+
+  // Get marked items for pickup dialog
+  const markedItems = useMemo(
+    () => data.items.filter(i => i.batch_status === "MARKED_FOR_RETURN"),
+    [data.items]
+  );
+
+  // Handler for single batch return
+  const handleSingleBatchReturn = useCallback((item: ExpiringItem) => {
+    setPreSelectedBatchId(item.batch_id);
+    setBatchReturnOpen(true);
+  }, []);
+
+  // Handler for marking a batch for return (2-stage workflow)
+  const handleMarkForReturn = useCallback(async (item: ExpiringItem) => {
+    const reason = item.urgency === "expired" 
+      ? "Expired product - pending supplier pickup"
+      : `Near expiry (${item.days_until_expiry} days) - pending supplier pickup`;
+    
+    const result = await markBatchForReturn(item.batch_id, reason);
+    
+    if (result.success) {
+      toast.success("Batch marked for return", {
+        description: `${result.data!.quantity} units of "${result.data!.productName}" marked for supplier pickup`,
+      });
+      router.refresh();
+    } else {
+      toast.error("Failed to mark batch", {
+        description: result.error,
+      });
+    }
+  }, [router]);
+
+  // Reset pre-selection when dialog closes
+  const handleBatchReturnClose = (open: boolean) => {
+    setBatchReturnOpen(open);
+    if (!open) {
+      setPreSelectedBatchId(null);
+    }
+  };
 
   // Get unique categories
   const categories = useMemo(
@@ -174,7 +247,10 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
   // Filter items
   const filteredData = useMemo(() => {
     return data.items.filter((item) => {
-      const matchesUrgency = urgencyFilter === "all" || item.urgency === urgencyFilter;
+      // Special filter for "marked" which checks batch_status
+      const matchesUrgency = 
+        urgencyFilter === "all" || 
+        (urgencyFilter === "marked" ? item.batch_status === "MARKED_FOR_RETURN" : item.urgency === urgencyFilter);
       const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
       return matchesUrgency && matchesCategory;
     });
@@ -225,6 +301,18 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           </SortableHeader>
         ),
         cell: ({ row }) => {
+          const isMarkedForReturn = row.original.batch_status === "MARKED_FOR_RETURN";
+          
+          // If marked for return, show a special badge
+          if (isMarkedForReturn) {
+            return (
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                <Package className="h-3 w-3 mr-1" />
+                Marked for Return
+              </Badge>
+            );
+          }
+          
           const config = urgencyConfig[row.original.urgency];
           const StatusIcon = config.icon;
           return (
@@ -235,6 +323,10 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           );
         },
         sortingFn: (rowA, rowB) => {
+          // Marked for return items should appear at top
+          const aMarked = rowA.original.batch_status === "MARKED_FOR_RETURN" ? -1 : 0;
+          const bMarked = rowB.original.batch_status === "MARKED_FOR_RETURN" ? -1 : 0;
+          if (aMarked !== bMarked) return aMarked - bMarked;
           return urgencyConfig[rowA.original.urgency].order - urgencyConfig[rowB.original.urgency].order;
         },
         size: 140,
@@ -290,7 +382,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           </div>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums">{row.original.quantity.toLocaleString()}</div>
+          <div className="text-right font-mono tabular-nums">{row.original.current_quantity.toLocaleString()}</div>
         ),
         size: 70,
       },
@@ -324,8 +416,73 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
         ),
         size: 120,
       },
+      {
+        id: "actions",
+        header: () => (
+          <div className="font-medium text-muted-foreground uppercase text-[11px] tracking-wide text-center print:hidden">
+            Actions
+          </div>
+        ),
+        cell: ({ row }) => {
+          const isMarked = row.original.batch_status === "MARKED_FOR_RETURN";
+          
+          return (
+            <div className="flex justify-center print:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="sr-only">Open menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[180px]">
+                  {isMarked ? (
+                    // Already marked - show "Confirm Pickup" for this batch
+                    <DropdownMenuItem 
+                      onClick={async () => {
+                        const result = await confirmBatchesReturned([row.original.batch_id]);
+                        if (result.success) {
+                          toast.success("Batch returned to supplier", {
+                            description: `${row.original.current_quantity} units of "${row.original.product_name}" removed from inventory`,
+                          });
+                          router.refresh();
+                        } else {
+                          toast.error("Failed to confirm return", { description: result.error });
+                        }
+                      }}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2 text-[#2EAFC5]" />
+                      Confirm Pickup
+                    </DropdownMenuItem>
+                  ) : (
+                    // Not marked - show both options
+                    <>
+                      <DropdownMenuItem onClick={() => handleMarkForReturn(row.original)}>
+                        <Package className="h-4 w-4 mr-2 text-purple-600" />
+                        Mark for Return
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSingleBatchReturn(row.original)}>
+                        <Undo2 className="h-4 w-4 mr-2 text-[#AC0F16]" />
+                        Return Now
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href={`/admin/inventory/${row.original.product_id}/batches`}>
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      View Batches
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
+        size: 60,
+      },
     ],
-    []
+    [handleSingleBatchReturn, handleMarkForReturn, router]
   );
 
   const table = useReactTable({
@@ -362,7 +519,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
       urgencyConfig[item.urgency].label,
       format(new Date(item.expiry_date), "MMM d, yyyy"),
       item.days_until_expiry <= 0 ? "EXPIRED" : `${item.days_until_expiry}d`,
-      item.quantity.toLocaleString(),
+      item.current_quantity.toLocaleString(),
       `₱${item.value_at_risk.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
     ]);
     return { headers, rows };
@@ -394,7 +551,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
         urgency: urgencyConfig[item.urgency].label,
         expiry_date: format(new Date(item.expiry_date), "yyyy-MM-dd"),
         days_until_expiry: item.days_until_expiry,
-        quantity: item.quantity,
+        quantity: item.current_quantity,
         cost_price: item.cost_price,
         value_at_risk: item.value_at_risk,
         supplier_name: item.supplier_name || "",
@@ -405,51 +562,81 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
   return (
     <ReportShell
       title="Expiry Tracker"
-      description="Products expiring within 30 days. FEFO (First Expired, First Out) compliance monitoring."
+      description="Products expiring within 45 days. FEFO (First Expired, First Out) compliance monitoring."
       icon={CalendarClock}
       generatedBy="Admin"
       excelExport={excelExport}
       printTableData={printTableData}
-    >
-      {/* Filters - Screen Only */}
-      <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search products, batches..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9 py-2.25"
-          />
+      toolbarFilters={
+        <div className="flex items-center gap-2 flex-1">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search products, batches..."
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="pl-9 h-9 text-xs"
+            />
+          </div>
+          <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+            <SelectTrigger className="h-9 w-[160px] text-xs hidden sm:flex">
+              <SelectValue placeholder="Urgency" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="expired">Expired</SelectItem>
+              <SelectItem value="critical">Critical (≤7d)</SelectItem>
+              <SelectItem value="warning">Warning (≤14d)</SelectItem>
+              <SelectItem value="caution">Caution (≤30d)</SelectItem>
+              <SelectItem value="advise_return">Advise Return (≤45d)</SelectItem>
+              <SelectItem value="marked">Marked for Return</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-9 w-[140px] text-xs hidden sm:flex">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {formatCategoryName(cat)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-          <SelectTrigger className="w-[160px]">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Urgency" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="expired">Expired</SelectItem>
-            <SelectItem value="critical">Critical (≤7d)</SelectItem>
-            <SelectItem value="warning">Warning (≤14d)</SelectItem>
-            <SelectItem value="caution">Caution (≤30d)</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {formatCategoryName(cat)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
+      }
+      toolbarContent={
+        <div className="flex items-center gap-2">
+          {/* Confirm Pickup button - only show if there are marked batches */}
+          {data.summary.marked_for_return_count > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPickupDialogOpen(true)}
+              className="h-9 gap-1.5 text-xs border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Confirm Pickup</span>
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
+                {data.summary.marked_for_return_count}
+              </Badge>
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBatchReturnOpen(true)}
+            className="h-9 gap-1.5 text-xs border-[#AC0F16]/30 text-[#AC0F16] hover:bg-[#AC0F16]/5"
+            disabled={data.items.length === 0}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Batch Return</span>
+          </Button>
+        </div>
+      }
+    >
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <CompactCard
@@ -484,7 +671,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           <CardTitle className="text-base font-semibold">Urgency Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 translate-y-[-2.5vh] border">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-red-50">
@@ -530,6 +717,19 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
                   </p>
                 </div>
               </div>
+              {data.summary.marked_for_return_count > 0 && (
+                <div className="flex items-center gap-3 md:col-span-4 pt-3 mt-3 border-t border-dashed">
+                  <div className="p-2 rounded-lg bg-purple-50">
+                    <Package className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Marked for Supplier Pickup</p>
+                    <p className="text-xl font-bold font-mono text-purple-700 tabular-nums">
+                      {data.summary.marked_for_return_count.toLocaleString()} batches
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>
@@ -651,6 +851,23 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Batch Return Dialog */}
+      <BatchReturnDialog
+        open={batchReturnOpen}
+        onOpenChange={handleBatchReturnClose}
+        expiringItems={data.items}
+        preSelectedBatchId={preSelectedBatchId}
+        onSuccess={() => router.refresh()}
+      />
+
+      {/* Pickup Confirmation Dialog */}
+      <PickupConfirmDialog
+        open={pickupDialogOpen}
+        onOpenChange={setPickupDialogOpen}
+        markedItems={markedItems}
+        onSuccess={() => router.refresh()}
+      />
     </ReportShell>
   );
 }

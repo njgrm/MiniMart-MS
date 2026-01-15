@@ -30,6 +30,8 @@ import {
   LogIn,
   LogOut,
   Receipt,
+  ShieldAlert,
+  UserPlus,
 } from "lucide-react";
 import {
   Dialog,
@@ -63,8 +65,12 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; icon: typeof Plus; col
   EDIT_EXPIRY: { label: "Expiry Changed", icon: Calendar, color: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-900/30" },
   EDIT_BATCH: { label: "Batch Edited", icon: ClipboardEdit, color: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-900/30" },
   LOGIN: { label: "Logged In", icon: LogIn, color: "text-emerald-700 dark:text-emerald-400", bgColor: "bg-emerald-100 dark:bg-emerald-900/30" },
+  LOGIN_FAILED: { label: "Login Failed", icon: ShieldAlert, color: "text-red-700 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-900/30" },
   LOGOUT: { label: "Logged Out", icon: LogOut, color: "text-slate-700 dark:text-slate-400", bgColor: "bg-slate-100 dark:bg-slate-900/30" },
   ZREAD_CLOSE: { label: "Z-Read Close", icon: Receipt, color: "text-cyan-700 dark:text-cyan-400", bgColor: "bg-cyan-100 dark:bg-cyan-900/30" },
+  VENDOR_REGISTER: { label: "Vendor Registered", icon: UserPlus, color: "text-emerald-700 dark:text-emerald-400", bgColor: "bg-emerald-100 dark:bg-emerald-900/30" },
+  BATCH_RESTOCK: { label: "Batch Restocked", icon: PackagePlus, color: "text-teal-700 dark:text-teal-400", bgColor: "bg-teal-100 dark:bg-teal-900/30" },
+  BATCH_RETURN: { label: "Batch Returned", icon: RotateCcw, color: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-900/30" },
 };
 
 // Module colors
@@ -375,6 +381,48 @@ export function LogDetailsModal({ log, open, onOpenChange }: LogDetailsModalProp
     }
     if (metadata?.session_status) {
       metadataItems.push({ label: "Session", value: String(metadata.session_status) });
+    }
+  }
+
+  // LOGIN_FAILED metadata
+  if (log.action === "LOGIN_FAILED") {
+    const reasonMessages: Record<string, string> = {
+      user_not_found: "User not found in system",
+      wrong_password: "Incorrect password entered",
+      account_disabled: "Account has been disabled",
+      unknown: "Authentication failed",
+    };
+    if (metadata?.reason) {
+      metadataItems.push({ 
+        label: "Failure Reason", 
+        value: reasonMessages[String(metadata.reason)] || String(metadata.reason),
+        warning: true
+      });
+    }
+    if (metadata?.identifier) {
+      metadataItems.push({ label: "Attempted As", value: String(metadata.identifier) });
+    }
+    if (metadata?.attempt_time) {
+      metadataItems.push({ label: "Attempt Time", value: format(new Date(String(metadata.attempt_time)), "MMM d, yyyy h:mm a") });
+    }
+    if (metadata?.ip_address) {
+      metadataItems.push({ label: "IP Address", value: String(metadata.ip_address) });
+    }
+  }
+
+  // VENDOR_REGISTER metadata
+  if (log.action === "VENDOR_REGISTER") {
+    if (metadata?.vendor_name) {
+      metadataItems.push({ label: "Vendor Name", value: String(metadata.vendor_name) });
+    }
+    if (metadata?.email) {
+      metadataItems.push({ label: "Email", value: String(metadata.email) });
+    }
+    if (metadata?.contact_details) {
+      metadataItems.push({ label: "Contact", value: String(metadata.contact_details) });
+    }
+    if (metadata?.registration_time) {
+      metadataItems.push({ label: "Registered At", value: format(new Date(String(metadata.registration_time)), "MMM d, yyyy h:mm a") });
     }
   }
 

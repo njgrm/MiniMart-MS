@@ -31,9 +31,10 @@ import {
   clearAllNotifications,
   type NotificationData,
 } from "@/actions/notifications";
+import { useEventSource } from "@/hooks/use-event-source";
 
-// Polling interval: 30 seconds
-const POLL_INTERVAL = 30 * 1000;
+// Fallback polling interval: 60 seconds (when SSE not available)
+const POLL_INTERVAL = 60 * 1000;
 
 const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   info: IconInfoCircle,
@@ -66,36 +67,54 @@ export function NotificationBell({ userId, userType }: NotificationBellProps) {
   // Track if this is the initial fetch (skip toast on first load)
   const isInitialFetchRef = useRef(true);
 
-  // Fetch notifications
+  // Handle new notifications from SSE or polling
+  const handleNewNotifications = useCallback((newNotifications: NotificationData[]) => {
+    // Show toast for each truly new notification
+    for (const notification of newNotifications) {
+      if (!toastedIdsRef.current.has(notification.id)) {
+        toastedIdsRef.current.add(notification.id);
+        toast.info(notification.title, {
+          description: notification.message,
+          action: notification.href
+            ? {
+                label: "View",
+                onClick: () => router.push(notification.href!),
+              }
+            : undefined,
+        });
+      }
+    }
+
+    // Update state with new notifications
+    setNotifications((prev) => {
+      const existingIds = new Set(prev.map((n) => n.id));
+      const unique = newNotifications.filter((n) => !existingIds.has(n.id));
+      return [...unique, ...prev].slice(0, 50); // Keep max 50 notifications
+    });
+    setUnreadCount((prev) => prev + newNotifications.filter((n) => !n.is_read).length);
+  }, [router]);
+
+  // Use SSE for real-time updates
+  useEventSource("/api/notifications/stream", {
+    enabled: true,
+    onMessage: (data: unknown) => {
+      const message = data as { type: string; data?: NotificationData[] };
+      if (message.type === "notifications" && message.data) {
+        handleNewNotifications(message.data);
+      }
+    },
+  });
+
+  // Fetch notifications (initial load and fallback polling)
   const fetchNotifications = useCallback(async () => {
     try {
       const result = await checkNotifications(userId, userType);
       setNotifications(result.notifications);
       setUnreadCount(result.newCount);
 
-      // Only show toast for NEW unread notifications we haven't toasted before
-      // Skip on initial fetch to avoid toasting existing notifications
-      if (!isInitialFetchRef.current) {
-        const newUnreadNotifications = result.notifications.filter(
-          (n) => !n.is_read && !toastedIdsRef.current.has(n.id)
-        );
-
-        // Show toast for each truly new notification
-        for (const notification of newUnreadNotifications) {
-          toastedIdsRef.current.add(notification.id);
-          toast.info(notification.title, {
-            description: notification.message,
-            action: notification.href
-              ? {
-                  label: "View",
-                  onClick: () => router.push(notification.href!),
-                }
-              : undefined,
-          });
-        }
-      } else {
-        // On initial fetch, just add all existing notification IDs to the set
-        // so we don't toast them on subsequent polls
+      // On initial fetch, add all existing notification IDs to the set
+      // so we don't toast them on subsequent updates
+      if (isInitialFetchRef.current) {
         result.notifications.forEach((n) => {
           toastedIdsRef.current.add(n.id);
         });
@@ -107,12 +126,13 @@ export function NotificationBell({ userId, userType }: NotificationBellProps) {
       console.error("Failed to fetch notifications:", error);
       setIsLoading(false);
     }
-  }, [userId, userType, router]);
+  }, [userId, userType]);
 
-  // Initial fetch and polling
+  // Initial fetch and fallback polling (less frequent since SSE is primary)
   useEffect(() => {
     fetchNotifications();
 
+    // Fallback polling at reduced frequency (SSE handles real-time)
     const interval = setInterval(fetchNotifications, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchNotifications]);

@@ -10,9 +10,6 @@ import {
   Activity,
   Trash2,
   CalendarClock,
-  FileText,
-  Users,
-  Archive,
   ChevronLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,9 +22,6 @@ const reportLinks = [
   { id: "velocity", title: "Velocity", href: "/admin/reports/velocity", icon: Activity, category: "inventory" },
   { id: "spoilage", title: "Spoilage", href: "/admin/reports/spoilage", icon: Trash2, category: "inventory" },
   { id: "expiring", title: "Expiry", href: "/admin/reports/expiring", icon: CalendarClock, category: "inventory" },
-  { id: "audit-logs", title: "Audit Log", href: "/admin/audit-logs", icon: FileText, category: "audit", external: true },
-  { id: "user-activity", title: "Users", href: "/admin/reports/user-activity", icon: Users, category: "audit" },
-  { id: "stock-movements", title: "Stock", href: "/admin/reports/stock-movements", icon: Archive, category: "audit" },
 ];
 
 const categoryColors: Record<string, string> = {
@@ -53,10 +47,10 @@ export function ReportsLayoutClient({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-full overflow-hidden">
       {/* Reports Sidebar Navigation - Hidden on mobile */}
-      <aside className="w-44 shrink-0 border-r border-stone-200/80 bg-card hidden lg:flex lg:flex-col">
+      <aside className="w-48 shrink-0 border-r border-stone-200/80 bg-card hidden lg:flex lg:flex-col">
         {/* Back Button - Height matches toolbar h-12 */}
         <div className="h-14 px-2 flex items-center border-b border-stone-200/80 shrink-0">
-          <Button variant="ghost" size="sm" asChild className="h-10 px-2 gap-1.5 text-sm w-full justify-start">
+          <Button variant="ghost" size="sm" asChild className="h-10 px-2 gap-2 text-sm w-full justify-start">
             <Link href="/admin/reports">
               <ChevronLeft className="h-4 w-4" />
               All Reports
@@ -65,23 +59,23 @@ export function ReportsLayoutClient({ children }: { children: React.ReactNode })
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 overflow-auto py-1 px-1.5">
+        <nav className="flex-1 overflow-auto py-2 px-2">
           {reportLinks.map((link) => {
             const Icon = link.icon;
-            const isActive = pathname === link.href || (link.external && pathname?.includes(link.id));
+            const isActive = pathname === link.href;
             
             return (
               <Link
                 key={link.id}
                 href={link.href}
                 className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors mb-0.5",
+                  "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors mb-1",
                   isActive 
                     ? "bg-primary/10 text-primary font-medium" 
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
               >
-                <Icon className={cn("h-3.5 w-3.5 shrink-0", isActive ? "" : categoryColors[link.category])} />
+                <Icon className={cn("h-4 w-4 shrink-0", isActive ? "" : categoryColors[link.category])} />
                 <span className="truncate">{link.title}</span>
               </Link>
             );

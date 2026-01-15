@@ -688,8 +688,9 @@ export interface ExpiringItem {
   days_until_expiry: number;
   cost_price: number;
   value_at_risk: number; // current_quantity * cost_price
-  urgency: "expired" | "critical" | "warning" | "caution";
+  urgency: "expired" | "critical" | "warning" | "caution" | "advise_return";
   supplier_name: string | null;
+  batch_status?: string; // For marked-for-return workflow
 }
 
 export interface ExpiringReportResult {
@@ -702,27 +703,38 @@ export interface ExpiringReportResult {
     critical_count: number; // 7 days
     warning_count: number;  // 14 days
     caution_count: number;  // 30 days
+    advise_return_count: number; // 31-45 days (new!)
+    marked_for_return_count: number; // Batches marked for supplier pickup
   };
 }
 
 /**
  * Get Expiring Products Report
- * Tracks products with batches expiring within 7, 14, and 30 days
+ * Tracks products with batches expiring within 45 days (advise return at 45d, caution at 30d, etc.)
  * Critical for FEFO compliance and proactive inventory management
  */
 export async function getExpiringReport(): Promise<ExpiringReportResult> {
   const today = startOfDay(new Date());
-  const thirtyDaysFromNow = subDays(today, -30); // 30 days in the future
+  const fortyFiveDaysFromNow = subDays(today, -45); // 45 days in the future for advise_return
 
-  // Get all batches expiring within 30 days (including already expired)
+  // Get all batches expiring within 45 days (including already expired) + marked for return
   const batches = await prisma.inventoryBatch.findMany({
     where: {
-      status: "ACTIVE",
-      deletedAt: null,
-      quantity: { gt: 0 },
-      expiry_date: {
-        lte: thirtyDaysFromNow,
-      },
+      OR: [
+        // Active batches expiring within 45 days
+        {
+          status: "ACTIVE",
+          deletedAt: null,
+          quantity: { gt: 0 },
+          expiry_date: { lte: fortyFiveDaysFromNow },
+        },
+        // Also include batches marked for return (regardless of expiry)
+        {
+          status: "MARKED_FOR_RETURN",
+          deletedAt: null,
+          quantity: { gt: 0 },
+        },
+      ],
     },
     include: {
       product: true,
@@ -749,8 +761,10 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
       urgency = "critical";
     } else if (daysUntilExpiry <= 14) {
       urgency = "warning";
-    } else {
+    } else if (daysUntilExpiry <= 30) {
       urgency = "caution";
+    } else {
+      urgency = "advise_return"; // 31-45 days: early warning to consider return
     }
 
     return {
@@ -767,6 +781,7 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
       value_at_risk: valueAtRisk,
       urgency,
       supplier_name: batch.supplier_name,
+      batch_status: batch.status,
     };
   });
 
@@ -775,6 +790,8 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
   const critical = items.filter((i) => i.urgency === "critical");
   const warning = items.filter((i) => i.urgency === "warning");
   const caution = items.filter((i) => i.urgency === "caution");
+  const adviseReturn = items.filter((i) => i.urgency === "advise_return");
+  const markedForReturn = items.filter((i) => i.batch_status === "MARKED_FOR_RETURN");
 
   return {
     items,
@@ -786,6 +803,8 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
       critical_count: critical.length,
       warning_count: warning.length,
       caution_count: caution.length,
+      advise_return_count: adviseReturn.length,
+      marked_for_return_count: markedForReturn.length,
     },
   };
 }

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { Decimal } from "@prisma/client/runtime/library";
 import { revalidatePath } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 
 // ============================================
@@ -78,8 +79,10 @@ export interface CartItem {
  * Sorting priority:
  * 1. Products with wholesale_price > 0 come first (true wholesale items)
  * 2. Then sorted alphabetically by product name
+ * 
+ * Cached for 60 seconds to reduce database load on repeated requests.
  */
-export async function getVendorProducts(): Promise<VendorProduct[]> {
+const fetchVendorProducts = async (): Promise<VendorProduct[]> => {
   const products = await prisma.product.findMany({
     where: {
       deletedAt: null, // Only active products
@@ -127,7 +130,14 @@ export async function getVendorProducts(): Promise<VendorProduct[]> {
       return a.product_name.localeCompare(b.product_name);
     })
     .map(({ _hasWholesalePrice, ...product }) => product); // Remove internal flag
-}
+};
+
+// Cached version of fetchVendorProducts - revalidates every 60 seconds
+export const getVendorProducts = unstable_cache(
+  fetchVendorProducts,
+  ["vendor-products"],
+  { revalidate: 60, tags: ["vendor-products"] }
+);
 
 /**
  * Get vendor's order history

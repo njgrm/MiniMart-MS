@@ -158,9 +158,6 @@ export function PaymentDialog({
     }
   };
 
-  // Quick amount buttons
-  const quickAmounts = [20, 50, 100, 500, 1000];
-
   const isGcash = paymentMethod === "GCASH";
 
   return (
@@ -288,43 +285,13 @@ export function PaymentDialog({
                     />
                   </div>
 
-                  {/* Quick Amount Buttons - Hidden in Legacy Mode */}
-                  {!isLegacyMode && (
-                    <>
-                      <div className="flex gap-2 mt-3">
-                        {quickAmounts.map((amount) => (
-                          <Button
-                            key={amount}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 font-mono text-xs"
-                            onClick={() => setAmountTendered(amount.toString())}
-                          >
-                            {amount}
-                          </Button>
-                        ))}
-                      </div>
-
-                      {/* Exact Amount Button */}
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="w-full mt-2 font-medium font-mono"
-                        onClick={() => setAmountTendered(totalDue.toFixed(2))}
-                      >
-                        Exact Amount (₱{totalDue.toFixed(2)})
-                      </Button>
-                    </>
-                  )}
-
-                  {/* Legacy Mode: Simplified hint */}
-                  {isLegacyMode && (
-                    <p className="text-xs text-muted-foreground mt-2 text-center">
-                      Type amount and press <kbd className="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> to confirm
-                    </p>
-                  )}
+                  {/* Quick Amount Buttons - REMOVED per UX request */}
+                  {/* Input is auto-focused, admin can type immediately */}
+                  
+                  {/* Keyboard hint for both modes */}
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Type amount and press <kbd className="px-1 py-0.5 rounded bg-muted font-mono">Enter</kbd> to confirm
+                  </p>
                 </div>
 
                 {/* Change Due */}

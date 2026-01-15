@@ -11,7 +11,7 @@ import {
   type VendorRegisterInput,
 } from "@/lib/validations/auth";
 import { AuthError } from "next-auth";
-import { logLogin, logLogout } from "@/lib/logger";
+import { logLogin, logLogout, logLoginFailed, logVendorRegister } from "@/lib/logger";
 
 export type ActionResult = {
   success: boolean;
@@ -34,32 +34,55 @@ export async function login(data: LoginInput): Promise<ActionResult> {
 
   try {
     // Determine user type before signing in
-    const { identifier } = parsed.data;
+    const { identifier, password } = parsed.data;
     let userType: "staff" | "vendor" = "staff";
     let userId: number | undefined;
     let email: string | undefined;
+    let userExists = false;
+    let passwordValid = false;
 
     if (isEmail(identifier)) {
       // Check if this email belongs to a vendor
       const customer = await prisma.customer.findUnique({
         where: { email: identifier },
-        select: { customer_id: true, is_vendor: true, email: true },
+        select: { customer_id: true, is_vendor: true, email: true, password_hash: true },
       });
       if (customer?.is_vendor) {
+        userExists = true;
         userType = "vendor";
         userId = customer.customer_id;
         email = customer.email || undefined;
+        // Check password
+        if (customer.password_hash) {
+          passwordValid = await bcrypt.compare(password, customer.password_hash);
+        }
       }
     } else {
-      // Staff login - get staff ID
-      const staff = await prisma.staff.findUnique({
+      // Staff login - get user by username
+      const user = await prisma.user.findUnique({
         where: { username: identifier },
-        select: { staff_id: true, email: true },
+        select: { user_id: true, password_hash: true },
       });
-      if (staff) {
-        userId = staff.staff_id;
-        email = staff.email || undefined;
+      if (user) {
+        userExists = true;
+        userId = user.user_id;
+        // Check password
+        if (user.password_hash) {
+          passwordValid = await bcrypt.compare(password, user.password_hash);
+        }
       }
+    }
+
+    // Log failed attempt if user not found
+    if (!userExists) {
+      await logLoginFailed(identifier, "user_not_found");
+      return { success: false, error: "Invalid username/email or password" };
+    }
+
+    // Log failed attempt if wrong password
+    if (!passwordValid) {
+      await logLoginFailed(identifier, "wrong_password");
+      return { success: false, error: "Invalid username/email or password" };
     }
 
     await signIn("credentials", {
@@ -74,6 +97,8 @@ export async function login(data: LoginInput): Promise<ActionResult> {
     return { success: true, userType };
   } catch (error) {
     if (error instanceof AuthError) {
+      // Log failed attempt for auth errors
+      await logLoginFailed(parsed.data.identifier, "unknown");
       return { success: false, error: "Invalid username/email or password" };
     }
     throw error;
@@ -105,7 +130,7 @@ export async function vendorRegister(data: VendorRegisterInput): Promise<ActionR
   const hashedPassword = await bcrypt.hash(password, 10);
 
   // Create new vendor customer
-  await prisma.customer.create({
+  const newVendor = await prisma.customer.create({
     data: {
       name,
       email,
@@ -114,6 +139,9 @@ export async function vendorRegister(data: VendorRegisterInput): Promise<ActionR
       is_vendor: true,
     },
   });
+
+  // Log the vendor registration
+  await logVendorRegister(newVendor.customer_id, name, email, contactDetails);
 
   return { success: true };
 }

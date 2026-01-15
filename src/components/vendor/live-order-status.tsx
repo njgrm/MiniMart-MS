@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,6 +22,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { getActiveOrderStatus, type ActiveOrderStatus, cancelVendorOrder } from "@/actions/vendor";
 import { toast } from "sonner";
+import { useEventSource } from "@/hooks/use-event-source";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,20 +53,56 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
   const [orders, setOrders] = useState<ActiveOrderStatus[]>(initialOrders);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Poll for updates every 5 seconds
+  // Handle order updates from SSE
+  const handleOrderUpdate = useCallback((data: ActiveOrderStatus[]) => {
+    // Check for status changes to show toast
+    const oldStatuses = new Map(orders.map(o => [o.order_id, o.status]));
+    
+    for (const order of data) {
+      const oldStatus = oldStatuses.get(order.order_id);
+      if (oldStatus && oldStatus !== order.status) {
+        // Status changed - show toast
+        const statusMessages: Record<string, string> = {
+          PREPARING: "Your order is now being prepared! 👨‍🍳",
+          READY: "Your order is ready for pickup! 🎉",
+        };
+        if (statusMessages[order.status]) {
+          toast.success(statusMessages[order.status], {
+            description: `Order #${order.order_id}`,
+          });
+        }
+      }
+    }
+    
+    setOrders(data);
+  }, [orders]);
+
+  // Use SSE for real-time order updates
+  useEventSource("/api/orders/stream", {
+    enabled: true,
+    onMessage: (data: unknown) => {
+      const message = data as { type: string; data?: ActiveOrderStatus[] };
+      if (message.type === "orders_update" && message.data) {
+        handleOrderUpdate(message.data);
+      }
+    },
+  });
+
+  // Fallback polling every 30 seconds (SSE is primary)
   useEffect(() => {
     const pollStatus = async () => {
       try {
         const updated = await getActiveOrderStatus(customerId);
-        setOrders(updated);
+        handleOrderUpdate(updated);
       } catch (err) {
         console.error("Failed to poll order status:", err);
       }
     };
 
-    const interval = setInterval(pollStatus, 5000);
+    // Less aggressive polling since SSE handles real-time
+    const interval = setInterval(pollStatus, 30000);
     return () => clearInterval(interval);
-  }, [customerId]);
+  }, [customerId, handleOrderUpdate]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

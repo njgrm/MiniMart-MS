@@ -48,9 +48,6 @@ const reportLinks = [
   { id: "velocity", title: "Velocity", href: "/admin/reports/velocity", icon: Activity, category: "inventory" },
   { id: "spoilage", title: "Spoilage", href: "/admin/reports/spoilage", icon: Trash2, category: "inventory" },
   { id: "expiring", title: "Expiry", href: "/admin/reports/expiring", icon: CalendarClock, category: "inventory" },
-  { id: "audit-logs", title: "Audit Log", href: "/admin/audit-logs", icon: FileText, category: "audit", external: true },
-  { id: "user-activity", title: "Users", href: "/admin/reports/user-activity", icon: Users, category: "audit" },
-  { id: "stock-movements", title: "Stock", href: "/admin/reports/stock-movements", icon: Archive, category: "audit" },
 ];
 
 const categoryColors: Record<string, string> = {
@@ -93,19 +90,19 @@ function formatPeso(amount: number, options?: { decimals?: number }) {
 
 function ReportsSidebar() {
   return (
-    <aside className="w-44 shrink-0 border-r border-stone-200/80 bg-card hidden lg:flex lg:flex-col">
+    <aside className="w-48 shrink-0 border-r border-stone-200/80 bg-card hidden lg:flex lg:flex-col">
       {/* Back Button */}
-      <div className="h-10 px-2 flex items-center border-b border-stone-200/80 shrink-0">
-        <Button variant="ghost" size="sm" asChild className="h-7 px-2 gap-1 text-xs w-full justify-start">
+      <div className="h-12 px-2 flex items-center border-b border-stone-200/80 shrink-0">
+        <Button variant="ghost" size="sm" asChild className="h-9 px-2 gap-2 text-sm w-full justify-start">
           <Link href="/admin">
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-4 w-4" />
             Dashboard
           </Link>
         </Button>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 overflow-auto py-1 px-1.5">
+      <nav className="flex-1 overflow-auto py-2 px-2">
         {reportLinks.map((link) => {
           const Icon = link.icon;
           
@@ -113,9 +110,9 @@ function ReportsSidebar() {
             <Link
               key={link.id}
               href={link.href}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors mb-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors mb-1 text-muted-foreground hover:text-foreground hover:bg-muted/50"
             >
-              <Icon className={cn("h-3.5 w-3.5 shrink-0", categoryColors[link.category])} />
+              <Icon className={cn("h-4 w-4 shrink-0", categoryColors[link.category])} />
               <span className="truncate">{link.title}</span>
             </Link>
           );
@@ -433,7 +430,7 @@ async function ReportsDashboard() {
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
         {/* Toolbar - Same style as ReportShell */}
-        <div className="shrink-0 bg-card border-b border-stone-200/80 h-10 flex items-center justify-between px-3">
+        <div className="shrink-0 bg-card border-b border-stone-200/80 h-12 flex items-center justify-between px-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="p-1 rounded bg-[#2EAFC5]/10 shrink-0">
               <LayoutDashboard className="h-3.5 w-3.5 text-[#2EAFC5]" />
@@ -598,53 +595,7 @@ async function ReportsDashboard() {
               </WidgetCard>
             </div>
 
-            {/* System Reports Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <Link href="/admin/audit-logs" className="group">
-                <Card className="border-stone-200/80 bg-card hover:shadow-md transition-shadow h-full">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-stone-100 group-hover:bg-stone-200 transition-colors">
-                      <FileText className="h-4 w-4 text-stone-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm group-hover:text-primary transition-colors">Audit Log</p>
-                      <p className="text-xs text-muted-foreground">System activity history</p>
-                    </div>
-                    <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </CardContent>
-                </Card>
-              </Link>
-
-              <Link href="/admin/reports/user-activity" className="group">
-                <Card className="border-stone-200/80 bg-card hover:shadow-md transition-shadow h-full">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-stone-100 group-hover:bg-stone-200 transition-colors">
-                      <Users className="h-4 w-4 text-stone-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm group-hover:text-primary transition-colors">User Activity</p>
-                      <p className="text-xs text-muted-foreground">Staff performance metrics</p>
-                    </div>
-                    <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </CardContent>
-                </Card>
-              </Link>
-
-              <Link href="/admin/reports/stock-movements" className="group">
-                <Card className="border-stone-200/80 bg-card hover:shadow-md transition-shadow h-full">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-stone-100 group-hover:bg-stone-200 transition-colors">
-                      <Archive className="h-4 w-4 text-stone-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm group-hover:text-primary transition-colors">Stock Movements</p>
-                      <p className="text-xs text-muted-foreground">Inventory transaction log</p>
-                    </div>
-                    <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </CardContent>
-                </Card>
-              </Link>
-            </div>
+        
           </div>
         </div>
       </div>

@@ -45,6 +45,8 @@ interface ReportShellProps {
   icon?: React.ElementType;
   /** Custom content to render in the toolbar (e.g., date picker, filters) */
   toolbarContent?: React.ReactNode;
+  /** Filters to show in the toolbar (search bar, dropdowns) */
+  toolbarFilters?: React.ReactNode;
   /** Show loading indicator in toolbar */
   isLoading?: boolean;
   /** Summary data for print preview (avoids icon rendering issues) */
@@ -340,6 +342,7 @@ export function ReportShell({
   children,
   icon: Icon,
   toolbarContent,
+  toolbarFilters,
   isLoading = false,
   printSummary,
   printTableData,
@@ -469,13 +472,14 @@ export function ReportShell({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Toolbar - Title + Description */}
-      <div className="shrink-0 bg-card border-b border-stone-200/80 h-14 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+      {/* Toolbar - Filters and Actions */}
+      <div className="shrink-0 bg-card border-b border-stone-200/80 h-14 flex items-center justify-between px-4 gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Mobile back button */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" asChild className="h-7 w-7 p-0 lg:hidden">
+                <Button variant="ghost" size="sm" asChild className="h-7 w-7 p-0 lg:hidden shrink-0">
                   <Link href={backHref}>
                     <ArrowLeft className="h-4 w-4" />
                   </Link>
@@ -485,25 +489,11 @@ export function ReportShell({
             </Tooltip>
           </TooltipProvider>
           
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {Icon && (
-              <div className="p-1 rounded bg-[#2EAFC5]/10 shrink-0">
-                <Icon className="h-3.5 w-3.5 text-[#2EAFC5]" />
-              </div>
-            )}
-            <h1 className="font-semibold text-sm text-foreground shrink-0">{title}</h1>
-            {description && (
-              <>
-                <span className="text-stone-300 hidden sm:inline">|</span>
-                <span className="text-xs text-muted-foreground truncate hidden sm:inline">{description}</span>
-              </>
-            )}
-          </div>
+          {/* Toolbar filters (search bar, dropdowns) */}
+          {toolbarFilters}
         </div>
         
-        <div className="flex items-center translate-x-[-1.5vh]  gap-2 shrink-0">
-          {/* Loading indicator removed from toolbar - use content loading states instead */}
-          
+        <div className="flex items-center gap-2 shrink-0">
           {/* Custom toolbar content (e.g., date picker) */}
           {toolbarContent}
           

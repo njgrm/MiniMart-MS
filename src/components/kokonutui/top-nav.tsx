@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { Moon, Sun, LogOut, User, Settings, ChevronDown, AlertTriangle, AlertCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,7 @@ import {
 import { DynamicBreadcrumb } from "@/components/layout/dynamic-breadcrumb";
 import { NotificationBell } from "@/components/ui/notification-bell";
 import { getInventoryAlerts } from "@/actions/inventory";
+import { logout } from "@/actions/auth";
 
 interface TopNavProps {
   user?: {
@@ -53,7 +53,8 @@ export default function TopNav({ user }: TopNavProps) {
   }, []);
 
   const handleLogout = async () => {
-    await signOut({ redirect: false });
+    // Use the server action for proper audit logging
+    await logout(user?.name || "Admin", "staff");
     router.push("/login");
   };
 

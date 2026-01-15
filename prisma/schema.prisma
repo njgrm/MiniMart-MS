@@ -87,19 +87,43 @@ model InventoryBatch {
   expiry_date   DateTime?
   received_date DateTime  @default(now())
   supplier_ref  String?
-  supplier_name String?
+  supplier_name String?   // Legacy: Kept for backward compatibility
+  supplier_id   Int?      // New: Foreign key to Supplier
   cost_price    Decimal?  @db.Decimal(10, 2)
   status        String    @default("ACTIVE")
   deletedAt     DateTime?
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
   product       Product   @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+  supplier      Supplier? @relation(fields: [supplier_id], references: [id])
 
   @@index([product_id])
   @@index([expiry_date])
   @@index([quantity])
   @@index([deletedAt])
+  @@index([supplier_id])
   @@map("inventory_batches")
+}
+
+/// Supplier entity for managing vendor relationships
+/// Links to inventory batches (restocks) and returns for ledger tracking
+model Supplier {
+  id             Int              @id @default(autoincrement())
+  name           String           @unique
+  contact_person String?
+  contact_number String?
+  email          String?
+  address        String?
+  notes          String?
+  status         String           @default("ACTIVE") // ACTIVE, ARCHIVED
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
+  batches        InventoryBatch[] // Deliveries from this supplier
+  stockMovements StockMovement[]  // Returns to this supplier
+
+  @@index([name])
+  @@index([status])
+  @@map("suppliers")
 }
 
 /// Audit log for all inventory stock changes
@@ -114,17 +138,20 @@ model StockMovement {
   new_stock         Int
   reason            String?
   reference         String?
-  supplier_name     String?
+  supplier_name     String?           // Legacy: Kept for backward compatibility
+  supplier_id       Int?              // New: Foreign key to Supplier
   cost_price        Decimal?          @db.Decimal(10, 2)
   receipt_image_url String?
   created_at        DateTime          @default(now())
   inventory         Inventory         @relation(fields: [inventory_id], references: [inventory_id])
   user              User              @relation(fields: [user_id], references: [user_id])
+  supplier          Supplier?         @relation(fields: [supplier_id], references: [id])
 
   @@index([inventory_id])
   @@index([user_id])
   @@index([movement_type])
   @@index([created_at])
+  @@index([supplier_id])
   @@map("stock_movements")
 }
 
@@ -361,13 +388,17 @@ enum AuditAction {
   RESTORE
   ADJUST_STOCK
   RESTOCK
+  BATCH_RESTOCK
+  BATCH_RETURN
   BULK_IMPORT
   ORDER_CANCEL
   EDIT_EXPIRY
   EDIT_BATCH
   LOGIN
+  LOGIN_FAILED
   LOGOUT
   ZREAD_CLOSE
+  VENDOR_REGISTER
 }
 
 /// Event sources for the forecasting system

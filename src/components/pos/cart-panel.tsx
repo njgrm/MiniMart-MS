@@ -278,7 +278,16 @@
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="w-5 text-center text-xs font-semibold">{item.quantity}</span>
+                      <Input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0;
+                          if (val >= 0) updateQuantity(item.product_id, val);
+                        }}
+                        className="w-10 h-6 text-center text-xs font-semibold p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        min="0"
+                      />
                       <Button
                         variant="ghost"
                         size="icon"

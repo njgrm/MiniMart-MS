@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { format, subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import Link from "next/link";
@@ -49,7 +50,7 @@ import {
 } from "@/components/reports/report-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTablePagination } from "@/components/data-table-pagination";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DateRangePickerWithPresets } from "@/components/ui/date-range-picker-with-presets";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import {
   getVelocityReport,
@@ -160,17 +161,28 @@ const statusConfig: Record<
 };
 
 export function VelocityReportClient({ data: initialData }: VelocityReportClientProps) {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search") || "";
+  
   const [isPending, startTransition] = useTransition();
   const [data, setData] = useState<VelocityReportResult>(initialData);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [globalFilter, setGlobalFilter] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 30),
     to: new Date(),
   });
+  
+  // Update search when URL param changes (e.g., from Intelligence Feed)
+  useEffect(() => {
+    const search = searchParams.get("search");
+    if (search) {
+      setGlobalFilter(search);
+    }
+  }, [searchParams]);
 
   const handleDateChange = (range: DateRange | undefined) => {
     setDateRange(range);
@@ -447,52 +459,52 @@ export function VelocityReportClient({ data: initialData }: VelocityReportClient
       generatedBy="Admin"
       excelExport={excelExport}
       printTableData={printTableData}
+      toolbarFilters={
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="relative flex-1 min-w-[150px] max-w-[250px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search..."
+              value={globalFilter}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              className="pl-8 h-9 text-sm"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="h-9 w-[130px] text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="dead_stock">Dead Stock</SelectItem>
+              <SelectItem value="slow_mover">Slow Mover</SelectItem>
+              <SelectItem value="moderate">Moderate</SelectItem>
+              <SelectItem value="fast_mover">Fast Mover</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-9 w-[140px] text-xs hidden sm:flex">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {formatCategoryName(cat)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      }
       toolbarContent={
-        <DateRangePicker
+        <DateRangePickerWithPresets
           date={dateRange}
           onDateChange={handleDateChange}
           align="end"
         />
       }
     >
-      {/* Filters - Screen Only */}
-      <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search products, categories..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9 py-2.25"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="dead_stock">Dead Stock</SelectItem>
-            <SelectItem value="slow_mover">Slow Mover</SelectItem>
-            <SelectItem value="moderate">Moderate</SelectItem>
-            <SelectItem value="fast_mover">Fast Mover</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categories.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {formatCategoryName(cat)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Summary Cards */}
       <LoadingOverlay isLoading={isPending}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -530,7 +542,7 @@ export function VelocityReportClient({ data: initialData }: VelocityReportClient
           <CardTitle className="text-base font-semibold">Capital Efficiency Analysis</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 translate-y-[-2.5vh] border">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Capital Tied in Inventory</p>

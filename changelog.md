@@ -6,6 +6,659 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-15
 
+### Suppliers Module & Audit Config Fixes
+
+**Verdict:** Added comprehensive Suppliers module with entity management, ledger tracking, and sidebar navigation. Fixed critical audit log configuration issues.
+
+#### 1. New Suppliers Module
+
+**User Request:** "You absolutely need a Suppliers Page... In a professional ERP/POS system, Audit Logs are for security, while Supplier Ledgers are for business"
+
+**Files Created:**
+- `prisma/schema.prisma` - Added `Supplier` model with relations to `InventoryBatch` and `StockMovement`
+- `src/actions/supplier.ts` - Full CRUD: `getSuppliers`, `getSupplierDetails`, `createSupplier`, `updateSupplier`, `toggleSupplierStatus`, `getSuppliersForSelect`, `backfillSuppliersFromBatches`
+- `src/app/admin/suppliers/page.tsx` - Suppliers list page (server component)
+- `src/app/admin/suppliers/suppliers-client.tsx` - Suppliers table with search, status filter, summary cards
+- `src/app/admin/suppliers/add-supplier-dialog.tsx` - Create new supplier dialog
+- `src/app/admin/suppliers/[id]/page.tsx` - Supplier details page (server component)
+- `src/app/admin/suppliers/[id]/supplier-details-client.tsx` - Details with Deliveries & Returns tabs
+- `src/app/admin/suppliers/[id]/edit-supplier-dialog.tsx` - Edit supplier dialog
+
+**Schema Changes:**
+- Added `Supplier` model: `id`, `name` (unique), `contact_person`, `contact_number`, `email`, `address`, `notes`, `status`, relations
+- Added `supplier_id` FK to `InventoryBatch` (links deliveries to supplier)
+- Added `supplier_id` FK to `StockMovement` (links returns to supplier)
+- Added indexes on `supplier_id` for both tables
+
+**UI Features:**
+- Summary cards: Active suppliers, Archived, Total deliveries, Total returns
+- Search by name/contact/email
+- Status filter (All/Active/Archived)
+- "Sync from Batches" button to backfill suppliers from existing `supplier_name` fields
+- Supplier details with tabbed view: Deliveries | Returns
+- Edit/Archive/Reactivate actions
+
+**Files Modified:**
+- `src/components/app-sidebar.tsx` - Added "Suppliers" nav item with `Building2` icon
+
+#### 2. Audit Log Configuration Fixes
+
+**Problem:** Missing `BATCH_RESTOCK` and `BATCH_RETURN` audit actions in config maps causing TypeScript errors
+
+**Files Modified:**
+- `src/app/admin/audit-logs/audit-logs-client.tsx` - Added `BATCH_RESTOCK` and `BATCH_RETURN` to `ACTION_CONFIG`
+- `src/components/audit/log-details-modal.tsx` - Added `BATCH_RESTOCK` and `BATCH_RETURN` to `ACTION_CONFIG`
+
+#### 3. Batch Return Dialog Fix
+
+**Problem:** Missing `advise_return` in `urgencyOrder` causing TypeScript error
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx` - Added `advise_return: 4` to urgencyOrder map, added fallback for unknown urgency types
+
+---
+
+## [Previous] - 2026-01-15
+
+### UX Improvements, 45-Day Expiry Workflow & Batch Return Enhancements
+
+**Verdict:** Comprehensive UX improvements including Touch POS quantity controls, payment modal cleanup, auto-cancel stale orders, and a professional ERP-style "Marked for Return" workflow with 45-day advance notice.
+
+#### 1. Payment Modal: Removed Preset Buttons
+
+**User Request:** "Remove preset numbers for payment confirm modal... make input instantly active so admin can instantly type"
+
+**Files Modified:**
+- `src/components/pos/payment-dialog.tsx`
+
+**Changes:**
+- Removed `quickAmounts` array and all preset amount buttons (₱20, ₱50, ₱100, etc.)
+- Removed "Exact Amount" button
+- Input field remains auto-focused with keyboard hint "Type amount or press Enter for exact"
+- Cleaner, faster checkout experience
+
+#### 2. Touch POS: Added Quantity Input Fields
+
+**User Request:** "Add text input fields for quantity in touch POS, both in product card and cart"
+
+**Files Modified:**
+- `src/components/pos/cart-panel.tsx`
+- `src/components/pos/product-card.tsx`
+
+**Changes:**
+- Cart: Replaced span with `<Input type="number">` for direct quantity editing
+- Product Card: Added full quantity control (minus/input/plus) replacing simple +1 counter
+- Added `stopPropagation` to prevent card click when editing quantity
+- Now matches Legacy POS and Vendor ordering experience
+
+#### 3. Active Orders Card: Truncation & Auto-Cancel
+
+**User Request:** "Truncate the active orders card... orders not processed after 48 hours get automatically cancelled"
+
+**Files Modified:**
+- `src/components/dashboard/active-orders-card.tsx`
+- `src/actions/orders.ts`
+
+**Changes:**
+- Added `max-h-[400px]` constraint to prevent card overflow
+- Added `autoCancelExpiredOrders(hoursThreshold: number = 48)` function
+- Integrated auto-cancel into `getIncomingOrders()` (fire-and-forget on each fetch)
+- Cancelled orders release allocated stock and log via `logOrderCancel` with "System" actor
+
+#### 4. 45-Day Expiry Workflow: "Advise Return" Status
+
+**User Request:** "Expiry reports logic should adjust to advise admin to return items 45 days before... adding the marked for return status"
+
+**Files Modified:**
+- `src/actions/reports.ts` - Extended ExpiringItem type and getExpiringReport
+- `src/actions/inventory.ts` - Added batch status management functions
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Added new UI elements
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx` - Added advise_return config
+
+**New Urgency Level:**
+- `advise_return` (31-45 days): Stone-colored badge for early warning
+- Allows admin time to consider returns before items become critical
+
+**New Batch Status Workflow (ERP Best Practice):**
+1. **ACTIVE** → Normal inventory
+2. **MARKED_FOR_RETURN** → Excluded from FEFO, visible in "Marked for Return" filter
+3. **RETURNED** → Soft-deleted with `deletedAt`, stock removed
+
+**New Server Actions:**
+- `markBatchForReturn(batchId, reason)` - Stage 1: Mark for supplier pickup
+- `confirmBatchesReturned(batchIds, supplierName?, reference?)` - Stage 2: Confirm pickup, remove stock
+- `getBatchesMarkedForReturn()` - Get all marked batches for pickup list
+
+**New UI Elements:**
+- Purple "Marked for Return" badge in Status column
+- "Mark for Return" action in dropdown menu
+- "Confirm Pickup" toolbar button (appears when batches are marked)
+- "Marked for Return" filter option
+- Urgency breakdown shows marked batch count
+
+#### 5. Inventory Page: Enhanced Batch Return Dialog
+
+**User Request:** "Add batch return for non-expiry reasons (damaged, recalled)"
+
+**Files Modified:**
+- `src/app/admin/inventory/[id]/batches/batch-audit-client.tsx`
+
+**Changes:**
+- Added quick reason buttons: Expired, Damaged, Recalled, Wrong Item
+- Each button pre-fills the reason textarea with appropriate text
+- Detailed toast on success: "Returned Batch #X to supplier - Y units of 'Product' to Supplier Z"
+- Imported `markBatchForReturn` and `BATCH_STATUS` for future workflow integration
+
+---
+
+## [Previous] - 2026-01-15
+
+### Critical Bug Fixes & Batch Return Feature Improvements
+
+**Verdict:** Fixed critical stock calculation bug, Decimal serialization errors, infinite loop in checkbox, scroll issues, and added single-batch return from expiry table.
+
+#### 1. CRITICAL: Fixed Stock Disappearing on Batch Operations
+
+**Root Cause:** Products created with initial stock did NOT create an `InventoryBatch` record. When any batch operation (restock, return) called `syncProductFromBatches()`, it would sum batches (0 units) and overwrite `current_stock`, erasing the initial stock.
+
+**Files Modified:**
+- `src/actions/product.ts` - Added initial batch creation
+
+**Changes:**
+- Now creates `InventoryBatch` record alongside `Inventory` when product has initial stock
+- This ensures `syncProductFromBatches()` includes the initial stock in its calculation
+- Without this fix, restocking 1 unit would show stock = 1 instead of initial + 1
+
+**Backfill Script Created:**
+- `scripts/backfill-inventory-batches.ts` - Run `npx tsx scripts/backfill-inventory-batches.ts`
+- Creates "Legacy Stock" batches for existing products with stock but no batches
+- MUST run this script to fix existing data
+
+#### 2. Fixed Decimal Serialization Error
+
+**Error:** "Only plain objects can be passed to Client Components from Server Components. Decimal objects are not supported."
+
+**Files Modified:**
+- `src/actions/inventory.ts` - Convert Decimal to Number in returnBatchToSupplier
+
+**Changes:**
+- Changed `costPrice: batch.cost_price` to `costPrice: batch.cost_price ? Number(batch.cost_price) : null`
+- Prisma Decimal objects cannot be serialized to client components
+
+#### 3. Fixed Infinite Loop in Batch Return Dialog
+
+**Error:** "Maximum update depth exceeded" when clicking checkbox or scrolling
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx`
+
+**Changes:**
+- Fixed checkbox double-toggle: parent div onClick + checkbox onCheckedChange both fired
+- Checkbox now only prevents propagation, toggle handled by parent div
+- Added `min-h-0` and `overflow-auto` to flex containers for proper scroll behavior
+
+#### 4. Added Single-Batch Return from Expiry Table
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Added actions column
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx` - Added preSelectedBatchId prop
+
+**Changes:**
+- New "Actions" column in expiry table with dropdown menu
+- "Return Batch" action opens dialog with batch pre-selected
+- "View Batches" links to batch audit page
+- Dialog auto-fills reason and supplier based on selected batch
+- Implements ERP best practice: actionable reports, not just read-only
+
+---
+
+## [Previous] - 2026-01-15
+
+### Bug Fixes & Batch Return Feature
+
+**Verdict:** Fixed multiple TypeScript errors, added batch return functionality for expired products, and improved reports UI with filters in toolbar.
+
+#### 1. Fixed Authentication Error (prisma.staff undefined)
+
+**Files Modified:**
+- `src/actions/auth.ts` - Changed prisma.staff to prisma.user
+
+**Changes:**
+- Fixed runtime error when logging in as admin via port forwarding
+- Changed `prisma.staff.findUnique` to `prisma.user.findUnique`
+- Updated field references from `staff_id` to `user_id`
+
+#### 2. Fixed ExpiringItem.quantity Error
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Changed quantity to current_quantity
+
+**Changes:**
+- Fixed 3 locations referencing `item.quantity` to use `item.current_quantity`
+- Matches the ExpiringItem interface from actions/reports.ts
+
+#### 3. Fixed Product created_at Error in Analytics
+
+**Files Modified:**
+- `src/app/admin/analytics/actions.ts` - Updated product query and fallback logic
+
+**Changes:**
+- Removed `created_at` from Product select (field doesn't exist on model)
+- Added `last_restock` from inventory as proxy for product age
+- Updated daysSinceLastSale fallback to use last_restock date or default 30 days
+
+#### 4. Fixed Profit Margin Category Dropdown
+
+**Files Modified:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx` - Format category names
+
+**Changes:**
+- Categories now display as "Softdrinks Case" instead of "SOFTDRINKS_CASE"
+- Applied `formatCategoryName()` helper to dropdown items
+
+#### 5. Moved Expiry Report Filters to Toolbar
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Restructured filters
+
+**Changes:**
+- Search bar and dropdowns moved to `toolbarFilters` prop
+- Consistent styling with other report pages (h-9 inputs, text-xs)
+- Removed redundant Filter icon from urgency dropdown
+
+#### 6. Added Batch Return to Supplier Feature
+
+**Files Created:**
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx` - Full-featured dialog
+
+**Files Modified:**
+- `src/actions/inventory.ts` - Added `batchReturnProducts` action
+- `src/app/admin/reports/expiring/expiring-client.tsx` - Added button and dialog
+- `prisma/schema.prisma` - Added BATCH_RESTOCK, BATCH_RETURN to AuditAction enum
+
+**Changes:**
+- New BatchReturnDialog with:
+  - Multi-select batch list sorted by urgency (expired first)
+  - Search/filter by product name, supplier, barcode
+  - Quick actions: "Select All Expired", "Select All Visible"
+  - Return details: supplier name, reference/RMA#, reason
+  - Live totals: units, batches, value at risk
+  - Confirmation dialog with detailed summary
+- batchReturnProducts server action:
+  - Atomic transaction (all succeed or all fail)
+  - Creates SUPPLIER_RETURN stock movements
+  - Syncs inventory totals after batch removal
+  - Comprehensive audit logging
+- "Batch Return" button in expiry report toolbar
+
+#### 7. Added AuditAction Enum Values
+
+**Files Modified:**
+- `prisma/schema.prisma` - Extended AuditAction enum
+
+**Changes:**
+- Added BATCH_RESTOCK for batch restock operations
+- Added BATCH_RETURN for batch supplier return operations
+- Regenerated Prisma client
+
+---
+
+## [Unreleased] - 2026-01-15
+
+### Analytics & Reports UX Improvements
+
+**Verdict:** Comprehensive fixes to analytics charts, data grouping, and reports UI. Added animated sorting to restock table, fixed chart performance on sidebar hover, and improved Intelligence Feed integration with velocity reports.
+
+#### 1. Fixed Weekly Data Grouping (Full Weeks Only)
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Rewrote `groupedChartData` useMemo
+
+**Changes:**
+- Weekly view now uses ISO weeks with `eachWeekOfInterval` from date-fns
+- Only includes weeks where all 7 days fall within the selected range
+- Tooltips now show date range labels (e.g., "Jan 6 - Jan 12")
+- Prevents partial week data from skewing averages
+
+#### 2. Fixed Hourly View for All Time Periods
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Updated hourly aggregation logic
+
+**Changes:**
+- Hourly view now works for multi-day date ranges
+- Averages data across all hours of the day
+- Distributes metrics proportionally with peak hour simulation
+- Valid for any date range (previously single-day only)
+
+#### 3. Fixed Granularity Toggle Logic
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Updated `getValidGranularities()`
+
+**Changes:**
+- Granularity options now based on actual date range, not preset labels
+- New logic: 1 day = hourly only; 2-7 days = hourly+daily; <30 = hourly+daily; 30-59 = +weekly; 60+ = all
+- Auto-switches granularity when date range changes
+
+#### 4. Fixed Dead Stock "27 Years" Bug
+
+**Files Modified:**
+- `src/app/admin/analytics/actions.ts` - Updated `getSmartInsights()` query
+
+**Changes:**
+- `daysSinceLastSale` now uses `product.created_at` as fallback instead of hardcoded 9999
+- Added `created_at` to product query select
+- Products with no sales show days since creation, not impossible values
+
+#### 5. Intelligence Feed Investigate Link
+
+**Files Modified:**
+- `src/lib/insights.ts` - Updated `detectSlowMovers()` actionHref
+
+**Changes:**
+- "Investigate" button now links to `/admin/reports/velocity?search=<productName>`
+- Clicking navigates directly to velocity report with product pre-searched
+
+#### 6. Velocity Report URL Search Integration
+
+**Files Modified:**
+- `src/app/admin/reports/velocity/velocity-client.tsx` - Added useSearchParams support
+
+**Changes:**
+- Added `useSearchParams` to read initial search query from URL
+- Uses `useEffect` to set table filter when URL param is present
+- Enables deep linking to specific product searches
+
+#### 7. Reports Page UI Refactoring
+
+**Files Modified:**
+- `src/components/reports/report-shell.tsx` - Added `toolbarFilters` prop
+- `src/app/admin/reports/velocity/velocity-client.tsx` - Moved filters to toolbar
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx` - Moved filters to toolbar
+- `src/app/admin/reports/spoilage/spoilage-client.tsx` - Moved filters to toolbar
+
+**Changes:**
+- Report shell now supports `toolbarFilters` slot in nested nav
+- Removed title/description from toolbar display
+- Search and filter controls now in toolbar area for cleaner layout
+
+#### 8. Animated Sorting for Restock Table
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Updated `SortButton` component
+
+**Changes:**
+- Added framer-motion imports (motion, AnimatePresence)
+- Added ChevronUp, ChevronDown, ChevronsUpDown icons
+- Sort icons now animate with direction indicators matching inventory table
+
+#### 9. Chart Performance on Sidebar Hover
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - All ResponsiveContainer components
+
+**Changes:**
+- Added `debounce={100}` to all 3 ResponsiveContainer components
+- Prevents frame drops when hovering over collapsing sidebar
+- Charts now only resize after 100ms of stable container width
+
+#### 10. Replaced Emoji Arrows with Lucide Icons
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Financial Hub trend display
+
+**Changes:**
+- Replaced `📈` / `📉` / `→` with `TrendingUp` / `TrendingDown` / `ArrowRight` icons
+- Consistent with design system icon usage
+
+---
+
+## [Unreleased] - 2026-01-15
+
+### Reports UI Restoration & Dashboard Enhancements
+
+**Verdict:** Restored date range preset badges to reports pages, cleaned up reports menu, enhanced Financial Hub with dynamic granularity toggles including hourly view, and expanded date presets with 90 days, 6 months, and yearly options.
+
+#### 1. Restored Date Range Badges for Reports Pages
+
+**Files Created:**
+- `src/components/ui/date-range-picker-with-presets.tsx` - New picker with 30 Days, 90 Days, This Year badges
+
+**Files Modified:**
+- `src/app/admin/reports/z-read/z-read-client.tsx` - Changed to DateRangePickerWithPresets
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx` - Changed to DateRangePickerWithPresets
+- `src/app/admin/reports/velocity/velocity-client.tsx` - Changed to DateRangePickerWithPresets
+- `src/app/admin/reports/spoilage/spoilage-client.tsx` - Changed to DateRangePickerWithPresets
+- `src/app/admin/reports/sales-category/sales-category-client.tsx` - Changed to DateRangePickerWithPresets
+
+**Changes:**
+- Created separate DateRangePickerWithPresets component specifically for reports pages
+- Reports pages now have quick access to 30 Days, 90 Days, This Year presets
+- Dashboard date pickers remain clean without duplicate badges
+
+#### 2. Cleaned Up Reports Menu
+
+**Files Modified:**
+- `src/app/admin/reports/layout-client.tsx` - Removed Audit Logs, Users, Stock from sidebar
+- `src/app/admin/reports/page.tsx` - Removed same items from main reports page sidebar
+
+**Changes:**
+- Removed 3 audit-related links from reports navigation:
+  - Audit Logs (FileText icon)
+  - User Activity (Users icon)
+  - Stock Movements (Archive icon)
+- These are system logs, not business reports - moved to admin-only section
+- Cleaned up unused imports (FileText, Users, Archive)
+
+#### 3. Increased Reports Sidebar Font & Icon Sizes
+
+**Files Modified:**
+- `src/app/admin/reports/layout-client.tsx` - Updated nested sidebar styling
+- `src/app/admin/reports/page.tsx` - Updated main reports page sidebar styling
+
+**Changes:**
+- Sidebar width: w-44 → w-48 (more room for text)
+- Font size: text-xs → text-sm (better readability)
+- Icon size: h-3.5 w-3.5 → h-4 w-4 (clearer icons)
+- Padding adjustments for better spacing
+- Back button height: h-7 → h-9/h-10 (easier to click)
+
+#### 4. Financial Hub Dynamic Granularity Toggles
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Enhanced granularity controls
+
+**Changes:**
+- Added "Hourly" as a new granularity option for single-day views
+- Granularity toggles now dynamically enable/disable based on date range:
+  - 1 day: Hourly only
+  - 2-7 days: Hourly + Daily
+  - 8-30 days: Daily + Weekly
+  - 31-90 days: Daily + Weekly + Monthly
+  - 90+ days: Weekly + Monthly only
+- Disabled toggles appear grayed out with cursor-not-allowed
+- Auto-selects first valid granularity when date range changes
+
+#### 5. Expanded Date Presets for Dashboards
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Added new presets
+- `src/app/admin/dashboard-client.tsx` - Added new presets + imports
+
+**Changes:**
+- Added 4 new date presets to both dashboards:
+  - Last 90 days (for quarterly analysis)
+  - Last 6 months (for trend analysis)
+  - 2026 (current year full view)
+  - 2025 (previous year for YoY comparison)
+- Added `startOfYear` and `endOfYear` imports where needed
+- Total presets now: Today, Yesterday, Last 7 days, Last 30 days, Last 90 days, Last 6 months, This Month, Last Month, 2026, 2025
+
+---
+
+## [Unreleased] - 2026-01-15
+
+### UI/UX Improvements & Cache Optimization
+
+**Verdict:** Removed duplicate date range badges, added hourly chart views for single-day ranges, updated peak traffic heatmap to use AM/PM format, added vendor products cache revalidation, and enhanced restock recommendation tooltips.
+
+#### 1. Removed Duplicate Date Range Badges
+
+**Files Modified:**
+- `src/components/ui/date-range-picker.tsx` - Removed preset badges (30 Days, 90 Days, This Year)
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Removed Year 2024/2025/2026 presets
+
+**Changes:**
+- Removed quick preset badges from DateRangePicker component since pages already have their own presets
+- Removed Year 2024/2025/2026 options from analytics dashboard presets (redundant with date picker)
+- Cleaned up unused imports (Badge, startOfYear, isSameDay, isAfter)
+
+#### 2. Hourly Chart Data for Single-Day Views
+
+**Files Modified:**
+- `src/app/admin/analytics/actions.ts` - Updated `getDashboardChartDataByDateRange()`
+
+**Changes:**
+- When viewing a single day (Today, Yesterday), charts now show hourly data points
+- X-axis displays business hours: 8AM, 9AM, 10AM, 11AM, 12PM, 1PM, 2PM, 3PM, 4PM, 5PM, 6PM, 7PM
+- Transactions outside business hours are clamped to nearest hour (before 8AM → 8AM, after 7PM → 7PM)
+- Enables better granularity for analyzing daily sales patterns
+
+#### 3. Peak Traffic Heatmap AM/PM Format
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Updated `PeakTrafficHeatmap` component
+
+**Changes:**
+- Hour labels now display in AM/PM format (8AM, 9AM, ..., 12PM, 1PM, ..., 7PM)
+- Tooltip hover also shows AM/PM format instead of 24-hour time
+- Added `formatHourLabel()` helper function for consistent formatting
+
+#### 4. Vendor Products Cache Revalidation
+
+**Files Modified:**
+- `src/actions/product.ts` - Added `revalidateTag()` calls
+
+**Changes:**
+- Added `revalidateTag("vendor-products")` in:
+  - `createProduct()` - When new products are added
+  - `updateProduct()` - When product details change
+  - `deleteProduct()` - When products are archived
+  - `restoreProduct()` - When products are restored from archive
+  - `bulkDeleteProducts()` - When multiple products are deleted/archived
+- Ensures vendor portal always shows current product catalog
+- Works with the `unstable_cache` wrapper added to `getVendorProducts()`
+
+#### 5. Restock Recommendation Tooltips
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Updated `ForecastingTable` component
+
+**Changes:**
+- Added individual tooltips to **Forecasted** column data cells showing:
+  - Average daily sales rate
+  - 7-day projection
+  - Confidence level (HIGH/MEDIUM/LOW)
+- Added individual tooltips to **Rec** (Recommended) column data cells showing:
+  - Current stock level
+  - Daily velocity
+  - 7-day demand forecast
+  - Order quantity calculation
+  - Estimated cost (if cost price available)
+- Tooltips provide transparency into how each value was calculated
+
+---
+
+## [Previous] - 2026-01-15
+
+### Security & Performance Enhancements
+
+**Verdict:** Added failed login attempt tracking for security monitoring, integrated logout logging across all app paths, added vendor registration auditing, implemented Server-Sent Events (SSE) for real-time updates, and added caching for vendor products.
+
+#### 1. Failed Login Attempt Logging
+
+**Files Modified:**
+- `prisma/schema.prisma` - Added `LOGIN_FAILED` to AuditAction enum
+- `src/lib/logger.ts` - Added `logLoginFailed()` function
+- `src/actions/auth.ts` - Enhanced login action with failure tracking
+
+**Changes:**
+- New `logLoginFailed()` function captures: identifier (email/username), failure reason, attempt timestamp
+- Failure reasons tracked: `user_not_found`, `wrong_password`, `account_disabled`, `unknown`
+- Login action now validates credentials BEFORE calling signIn, enabling failure logging
+- Failed attempts are logged for security monitoring and brute-force detection
+
+#### 2. Vendor Registration Logging
+
+**Files Modified:**
+- `prisma/schema.prisma` - Added `VENDOR_REGISTER` to AuditAction enum
+- `src/lib/logger.ts` - Added `logVendorRegister()` function
+- `src/actions/auth.ts` - Integrated registration logging
+
+**Changes:**
+- New `logVendorRegister()` function captures: vendor_id, vendor_name, email, contact_details
+- vendorRegister() action now creates audit log entry on successful registration
+- Enables tracking of complete vendor lifecycle from registration to orders
+
+#### 3. Logout Integration Across All Paths
+
+**Files Modified:**
+- `src/app/vendor/layout-client.tsx`
+- `src/app/vendor/profile/profile-client.tsx`
+- `src/components/kokonutui/top-nav.tsx`
+
+**Changes:**
+- All 3 logout buttons now use the centralized `logout()` server action
+- Replaced direct `signOut()` calls with `logout()` then router.push("/login")
+- Complete audit trail for all user sessions (login → actions → logout)
+
+#### 4. Server-Sent Events (SSE) for Real-Time Updates
+
+**Files Created:**
+- `src/app/api/notifications/stream/route.ts` - SSE endpoint for notifications
+- `src/app/api/orders/stream/route.ts` - SSE endpoint for order status
+- `src/hooks/use-event-source.ts` - Custom React hook for SSE connections
+
+**Files Modified:**
+- `src/components/ui/notification-bell.tsx` - Integrated SSE with polling fallback
+- `src/components/vendor/live-order-status.tsx` - Integrated SSE with reduced polling
+
+**Changes:**
+- Notifications now update in real-time via SSE (10s server-side polling)
+- Order status updates pushed instantly when status changes
+- useEventSource hook handles connection lifecycle, auto-reconnect, visibility changes
+- Polling reduced from 5s/30s to 30s/60s as fallback only
+- Significantly reduced server load while improving responsiveness
+
+#### 5. Vendor Products Caching
+
+**Files Modified:**
+- `src/actions/vendor.ts`
+
+**Changes:**
+- Wrapped `getVendorProducts()` with `unstable_cache` from next/cache
+- 60-second revalidation period to reduce database queries
+- Tagged with "vendor-products" for manual revalidation when products change
+- Improves vendor portal load times significantly
+
+#### 6. Audit Logs UI Updates
+
+**Files Modified:**
+- `src/app/admin/audit-logs/audit-logs-client.tsx`
+- `src/components/audit/log-details-modal.tsx`
+
+**Changes:**
+- Added ShieldAlert icon for LOGIN_FAILED (high-risk red styling)
+- Added UserPlus icon for VENDOR_REGISTER (emerald styling)
+- DiffSummary and modal metadata display for new action types
+- LOGIN_FAILED shows: identifier, failure reason, attempt timestamp
+- VENDOR_REGISTER shows: vendor name, email, contact, registration time
+
+---
+
+## [Previous] - 2026-01-15
+
 ### Comprehensive Audit Logging Enhancements
 
 **Verdict:** Fixed product image changes not being tracked in audit logs, added LOGIN/LOGOUT tracking, and added Z-Read (end of day) close logging for complete operational audit trail.

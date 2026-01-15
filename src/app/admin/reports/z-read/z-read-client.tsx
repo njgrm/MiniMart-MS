@@ -38,7 +38,7 @@ import {
 } from "@/components/reports/report-shell";
 import { SortableHeader } from "@/components/ui/sortable-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DateRangePickerWithPresets } from "@/components/ui/date-range-picker-with-presets";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { getZReadHistory, type ZReadHistoryResult, type ZReadRecord } from "@/actions/reports";
 import { cn } from "@/lib/utils";
@@ -532,7 +532,7 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
       excelExport={excelExport}
       printSummary={printSummary}
       toolbarContent={
-        <DateRangePicker
+        <DateRangePickerWithPresets
           date={dateRange}
           onDateChange={handleDateRangeChange}
           align="end"

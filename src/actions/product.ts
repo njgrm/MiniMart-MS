@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import {
   createProductSchema,
   updateProductSchema,
@@ -220,7 +220,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
       }
     }
 
-    // Create product, inventory, and INITIAL_STOCK movement in a transaction
+    // Create product, inventory, batch (FEFO), and INITIAL_STOCK movement in a transaction
     const product = await prisma.$transaction(async (tx) => {
       const newProduct = await tx.product.create({
         data: {
@@ -243,6 +243,22 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
           last_restock: new Date(),
         },
       });
+
+      // Create initial InventoryBatch for FEFO tracking (only if stock > 0)
+      // This is CRITICAL: Without a batch, syncProductFromBatches() will reset stock to 0
+      if (initial_stock > 0) {
+        await tx.inventoryBatch.create({
+          data: {
+            product_id: newProduct.product_id,
+            quantity: initial_stock,
+            expiry_date: expiry_date || null,
+            received_date: new Date(),
+            supplier_name: supplier_name || null,
+            supplier_ref: reference || null,
+            cost_price: cost_price ? new Decimal(cost_price) : null,
+          },
+        });
+      }
 
       // Create INITIAL_STOCK movement for audit trail (only if stock > 0)
       if (initial_stock > 0) {
@@ -267,8 +283,7 @@ export async function createProduct(data: CreateProductInput): Promise<ActionRes
     });
 
     revalidatePath("/admin/inventory");
-    
-    // Audit log: Product created (using centralized logger)
+    revalidateTag("vendor-products"); // Invalidate vendor portal products cache
     await logProductCreate(
       "Admin", // TODO: Get from session
       product.product_id,
@@ -410,8 +425,7 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
     });
 
     revalidatePath("/admin/inventory");
-    
-    // Audit log: Product updated (using centralized logger with diff)
+    revalidateTag("vendor-products"); // Invalidate vendor portal products cache
     const newData = {
       product_name,
       category,
@@ -507,8 +521,7 @@ export async function bulkDeleteProducts(productIds: number[]): Promise<ActionRe
     });
 
     revalidatePath("/admin/inventory");
-    
-    // Audit log: Bulk delete/archive (using centralized logger)
+    revalidateTag("vendor-products"); // Invalidate vendor portal products cache
     if (idsToArchive.length > 0 || idsToDelete.length > 0) {
       await logActivity({
         username: "Admin", // TODO: Get from session
@@ -596,8 +609,7 @@ export async function deleteProduct(productId: number): Promise<ActionResult> {
     });
 
     revalidatePath("/admin/inventory");
-    
-    // Audit log: Product archived
+    revalidateTag("vendor-products"); // Invalidate vendor portal products cache
     await logActivity({
       username: "Admin", // TODO: Get from session
       action: "ARCHIVE",
@@ -691,6 +703,7 @@ export async function restoreProduct(productId: number): Promise<ActionResult> {
     });
 
     revalidatePath("/admin/inventory");
+    revalidateTag("vendor-products"); // Invalidate vendor portal products cache
     
     // Audit log: Product restored
     await logActivity({

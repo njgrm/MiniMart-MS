@@ -35,7 +35,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DateRangePickerWithPresets } from "@/components/ui/date-range-picker-with-presets";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { getSalesByCategory, type CategorySalesResult, type CategorySalesItem } from "@/actions/reports";
 
@@ -314,7 +314,7 @@ export function SalesCategoryClient({ data: initialData }: SalesCategoryClientPr
       excelExport={excelExport}
       printTableData={printTableData}
       toolbarContent={
-        <DateRangePicker
+        <DateRangePickerWithPresets
           date={dateRange}
           onDateChange={handleDateChange}
           align="end"
@@ -357,7 +357,7 @@ export function SalesCategoryClient({ data: initialData }: SalesCategoryClientPr
             <CardTitle className="text-base font-semibold">Top Performing Category</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+            <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 translate-y-[-2.5vh] border">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Category</p>

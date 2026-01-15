@@ -514,6 +514,37 @@ export async function logLogin(
 }
 
 /**
+ * Log a failed login attempt
+ */
+export async function logLoginFailed(
+  identifier: string,
+  reason: "user_not_found" | "wrong_password" | "account_disabled" | "unknown",
+  ipAddress?: string
+): Promise<void> {
+  const reasonMessages: Record<string, string> = {
+    user_not_found: "User not found",
+    wrong_password: "Incorrect password",
+    account_disabled: "Account is disabled",
+    unknown: "Authentication failed",
+  };
+
+  await logActivity({
+    username: identifier,
+    action: "LOGIN_FAILED",
+    module: "AUTH",
+    entity: "User",
+    entityName: identifier,
+    details: `Failed login attempt for "${identifier}": ${reasonMessages[reason]}.`,
+    metadata: {
+      identifier,
+      reason,
+      attempt_time: new Date().toISOString(),
+    },
+    ipAddress,
+  });
+}
+
+/**
  * Log a user logout event
  */
 export async function logLogout(
@@ -580,6 +611,34 @@ export async function logZReadClose(
       cash_in_drawer: data.cashInDrawer,
       variance: data.variance || 0,
       close_time: new Date().toISOString(),
+    },
+  });
+}
+
+/**
+ * Log a vendor registration event
+ */
+export async function logVendorRegister(
+  vendorId: number,
+  vendorName: string,
+  email: string,
+  contactDetails?: string | null
+): Promise<void> {
+  await logActivity({
+    userId: vendorId,
+    username: vendorName,
+    action: "VENDOR_REGISTER",
+    module: "AUTH",
+    entity: "Vendor",
+    entityId: vendorId,
+    entityName: vendorName,
+    details: `New vendor "${vendorName}" registered with email "${email}".`,
+    metadata: {
+      vendor_id: vendorId,
+      vendor_name: vendorName,
+      email,
+      contact_details: contactDetails || null,
+      registration_time: new Date().toISOString(),
     },
   });
 }

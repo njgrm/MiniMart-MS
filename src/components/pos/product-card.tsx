@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { 
   usePosStore, 
   getCartQuantity, 
@@ -171,21 +173,49 @@ export function ProductCard({ product, displayPrice, priceType, onClick }: Props
             ₱{displayPrice.toFixed(2)}
           </p>
 
-          {/* Subtract Control - entire button is clickable for decrement */}
+          {/* Quantity Control - shows when item is in cart */}
           {cartQty > 0 && (
-            <button
-              type="button"
-              className="flex items-center gap-0 rounded-lg overflow-hidden border border-primary dark:border-primary hover:scale-110 hover:shadow-md active:scale-100 transition-all duration-150 cursor-pointer"
-              onClick={handleDecrement}
-              aria-label={`Remove one ${product.product_name} from cart (${cartQty} in cart)`}
-            >
-              <span className="h-7 w-7 flex items-center justify-center bg-primary text-primary-foreground">
+            <div className="flex items-center gap-0 rounded-lg overflow-hidden border border-primary dark:border-primary">
+              <button
+                type="button"
+                className="h-7 w-7 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDecrement();
+                }}
+                aria-label={`Remove one ${product.product_name} from cart`}
+              >
                 <Minus className="h-3.5 w-3.5" />
-              </span>
-              <span className="px-2.5 h-7 flex items-center justify-center text-sm font-bold text-muted-foreground tabular-nums bg-card dark:bg-background">
-                {cartQty}
-              </span>
-            </button>
+              </button>
+              <input
+                type="number"
+                value={cartQty}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const val = parseInt(e.target.value) || 0;
+                  if (val >= 0 && val <= product.current_stock) {
+                    updateQuantity(product.product_id, val);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-10 h-7 text-center text-sm font-bold text-muted-foreground tabular-nums bg-card dark:bg-background border-0 focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                min="0"
+                max={product.current_stock}
+              />
+              <button
+                type="button"
+                className="h-7 w-7 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (cartQty < product.current_stock) {
+                    updateQuantity(product.product_id, cartQty + 1);
+                  }
+                }}
+                aria-label={`Add one more ${product.product_name} to cart`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
           )}
         </div>
       </div>

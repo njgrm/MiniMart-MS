@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DateRangePickerWithPresets } from "@/components/ui/date-range-picker-with-presets";
 import {
   ReportShell,
 } from "@/components/reports/report-shell";
@@ -216,27 +216,27 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
       excelExport={excelExport}
       printSummary={printSummary}
       printTableData={printTableData}
+      toolbarFilters={
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="relative flex-1 min-w-[150px] max-w-[300px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search products, categories, reasons..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 h-9 text-sm"
+            />
+          </div>
+        </div>
+      }
       toolbarContent={
-        <DateRangePicker
+        <DateRangePickerWithPresets
           date={dateRange}
           onDateChange={handleDateChange}
           align="end"
         />
       }
     >
-      {/* Filters - Screen Only */}
-      <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search products, categories, reasons..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 py-2.25"
-          />
-        </div>
-      </div>
-
       {/* Summary Cards - Larger with subtitles */}
       <LoadingOverlay isLoading={isPending}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

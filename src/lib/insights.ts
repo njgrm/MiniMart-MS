@@ -213,7 +213,7 @@ function calculateRevenuePacing(
       ? `This month's revenue (${formattedRevenue}) is tracking ${absChange.toFixed(1)}% ahead of last month's pace. Keep the momentum going!`
       : `Revenue is currently ${absChange.toFixed(1)}% behind last month's pace at this point. Consider promotions to boost sales.`,
     actionLabel: "View Financials",
-    actionHref: "/admin/sales/financial",
+    actionHref: "/admin/reports",
     value: percentChange,
     metadata: { thisMonthRevenue, lastMonthSameDayRevenue },
   };
@@ -277,7 +277,7 @@ function detectSlowMovers(velocityData: VelocityData[]): Insight[] {
       title: "Declining Sales",
       message: `${worst.productName} sales have dropped ${Math.abs(worst.velocityChange).toFixed(0)}% compared to last week. Investigate if pricing, placement, or competition is affecting demand.`,
       actionLabel: "Investigate",
-      actionHref: `/admin/inventory/${worst.productId}`,
+      actionHref: `/admin/reports/velocity?search=${encodeURIComponent(worst.productName)}`,
       productId: worst.productId,
       productName: worst.productName,
       productImage: worst.productImage,

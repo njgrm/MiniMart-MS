@@ -604,7 +604,7 @@ export async function returnBatchToSupplier(
         productName: batch.product.product_name,
         expiryDate: batch.expiry_date,
         supplierName: batchSupplier,
-        costPrice: batch.cost_price,
+        costPrice: batch.cost_price ? Number(batch.cost_price) : null,
       };
     });
 
@@ -640,6 +640,246 @@ export async function returnBatchToSupplier(
     console.error("Return batch to supplier error:", error);
     const message = error instanceof Error ? error.message : "Failed to return batch to supplier";
     return { success: false, error: message };
+  }
+}
+
+// ============================================================================
+// Batch Status Management (Marked for Return Workflow)
+// ============================================================================
+
+// Import batch status constants from shared constants file
+// (Cannot export objects from "use server" files)
+import { BATCH_STATUS } from "@/lib/constants";
+
+/**
+ * Mark a batch for return (soft-delete workflow step 1)
+ * Batch is excluded from FEFO deductions but remains in inventory until pickup
+ * 
+ * Use case: Admin marks expired/near-expiry batches for supplier pickup
+ */
+export async function markBatchForReturn(
+  batchId: number,
+  reason: string,
+  userId: number = 1
+): Promise<ActionResult<{ batchId: number; productName: string; quantity: number }>> {
+  if (!reason || reason.trim().length < 3) {
+    return { success: false, error: "Please provide a reason (min 3 characters)" };
+  }
+
+  try {
+    const batch = await prisma.inventoryBatch.findUnique({
+      where: { id: batchId },
+      include: { product: true },
+    });
+
+    if (!batch) {
+      return { success: false, error: "Batch not found" };
+    }
+
+    if (batch.status === BATCH_STATUS.MARKED_FOR_RETURN) {
+      return { success: false, error: "Batch is already marked for return" };
+    }
+
+    if (batch.status === BATCH_STATUS.RETURNED) {
+      return { success: false, error: "Batch has already been returned" };
+    }
+
+    await prisma.inventoryBatch.update({
+      where: { id: batchId },
+      data: { status: BATCH_STATUS.MARKED_FOR_RETURN },
+    });
+
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/reports/expiring");
+    revalidatePath(`/admin/inventory/${batch.product_id}/batches`);
+
+    // Audit log
+    await logActivity({
+      username: "Admin",
+      action: "UPDATE",
+      entity: "InventoryBatch",
+      entityId: batchId,
+      entityName: batch.product.product_name,
+      details: `📦 Marked Batch #${batchId} for return. ${batch.quantity} units of "${batch.product.product_name}". Reason: ${reason}`,
+      metadata: {
+        product_id: batch.product_id,
+        batch_id: batchId,
+        quantity: batch.quantity,
+        reason,
+        new_status: BATCH_STATUS.MARKED_FOR_RETURN,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        batchId: batch.id,
+        productName: batch.product.product_name,
+        quantity: batch.quantity,
+      },
+    };
+  } catch (error) {
+    console.error("Mark batch for return error:", error);
+    return { success: false, error: "Failed to mark batch for return" };
+  }
+}
+
+/**
+ * Confirm return of marked batches (soft-delete workflow step 2)
+ * Removes stock and creates audit trail when supplier actually picks up
+ * 
+ * @param batchIds - Array of batch IDs to confirm return
+ */
+export async function confirmBatchesReturned(
+  batchIds: number[],
+  supplierName?: string,
+  reference?: string,
+  userId: number = 1
+): Promise<ActionResult<{ returnedCount: number; totalUnits: number; totalValue: number }>> {
+  if (!batchIds || batchIds.length === 0) {
+    return { success: false, error: "No batches provided" };
+  }
+
+  try {
+    let totalUnits = 0;
+    let totalValue = 0;
+    const returnedBatches: { name: string; qty: number }[] = [];
+
+    await prisma.$transaction(async (tx) => {
+      for (const batchId of batchIds) {
+        const batch = await tx.inventoryBatch.findUnique({
+          where: { id: batchId },
+          include: { product: { include: { inventory: true } } },
+        });
+
+        if (!batch || batch.status !== BATCH_STATUS.MARKED_FOR_RETURN) {
+          continue; // Skip batches not marked for return
+        }
+
+        const inventory = batch.product.inventory;
+        if (!inventory) continue;
+
+        const quantityReturned = batch.quantity;
+        const costPrice = Number(batch.cost_price) || Number(batch.product.cost_price) || 0;
+        const previousStock = inventory.current_stock;
+
+        totalUnits += quantityReturned;
+        totalValue += quantityReturned * costPrice;
+        returnedBatches.push({ name: batch.product.product_name, qty: quantityReturned });
+
+        // Soft delete: Mark as RETURNED instead of hard delete
+        await tx.inventoryBatch.update({
+          where: { id: batchId },
+          data: {
+            status: BATCH_STATUS.RETURNED,
+            quantity: 0, // Zero out for accurate stock sync
+            deletedAt: new Date(),
+          },
+        });
+
+        // Sync inventory stock
+        const { totalStock } = await syncProductFromBatches(tx, batch.product_id);
+
+        // Create stock movement record
+        await tx.stockMovement.create({
+          data: {
+            inventory_id: inventory.inventory_id,
+            user_id: userId,
+            movement_type: "SUPPLIER_RETURN",
+            quantity_change: -quantityReturned,
+            previous_stock: previousStock,
+            new_stock: totalStock,
+            reason: `Batch pickup confirmed`,
+            reference: reference || `PICKUP-${Date.now()}`,
+            supplier_name: supplierName || batch.supplier_name || "Unknown Supplier",
+            cost_price: batch.cost_price,
+          },
+        });
+      }
+    });
+
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/reports/expiring");
+    revalidatePath("/admin/analytics");
+
+    // Audit log
+    await logActivity({
+      action: "BATCH_RETURN",
+      module: "INVENTORY",
+      actor: "Admin",
+      description: `Confirmed return of ${returnedBatches.length} batches (${totalUnits} units, ₱${totalValue.toLocaleString()})`,
+      details: {
+        batchIds,
+        supplierName,
+        reference,
+        totalUnits,
+        totalValue,
+        batches: returnedBatches,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        returnedCount: returnedBatches.length,
+        totalUnits,
+        totalValue,
+      },
+    };
+  } catch (error) {
+    console.error("Confirm batches returned error:", error);
+    return { success: false, error: "Failed to confirm batch returns" };
+  }
+}
+
+/**
+ * Get all batches marked for return (for pickup list)
+ */
+export async function getBatchesMarkedForReturn(): Promise<ActionResult<{
+  batches: Array<{
+    id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    expiry_date: Date | null;
+    supplier_name: string | null;
+    cost_price: number | null;
+    marked_date: Date;
+  }>;
+  totalUnits: number;
+  totalValue: number;
+}>> {
+  try {
+    const batches = await prisma.inventoryBatch.findMany({
+      where: { status: BATCH_STATUS.MARKED_FOR_RETURN },
+      include: { product: true },
+      orderBy: [
+        { expiry_date: { sort: 'asc', nulls: 'last' } },
+        { updated_at: 'asc' },
+      ],
+    });
+
+    const formatted = batches.map((b) => ({
+      id: b.id,
+      product_id: b.product_id,
+      product_name: b.product.product_name,
+      quantity: b.quantity,
+      expiry_date: b.expiry_date,
+      supplier_name: b.supplier_name,
+      cost_price: b.cost_price ? Number(b.cost_price) : null,
+      marked_date: b.updated_at,
+    }));
+
+    const totalUnits = formatted.reduce((sum, b) => sum + b.quantity, 0);
+    const totalValue = formatted.reduce((sum, b) => sum + b.quantity * (b.cost_price || 0), 0);
+
+    return {
+      success: true,
+      data: { batches: formatted, totalUnits, totalValue },
+    };
+  } catch (error) {
+    console.error("Get batches marked for return error:", error);
+    return { success: false, error: "Failed to get marked batches" };
   }
 }
 
@@ -1274,6 +1514,212 @@ export async function batchRestockProducts(input: BatchRestockInput): Promise<Ac
   } catch (error) {
     console.error("Batch restock error:", error);
     const message = error instanceof Error ? error.message : "Failed to process batch restock";
+    return { success: false, error: message };
+  }
+}
+
+// ============================================================================
+// Batch Return to Supplier
+// ============================================================================
+
+export interface BatchReturnItem {
+  batchId: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  expiryDate?: Date | null;
+  supplierName?: string | null;
+  costPrice?: number;
+}
+
+export interface BatchReturnInput {
+  items: BatchReturnItem[];
+  reason: string;
+  supplierName?: string;
+  reference?: string;
+  userId?: number;
+}
+
+export interface BatchReturnResult {
+  results: Array<{
+    batchId: number;
+    productId: number;
+    productName: string;
+    quantityReturned: number;
+    success: boolean;
+    error?: string;
+  }>;
+  successCount: number;
+  failedCount: number;
+  totalUnitsReturned: number;
+  totalValueReturned: number;
+}
+
+/**
+ * Batch Return to Supplier - Return multiple expired/damaged batches to supplier
+ * 
+ * Use Case: Supplier pickup of expired products, damaged goods returns,
+ * or recalls that affect multiple product batches.
+ * 
+ * Features:
+ * - Single transaction for all items (atomic - all succeed or all fail)
+ * - Removes batches and updates inventory totals
+ * - Creates SUPPLIER_RETURN stock movements for each item
+ * - Comprehensive audit trail with return reference
+ * - Updates nearest_expiry_date after batch removal
+ */
+export async function batchReturnProducts(input: BatchReturnInput): Promise<ActionResult<BatchReturnResult>> {
+  const { items, reason, supplierName, reference, userId = 1 } = input;
+
+  if (!items || items.length === 0) {
+    return { success: false, error: "No items provided for batch return" };
+  }
+
+  if (!reason || reason.trim().length < 3) {
+    return { success: false, error: "Please provide a reason (min 3 characters)" };
+  }
+
+  try {
+    const results: BatchReturnResult['results'] = [];
+    let totalValueReturned = 0;
+
+    // Process all items in a single transaction for atomicity
+    await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        try {
+          // Get the batch with product and inventory info
+          const batch = await tx.inventoryBatch.findUnique({
+            where: { id: item.batchId },
+            include: { product: { include: { inventory: true } } },
+          });
+
+          if (!batch) {
+            results.push({
+              batchId: item.batchId,
+              productId: item.productId,
+              productName: item.productName,
+              quantityReturned: 0,
+              success: false,
+              error: "Batch not found",
+            });
+            continue;
+          }
+
+          const inventory = batch.product.inventory;
+          if (!inventory) {
+            results.push({
+              batchId: item.batchId,
+              productId: item.productId,
+              productName: item.productName,
+              quantityReturned: 0,
+              success: false,
+              error: "Product inventory not found",
+            });
+            continue;
+          }
+
+          const quantityReturned = batch.quantity;
+          const batchSupplier = supplierName || batch.supplier_name || "Unknown Supplier";
+          const previousStock = inventory.current_stock;
+          const costPrice = Number(batch.cost_price) || Number(batch.product.cost_price) || 0;
+          
+          totalValueReturned += quantityReturned * costPrice;
+
+          // Delete the batch
+          await tx.inventoryBatch.delete({
+            where: { id: item.batchId },
+          });
+
+          // Sync inventory.current_stock and product.nearest_expiry_date
+          const { totalStock } = await syncProductFromBatches(tx, batch.product_id);
+
+          // Create SUPPLIER_RETURN stock movement
+          await tx.stockMovement.create({
+            data: {
+              inventory_id: inventory.inventory_id,
+              user_id: userId,
+              movement_type: "SUPPLIER_RETURN",
+              quantity_change: -quantityReturned,
+              previous_stock: previousStock,
+              new_stock: totalStock,
+              reason: `Batch return: ${reason}`,
+              reference: reference || `BATCHRETURN-${Date.now()}`,
+              supplier_name: batchSupplier,
+              cost_price: batch.cost_price,
+            },
+          });
+
+          results.push({
+            batchId: item.batchId,
+            productId: batch.product_id,
+            productName: batch.product.product_name,
+            quantityReturned,
+            success: true,
+          });
+        } catch (itemError) {
+          const message = itemError instanceof Error ? itemError.message : "Unknown error";
+          results.push({
+            batchId: item.batchId,
+            productId: item.productId,
+            productName: item.productName,
+            quantityReturned: 0,
+            success: false,
+            error: message,
+          });
+        }
+      }
+    });
+
+    // Revalidate paths
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/reports/expiring");
+    revalidatePath("/admin/analytics");
+    revalidatePath("/admin");
+
+    // Log the batch return operation
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+    const totalUnitsReturned = results.reduce((sum, r) => sum + r.quantityReturned, 0);
+
+    // Centralized audit log for batch return operation
+    await logActivity({
+      action: "BATCH_RETURN",
+      module: "INVENTORY",
+      actor: "Admin", // TODO: Get from session
+      description: `Batch return to supplier: ${successCount} batches (${totalUnitsReturned} units, ₱${totalValueReturned.toLocaleString()}) - ${reason}`,
+      details: {
+        supplierName: supplierName || "Various Suppliers",
+        reference,
+        reason,
+        batchCount: items.length,
+        totalUnitsReturned,
+        totalValueReturned,
+        successCount,
+        failedCount,
+        batches: results.map(r => ({
+          batchId: r.batchId,
+          productId: r.productId,
+          productName: r.productName,
+          quantityReturned: r.quantityReturned,
+          success: r.success,
+        })),
+      },
+    });
+
+    return {
+      success: failedCount === 0,
+      data: {
+        results,
+        successCount,
+        failedCount,
+        totalUnitsReturned,
+        totalValueReturned,
+      },
+      error: failedCount > 0 ? `${failedCount} batches failed to return` : undefined,
+    };
+  } catch (error) {
+    console.error("Batch return error:", error);
+    const message = error instanceof Error ? error.message : "Failed to process batch return";
     return { success: false, error: message };
   }
 }

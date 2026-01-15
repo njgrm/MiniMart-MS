@@ -29,6 +29,8 @@ import {
   LogIn,
   LogOut,
   Receipt,
+  UserPlus,
+  ShieldAlert,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,8 +86,12 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; icon: typeof Plus; col
   EDIT_EXPIRY: { label: "Expiry", icon: Calendar, color: "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 ring-1 ring-orange-400/50", isHighRisk: true },
   EDIT_BATCH: { label: "Batch", icon: ClipboardEdit, color: "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 ring-1 ring-orange-400/50", isHighRisk: true },
   LOGIN: { label: "Logged In", icon: LogIn, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  LOGIN_FAILED: { label: "Login Failed", icon: ShieldAlert, color: "bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-300 ring-1 ring-red-400/50", isHighRisk: true },
   LOGOUT: { label: "Logged Out", icon: LogOut, color: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400" },
   ZREAD_CLOSE: { label: "Z-Read", icon: Receipt, color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
+  VENDOR_REGISTER: { label: "Registered", icon: UserPlus, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  BATCH_RESTOCK: { label: "Batch Restock", icon: PackagePlus, color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" },
+  BATCH_RETURN: { label: "Batch Return", icon: RotateCcw, color: "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 ring-1 ring-orange-400/50", isHighRisk: true },
 };
 
 // Module badge colors
@@ -328,6 +334,37 @@ function DiffSummary({ log }: { log: AuditLogEntry }): React.ReactNode {
         </span>
         {txnCount && (
           <Badge variant="outline" className="text-[9px]">{txnCount} txn</Badge>
+        )}
+      </div>
+    );
+  }
+  
+  // LOGIN_FAILED
+  if (log.action === "LOGIN_FAILED") {
+    const reason = metadata?.reason as string | undefined;
+    const reasonLabels: Record<string, string> = {
+      user_not_found: "User not found",
+      wrong_password: "Wrong password",
+      account_disabled: "Disabled",
+      unknown: "Failed",
+    };
+    return (
+      <Badge variant="outline" className="text-[10px] text-red-600 border-red-200">
+        {reasonLabels[reason || "unknown"] || "Failed"}
+      </Badge>
+    );
+  }
+  
+  // VENDOR_REGISTER
+  if (log.action === "VENDOR_REGISTER") {
+    const email = metadata?.email as string | undefined;
+    return (
+      <div className="flex items-center gap-1.5 text-sm">
+        <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200">
+          new vendor
+        </Badge>
+        {email && (
+          <span className="text-xs text-muted-foreground truncate max-w-[120px]">{email}</span>
         )}
       </div>
     );

@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { BATCH_STATUS } from "@/lib/constants";
 import {
   type BatchInfo,
   adjustBatchQuantity,
@@ -56,6 +57,7 @@ import {
   editBatchExpiry,
   getProductBatches,
   returnBatchToSupplier,
+  markBatchForReturn,
 } from "@/actions/inventory";
 
 interface ProductInfo {
@@ -259,7 +261,10 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
       );
 
       if (result.success) {
-        toast.success(`Returned ${returningBatch.quantity} units to supplier`);
+        // Detailed toast showing which batch was returned
+        toast.success(`Returned Batch #${returningBatch.id} to supplier`, {
+          description: `${returningBatch.quantity} units of "${product.product_name}"${returnSupplier ? ` to ${returnSupplier}` : ""}`,
+        });
         setReturnDialogOpen(false);
         await refreshBatches();
       } else {
@@ -643,6 +648,32 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4 space-y-4">
+            {/* Quick Reason Buttons */}
+            <div className="space-y-2">
+              <Label>Quick Select Reason</Label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "Expired", reason: "Expired stock - returning to supplier" },
+                  { label: "Damaged", reason: "Damaged/defective items - returning to supplier" },
+                  { label: "Recalled", reason: "Product recall - returning to supplier" },
+                  { label: "Wrong Item", reason: "Wrong item delivered - returning to supplier" },
+                ].map((preset) => (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "text-xs",
+                      returnReason === preset.reason && "border-orange-500 bg-orange-50 text-orange-700"
+                    )}
+                    onClick={() => setReturnReason(preset.reason)}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="return-supplier">Supplier Name</Label>
               <Input

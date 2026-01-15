@@ -303,6 +303,54 @@ export async function getDashboardChartDataByDateRange(
       },
     });
     
+    // Check if this is a single-day view
+    const diffDays = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
+    const isSingleDay = diffDays <= 1;
+    
+    // For single-day view, use hourly aggregation (8AM - 7PM = business hours)
+    if (isSingleDay) {
+      const hourlyMap = new Map<number, DashboardChartDataPoint>();
+      
+      // Initialize hours 8AM to 7PM (8-19)
+      for (let hour = 8; hour <= 19; hour++) {
+        const hourLabel = hour === 12 ? "12PM" : hour > 12 ? `${hour - 12}PM` : `${hour}AM`;
+        hourlyMap.set(hour, {
+          date: hourLabel,
+          fullDate: `${format(rangeStart, "EEE, MMM d, yyyy")} at ${hourLabel}`,
+          revenue: 0,
+          cost: 0,
+          profit: 0,
+        });
+      }
+      
+      // Aggregate transactions by hour
+      for (const txn of transactions) {
+        const txnHour = txn.created_at.getHours();
+        // Clamp to business hours (before 8AM goes to 8AM, after 7PM goes to 7PM)
+        const mappedHour = Math.max(8, Math.min(19, txnHour));
+        const existing = hourlyMap.get(mappedHour);
+        
+        if (existing) {
+          let txRevenue = 0;
+          let txCost = 0;
+          
+          for (const item of txn.items) {
+            txRevenue += Number(item.price_at_sale) * item.quantity;
+            txCost += Number(item.cost_at_sale) * item.quantity;
+          }
+          
+          existing.revenue += txRevenue;
+          existing.cost += txCost;
+          existing.profit += (txRevenue - txCost);
+        }
+      }
+      
+      // Return sorted by hour
+      return Array.from(hourlyMap.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([, data]) => data);
+    }
+    
     // Create a map for all days in the range
     const days = eachDayOfInterval({ start: rangeStart, end: rangeEnd });
     const dataMap = new Map<string, DashboardChartDataPoint>();
@@ -341,7 +389,6 @@ export async function getDashboardChartDataByDateRange(
     }
     
     // Format date labels based on range length
-    const diffDays = days.length;
     const sortedData = Array.from(dataMap.values())
       .sort((a, b) => a.date.localeCompare(b.date));
     
@@ -1551,6 +1598,7 @@ export async function getSmartInsights(): Promise<Insight[]> {
         inventory: {
           select: {
             current_stock: true,
+            last_restock: true, // Use last_restock as proxy for product age
           },
         },
       },
@@ -1659,10 +1707,14 @@ export async function getSmartInsights(): Promise<Insight[]> {
         velocityChange = 100; // New sales this week
       }
       
-      // Days since last sale
-      let daysSinceLastSale = 9999;
+      // Days since last sale - use last_restock as fallback (proxy for when product was added)
+      let daysSinceLastSale: number;
       if (lastSaleDate) {
         daysSinceLastSale = Math.floor((today.getTime() - lastSaleDate.getTime()) / (1000 * 60 * 60 * 24));
+      } else {
+        // No sales ever - use days since last restock as proxy, or default to 30 days
+        const fallbackDate = product.inventory?.last_restock ?? subDays(today, 30);
+        daysSinceLastSale = Math.floor((today.getTime() - fallbackDate.getTime()) / (1000 * 60 * 60 * 24));
       }
       
       return {
