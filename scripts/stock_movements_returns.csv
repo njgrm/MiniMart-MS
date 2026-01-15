@@ -1,0 +1,176 @@
+id,batch_id,product_barcode,product_name,supplier_id,supplier_name,movement_type,quantity_change,reason,reference,cost_price,created_at
+1,3,480198111664,Coke Zero 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-42,Product recall by manufacturer,RET-CBP-20240101-0003,54.0,2024-02-23 00:00:00
+2,12,480036141081,Nestle Bear Brand Fortified 33g,8,Alaska Milk Corporation,SUPPLIER_RETURN,-29,Product recall by manufacturer,RET-AMC-20240103-0012,10.0,2024-04-24 00:00:00
+3,13,480198112005,Sprite 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-12,Damaged packaging discovered during inventory check,RET-SMC-20240104-0013,22.51,2024-06-28 00:00:00
+4,20,965412919613,Energen Cereal Drink Mix Vanilla Hanger 40g,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-30,Damaged packaging discovered during inventory check,RET-PSC-20240105-0020,7.5,2024-05-22 00:00:00
+5,37,544900000099,Coca-Cola Mismo 295ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-36,Product recall by manufacturer,RET-CBP-20240109-0037,18.02,2024-06-02 00:00:00
+6,39,642321541122,Sisters Overnight Dry,10,Unilever Philippines,SUPPLIER_RETURN,-43,Near expiry - supplier policy return,RET-UP-20240109-0039,105.1,2024-02-16 00:00:00
+7,42,480864702009,Eden Cheese 165g,8,Alaska Milk Corporation,SUPPLIER_RETURN,-5,Expired stock - supplier credit agreement,RET-AMC-20240110-0042,70.08,2024-04-10 00:00:00
+8,52,480198112000,Coke 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-62,Product recall by manufacturer,RET-SMC-20240115-0052,22.54,2024-05-03 00:00:00
+9,64,480198111664,Coke Zero 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-56,Damaged packaging discovered during inventory check,RET-CBP-20240121-0064,54.13,2024-04-23 00:00:00
+10,75,748485200019,555 Sardines in Tomato Sauce 155g,14,Del Monte Philippines Inc.,SUPPLIER_RETURN,-3,Product recall by manufacturer,RET-DMP-20240122-0075,22.06,2024-03-28 00:00:00
+11,82,642321541122,Sisters Overnight Dry,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-32,Near expiry - supplier policy return,RET-PSC-20240123-0082,105.28,2024-05-23 00:00:00
+12,83,480198111696,Coke Light 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-19,Expired stock - supplier credit agreement,RET-CBP-20240124-0083,58.67,2024-02-24 00:00:00
+13,111,542353276241,Royal 1L (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-3,Damaged packaging discovered during inventory check,RET-PPP-20240205-0111,316.36,2024-04-04 00:00:00
+14,112,642647382226,Sisters Night Plus Cottony Napkin,10,Unilever Philippines,SUPPLIER_RETURN,-31,Damaged packaging discovered during inventory check,RET-UP-20240205-0112,40.17,2024-07-11 00:00:00
+15,180,480198112000,Coke 500ml,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-3,Quality issue reported by customers,RET-PPP-20240225-0180,22.65,2024-05-25 00:00:00
+16,203,490243086729,Joy Dishwashing Liquid Lemon 475ml,10,Unilever Philippines,SUPPLIER_RETURN,-60,Expired stock - supplier credit agreement,RET-UP-20240301-0203,120.89,2024-07-09 00:00:00
+17,206,480004784003,Zonrox Original Bleach 250ml,10,Unilever Philippines,SUPPLIER_RETURN,-104,Near expiry - supplier policy return,RET-UP-20240303-0206,34.26,2024-04-03 00:00:00
+18,220,480198109722,Royal Tru Strawberry 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-134,Damaged packaging discovered during inventory check,RET-SMC-20240308-0220,54.45,2024-04-14 00:00:00
+19,247,748485200019,555 Sardines in Tomato Sauce 155g,14,Del Monte Philippines Inc.,SUPPLIER_RETURN,-17,Expired stock - supplier credit agreement,RET-DMP-20240316-0247,22.2,2024-08-02 00:00:00
+20,256,480198118062,Sprite 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-50,Damaged packaging discovered during inventory check,RET-CBP-20240318-0256,54.51,2024-08-14 00:00:00
+21,269,489120804013,Oishi Prawn Crackers 60g,12,Rebisco Group of Companies,SUPPLIER_RETURN,-138,Expired stock - supplier credit agreement,RET-RGO-20240321-0269,15.65,2024-09-14 00:00:00
+22,270,480198111696,Coke Light 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-37,Expired stock - supplier credit agreement,RET-CBP-20240322-0270,59.08,2024-06-04 00:00:00
+23,283,480374937310,Coke 1L (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-3,Near expiry - supplier policy return,RET-SMC-20240327-0283,318.34,2024-06-11 00:00:00
+24,298,480535824701,Dari Creme Butter Milk 100g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-61,Product recall by manufacturer,RET-NPI-20240331-0298,37.41,2024-04-30 00:00:00
+25,325,000008586780,Datu Puti Patis 1L,11,NutriAsia Inc.,SUPPLIER_RETURN,-5,Near expiry - supplier policy return,RET-NI-20240409-0325,73.89,2024-08-01 00:00:00
+26,326,870021639476,Downy Sunrise Fresh Fabric Conditioner Sachet 20ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-20,Near expiry - supplier policy return,RET-P&G-20240409-0326,6.07,2024-05-11 00:00:00
+27,344,480057513016,Alaska Condensada Sweetened Condensed Creamer 168ml,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-89,Product recall by manufacturer,RET-NPI-20240414-0344,35.45,2024-05-23 00:00:00
+28,349,480036141081,Nestle Bear Brand Fortified 33g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-54,Product recall by manufacturer,RET-NPI-20240416-0349,10.13,2024-07-26 00:00:00
+29,355,480198109722,Royal Tru Strawberry 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-93,Quality issue reported by customers,RET-SMC-20240418-0355,54.72,2024-06-05 00:00:00
+30,370,480611352020,Juicy Lemon 237 ml (1 Bundle),1,San Miguel Corporation,SUPPLIER_RETURN,-8,Product recall by manufacturer,RET-SMC-20240422-0370,128.75,2024-09-06 00:00:00
+31,381,480392525110,Pepsi 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-101,Product recall by manufacturer,RET-CBP-20240427-0381,20.29,2024-06-20 00:00:00
+32,392,480392515110,Pepsi 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-13,Expired stock - supplier credit agreement,RET-CBP-20240430-0392,50.74,2024-06-23 00:00:00
+33,393,480392515116,Mirinda Orange 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-103,Product recall by manufacturer,RET-CBP-20240430-0393,54.8,2024-10-20 00:00:00
+34,395,642611907726,Ajinomoto Seasoning Mix 50g,10,Unilever Philippines,SUPPLIER_RETURN,-59,Near expiry - supplier policy return,RET-UP-20240430-0395,11.67,2024-09-22 00:00:00
+35,413,642321541122,Sisters Overnight Dry,10,Unilever Philippines,SUPPLIER_RETURN,-49,Damaged packaging discovered during inventory check,RET-UP-20240505-0413,106.62,2024-09-10 00:00:00
+36,435,480392515110,Pepsi 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-14,Damaged packaging discovered during inventory check,RET-CBP-20240514-0435,50.83,2024-09-27 00:00:00
+37,436,480392515116,Mirinda Orange 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-41,Product recall by manufacturer,RET-PPP-20240514-0436,54.89,2024-07-10 00:00:00
+38,458,965412919613,Energen Cereal Drink Mix Vanilla Hanger 40g,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-65,Quality issue reported by customers,RET-PPP-20240519-0458,7.63,2024-06-22 00:00:00
+39,465,480198111664,Coke Zero 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-56,Expired stock - supplier credit agreement,RET-CBP-20240522-0465,54.94,2024-07-14 00:00:00
+40,466,480198112010,Royal Tru Orange 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-80,Quality issue reported by customers,RET-CBP-20240523-0466,22.9,2024-11-13 00:00:00
+41,512,480198112005,Sprite 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-95,Expired stock - supplier credit agreement,RET-SMC-20240606-0512,22.94,2024-08-01 00:00:00
+42,529,893921341445,San Sky Flakes Crackers Original 25g x 10s,6,Monde Nissin Corporation,SUPPLIER_RETURN,-43,Damaged packaging discovered during inventory check,RET-MNC-20240611-0529,53.55,2024-07-17 00:00:00
+43,537,480198112000,Coke 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-119,Expired stock - supplier credit agreement,RET-SMC-20240615-0537,22.96,2024-09-28 00:00:00
+44,549,480198109722,Royal Tru Strawberry 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-90,Product recall by manufacturer,RET-CBP-20240619-0549,55.13,2024-08-24 00:00:00
+45,560,480392513032,Mountain Dew 290ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-6,Expired stock - supplier credit agreement,RET-PPP-20240621-0560,183.81,2024-08-26 00:00:00
+46,561,542353276241,Royal 1L (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-5,Product recall by manufacturer,RET-CBP-20240621-0561,321.68,2024-09-24 00:00:00
+47,566,672329634182,Whisper Cottony Soft Clean X-Long Overnight,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-45,Quality issue reported by customers,RET-PSC-20240622-0566,117.45,2024-12-07 00:00:00
+48,576,037000359562,Ariel With a Touch of Downy Freshness Powder,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-48,Expired stock - supplier credit agreement,RET-P&G-20240625-0576,607.9,2024-08-27 00:00:00
+49,597,480392515110,Pepsi 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-77,Product recall by manufacturer,RET-PPP-20240704-0597,51.14,2024-08-11 00:00:00
+50,609,672329634182,Whisper Cottony Soft Clean X-Long Overnight,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-4,Expired stock - supplier credit agreement,RET-P&G-20240708-0609,117.68,2024-11-03 00:00:00
+51,610,490243078997,Joy Dishwashing Liquid Lemon Sachet 40ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-14,Product recall by manufacturer,RET-P&G-20240708-0610,10.74,2024-09-10 00:00:00
+52,642,480198112000,Coke 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-78,Quality issue reported by customers,RET-SMC-20240718-0642,23.05,2024-10-26 00:00:00
+53,653,480864702009,Eden Cheese 165g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-5,Expired stock - supplier credit agreement,RET-NPI-20240721-0653,71.74,2024-08-22 00:00:00
+54,663,893921341445,San Sky Flakes Crackers Original 25g x 10s,12,Rebisco Group of Companies,SUPPLIER_RETURN,-17,Damaged packaging discovered during inventory check,RET-RGO-20240724-0663,53.83,2024-11-08 00:00:00
+55,673,542353276241,Royal 1L (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-4,Quality issue reported by customers,RET-CBP-20240727-0673,323.07,2024-09-17 00:00:00
+56,698,480198111607,Coke 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-22,Expired stock - supplier credit agreement,RET-CBP-20240804-0698,55.44,2025-01-16 00:00:00
+57,699,480392515114,Mountain Dew 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-37,Quality issue reported by customers,RET-PPP-20240804-0699,51.33,2024-12-07 00:00:00
+58,708,480036141081,Nestle Bear Brand Fortified 33g,5,URC (Universal Robina Corporation),SUPPLIER_RETURN,-38,Damaged packaging discovered during inventory check,RET-U(R-20240808-0708,10.27,2024-10-01 00:00:00
+59,713,480732471900,Sprite 1L (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-1,Expired stock - supplier credit agreement,RET-PPP-20240809-0713,323.58,2024-10-22 00:00:00
+60,734,480392515116,Mirinda Orange 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-55,Product recall by manufacturer,RET-PPP-20240816-0734,55.52,2024-10-08 00:00:00
+61,746,642321541122,Sisters Overnight Dry,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-83,Quality issue reported by customers,RET-PSC-20240820-0746,108.0,2024-12-11 00:00:00
+62,756,893951811445,Hansel Mocha Sandwich,6,Monde Nissin Corporation,SUPPLIER_RETURN,-26,Product recall by manufacturer,RET-MNC-20240822-0756,55.56,2024-09-25 00:00:00
+63,761,965412919613,Energen Cereal Drink Mix Vanilla Hanger 40g,5,URC (Universal Robina Corporation),SUPPLIER_RETURN,-3,Expired stock - supplier credit agreement,RET-U(R-20240824-0761,7.72,2024-11-03 00:00:00
+64,764,480198112717,Coke Swakto 195ml (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-1,Product recall by manufacturer,RET-SMC-20240825-0764,115.27,2024-10-19 00:00:00
+65,765,480732471900,Sprite 1L (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-4,Quality issue reported by customers,RET-SMC-20240825-0765,324.2,2024-12-24 00:00:00
+66,770,480864702009,Eden Cheese 165g,7,Century Pacific Food Inc.,SUPPLIER_RETURN,-46,Quality issue reported by customers,RET-CPF-20240826-0770,72.05,2024-12-11 00:00:00
+67,779,480004784003,Zonrox Original Bleach 250ml,10,Unilever Philippines,SUPPLIER_RETURN,-20,Expired stock - supplier credit agreement,RET-UP-20240829-0779,35.01,2025-01-18 00:00:00
+68,821,480392513032,Mountain Dew 290ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-9,Quality issue reported by customers,RET-PPP-20240911-0821,185.63,2024-11-17 00:00:00
+69,823,480392515116,Mirinda Orange 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-52,Damaged packaging discovered during inventory check,RET-CBP-20240912-0823,55.7,2024-10-22 00:00:00
+70,825,480374937310,Coke 1L (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-9,Damaged packaging discovered during inventory check,RET-CBP-20240912-0825,324.9,2025-02-12 00:00:00
+71,827,480864702009,Eden Cheese 165g,7,Century Pacific Food Inc.,SUPPLIER_RETURN,-5,Quality issue reported by customers,RET-CPF-20240912-0827,72.2,2024-10-12 00:00:00
+72,833,480198111607,Coke 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-19,Expired stock - supplier credit agreement,RET-SMC-20240915-0833,55.72,2024-11-28 00:00:00
+73,836,480392515110,Pepsi 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-12,Quality issue reported by customers,RET-SMC-20240916-0836,51.6,2024-11-04 00:00:00
+74,837,480198112000,Coke 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-35,Product recall by manufacturer,RET-SMC-20240917-0837,23.22,2024-10-21 00:00:00
+75,853,642321541122,Sisters Overnight Dry,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-83,Expired stock - supplier credit agreement,RET-PSC-20240921-0853,108.42,2024-11-04 00:00:00
+76,854,480392525114,Mountain Dew 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-49,Near expiry - supplier policy return,RET-SMC-20240922-0854,20.65,2024-11-18 00:00:00
+77,893,642647382226,Sisters Night Plus Cottony Napkin,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-18,Damaged packaging discovered during inventory check,RET-PSC-20241004-0893,41.37,2024-11-13 00:00:00
+78,927,480198111664,Coke Zero 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-42,Quality issue reported by customers,RET-CBP-20241015-0927,55.92,2025-02-11 00:00:00
+79,934,642647382226,Sisters Night Plus Cottony Napkin,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-55,Damaged packaging discovered during inventory check,RET-PSC-20241017-0934,41.43,2025-01-11 00:00:00
+80,957,480392515112,7-up 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-44,Product recall by manufacturer,RET-CBP-20241024-0957,51.83,2024-12-02 00:00:00
+81,958,965412919731,Energen Cereal Milk Chocolate Drink 40g,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-15,Near expiry - supplier policy return,RET-CBP-20241024-0958,8.29,2024-11-23 00:00:00
+82,961,480198112717,Coke Swakto 195ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-2,Near expiry - supplier policy return,RET-PPP-20241026-0961,116.13,2024-12-21 00:00:00
+83,964,870021639476,Downy Sunrise Fresh Fabric Conditioner Sachet 20ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-17,Expired stock - supplier credit agreement,RET-P&G-20241026-0964,6.22,2024-12-01 00:00:00
+84,978,489310100015,Lucky Me Pancit Canton with Kalamnsi 60g,6,Monde Nissin Corporation,SUPPLIER_RETURN,-63,Expired stock - supplier credit agreement,RET-MNC-20241030-0978,11.41,2025-01-03 00:00:00
+85,985,480198111607,Coke 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-32,Near expiry - supplier policy return,RET-CBP-20241102-0985,56.04,2025-04-03 00:00:00
+86,1025,642321541122,Sisters Overnight Dry,10,Unilever Philippines,SUPPLIER_RETURN,-5,Damaged packaging discovered during inventory check,RET-UP-20241114-1025,109.11,2025-04-01 00:00:00
+87,1035,544900000099,Coca-Cola Mismo 295ml,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-10,Expired stock - supplier credit agreement,RET-PPP-20241118-1035,18.71,2024-12-19 00:00:00
+88,1068,480611352020,Juicy Lemon 237 ml (1 Bundle),1,San Miguel Corporation,SUPPLIER_RETURN,-3,Near expiry - supplier policy return,RET-SMC-20241128-1068,132.19,2025-01-05 00:00:00
+89,1071,480392525110,Pepsi 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-40,Quality issue reported by customers,RET-CBP-20241129-1071,20.82,2025-05-07 00:00:00
+90,1085,480198111607,Coke 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-243,Quality issue reported by customers,RET-PPP-20241203-1085,56.24,2025-02-27 00:00:00
+91,1133,480392525114,Mountain Dew 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-70,Quality issue reported by customers,RET-SMC-20241217-1133,20.86,2025-04-02 00:00:00
+92,1153,480198112717,Coke Swakto 195ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-2,Near expiry - supplier policy return,RET-PPP-20241224-1153,116.94,2025-03-23 00:00:00
+93,1164,480198111696,Coke Light 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-29,Product recall by manufacturer,RET-SMC-20241228-1164,61.11,2025-06-25 00:00:00
+94,1169,489310100015,Lucky Me Pancit Canton with Kalamnsi 60g,5,URC (Universal Robina Corporation),SUPPLIER_RETURN,-69,Product recall by manufacturer,RET-U(R-20241229-1169,11.49,2025-05-27 00:00:00
+95,1186,489120804013,Oishi Prawn Crackers 60g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-28,Damaged packaging discovered during inventory check,RET-NPI-20250103-1186,16.2,2025-02-11 00:00:00
+96,1187,642647382226,Sisters Night Plus Cottony Napkin,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-15,Damaged packaging discovered during inventory check,RET-P&G-20250103-1187,41.81,2025-02-22 00:00:00
+97,1188,480198111607,Coke 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-47,Damaged packaging discovered during inventory check,RET-PPP-20250104-1188,56.45,2025-04-01 00:00:00
+98,1199,480198102719,Sprite Swakto 195ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-1,Near expiry - supplier policy return,RET-PPP-20250106-1199,117.12,2025-05-03 00:00:00
+99,1200,893921341445,San Sky Flakes Crackers Original 25g x 10s,13,Oishi Snack Time,SUPPLIER_RETURN,-132,Expired stock - supplier credit agreement,RET-OST-20250106-1200,54.9,2025-03-20 00:00:00
+100,1201,480198118062,Sprite 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-96,Near expiry - supplier policy return,RET-CBP-20250108-1201,56.48,2025-02-09 00:00:00
+101,1212,480392525114,Mountain Dew 500ml,1,San Miguel Corporation,SUPPLIER_RETURN,-76,Expired stock - supplier credit agreement,RET-SMC-20250113-1212,20.93,2025-07-05 00:00:00
+102,1226,489120804013,Oishi Prawn Crackers 60g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-4,Quality issue reported by customers,RET-NPI-20250117-1226,16.23,2025-03-12 00:00:00
+103,1238,893921341445,San Sky Flakes Crackers Original 25g x 10s,13,Oishi Snack Time,SUPPLIER_RETURN,-5,Near expiry - supplier policy return,RET-OST-20250119-1238,54.98,2025-03-02 00:00:00
+104,1264,480088814685,Sunsilk Strong & Long 350ml,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-10,Expired stock - supplier credit agreement,RET-PSC-20250128-1264,141.54,2025-04-02 00:00:00
+105,1280,542353276241,Royal 1L (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-13,Expired stock - supplier credit agreement,RET-CBP-20250202-1280,330.45,2025-03-05 00:00:00
+106,1288,893951811445,Hansel Mocha Sandwich,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-77,Product recall by manufacturer,RET-NPI-20250204-1288,56.66,2025-06-26 00:00:00
+107,1301,544900000099,Coca-Cola Mismo 295ml,1,San Miguel Corporation,SUPPLIER_RETURN,-18,Quality issue reported by customers,RET-SMC-20250209-1301,18.9,2025-04-08 00:00:00
+108,1316,000008586780,Datu Puti Patis 1L,14,Del Monte Philippines Inc.,SUPPLIER_RETURN,-25,Near expiry - supplier policy return,RET-DMP-20250213-1316,76.68,2025-06-28 00:00:00
+109,1325,480392513032,Mountain Dew 290ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-5,Near expiry - supplier policy return,RET-PPP-20250216-1325,189.14,2025-04-03 00:00:00
+110,1334,542353276241,Royal 1L (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-3,Expired stock - supplier credit agreement,RET-SMC-20250219-1334,331.11,2025-03-23 00:00:00
+111,1346,893921341445,San Sky Flakes Crackers Original 25g x 10s,6,Monde Nissin Corporation,SUPPLIER_RETURN,-10,Product recall by manufacturer,RET-MNC-20250223-1346,55.21,2025-04-14 00:00:00
+112,1371,480057511015,Alaska Classic Evaporated Filled Milk 140ml,7,Century Pacific Food Inc.,SUPPLIER_RETURN,-10,Product recall by manufacturer,RET-CPF-20250302-1371,26.84,2025-06-23 00:00:00
+113,1395,480392525110,Pepsi 500ml,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-98,Expired stock - supplier credit agreement,RET-PPP-20250311-1395,21.07,2025-07-31 00:00:00
+114,1422,480198112000,Coke 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-23,Expired stock - supplier credit agreement,RET-CBP-20250320-1422,23.73,2025-08-27 00:00:00
+115,1425,870021639476,Downy Sunrise Fresh Fabric Conditioner Sachet 20ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-33,Product recall by manufacturer,RET-P&G-20250320-1425,6.33,2025-06-25 00:00:00
+116,1444,480392515112,7-up 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-30,Product recall by manufacturer,RET-CBP-20250328-1444,52.78,2025-06-04 00:00:00
+117,1447,672329634182,Whisper Cottony Soft Clean X-Long Overnight,10,Unilever Philippines,SUPPLIER_RETURN,-17,Damaged packaging discovered during inventory check,RET-UP-20250328-1447,121.4,2025-06-04 00:00:00
+118,1458,480198112717,Coke Swakto 195ml (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-15,Expired stock - supplier credit agreement,RET-SMC-20250331-1458,118.28,2025-08-14 00:00:00
+119,1469,480198112720,Royal Swakto 195ml (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-2,Near expiry - supplier policy return,RET-SMC-20250403-1469,118.32,2025-05-05 00:00:00
+120,1491,480864731007,Tang Orange 250g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-13,Quality issue reported by customers,RET-NPI-20250411-1491,206.2,2025-05-22 00:00:00
+121,1505,480535824701,Dari Creme Butter Milk 100g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-37,Quality issue reported by customers,RET-NPI-20250414-1505,39.14,2025-05-22 00:00:00
+122,1525,955600121722,Milo 22g Sachet,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-31,Product recall by manufacturer,RET-CBP-20250421-1525,11.12,2025-06-19 00:00:00
+123,1532,480198112720,Royal Swakto 195ml (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-17,Damaged packaging discovered during inventory check,RET-CBP-20250424-1532,118.61,2025-08-30 00:00:00
+124,1533,480392513032,Mountain Dew 290ml (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-10,Quality issue reported by customers,RET-CBP-20250424-1533,190.62,2025-07-04 00:00:00
+125,1534,480611352020,Juicy Lemon 237 ml (1 Bundle),1,San Miguel Corporation,SUPPLIER_RETURN,-4,Quality issue reported by customers,RET-SMC-20250424-1534,134.49,2025-05-24 00:00:00
+126,1557,480392515114,Mountain Dew 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-47,Damaged packaging discovered during inventory check,RET-SMC-20250502-1557,53.0,2025-07-09 00:00:00
+127,1561,480198102719,Sprite Swakto 195ml (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-12,Product recall by manufacturer,RET-SMC-20250503-1561,118.73,2025-09-03 00:00:00
+128,1567,893921341445,San Sky Flakes Crackers Original 25g x 10s,13,Oishi Snack Time,SUPPLIER_RETURN,-21,Near expiry - supplier policy return,RET-OST-20250504-1567,55.66,2025-09-14 00:00:00
+129,1568,480002201028,Hunts Pork & Beans 100g Doy,14,Del Monte Philippines Inc.,SUPPLIER_RETURN,-56,Expired stock - supplier credit agreement,RET-DMP-20250504-1568,13.78,2025-09-05 00:00:00
+130,1570,480392515116,Mirinda Orange 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-86,Near expiry - supplier policy return,RET-PPP-20250506-1570,57.27,2025-07-27 00:00:00
+131,1579,480198112000,Coke 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-17,Product recall by manufacturer,RET-CBP-20250508-1579,23.87,2025-06-29 00:00:00
+132,1582,480198112720,Royal Swakto 195ml (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-3,Damaged packaging discovered during inventory check,RET-SMC-20250509-1582,118.82,2025-07-31 00:00:00
+133,1591,480057511015,Alaska Classic Evaporated Filled Milk 140ml,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-10,Near expiry - supplier policy return,RET-NPI-20250512-1591,27.06,2025-06-12 00:00:00
+134,1596,480198118062,Sprite 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-3,Damaged packaging discovered during inventory check,RET-PPP-20250513-1596,57.31,2025-07-14 00:00:00
+135,1626,480198112000,Coke 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-79,Damaged packaging discovered during inventory check,RET-CBP-20250524-1626,23.91,2025-11-13 00:00:00
+136,1635,480198112005,Sprite 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-80,Product recall by manufacturer,RET-CBP-20250527-1635,23.92,2025-07-20 00:00:00
+137,1652,480057511015,Alaska Classic Evaporated Filled Milk 140ml,7,Century Pacific Food Inc.,SUPPLIER_RETURN,-25,Product recall by manufacturer,RET-CPF-20250531-1652,27.12,2025-07-01 00:00:00
+138,1653,480392515114,Mountain Dew 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-30,Product recall by manufacturer,RET-SMC-20250601-1653,53.18,2025-07-08 00:00:00
+139,1661,542353276241,Royal 1L (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-8,Near expiry - supplier policy return,RET-CBP-20250604-1661,335.18,2025-07-07 00:00:00
+140,1667,480392513032,Mountain Dew 290ml (1 Case),3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-7,Quality issue reported by customers,RET-PPP-20250606-1667,191.58,2025-09-10 00:00:00
+141,1681,480088814685,Sunsilk Strong & Long 350ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-12,Near expiry - supplier policy return,RET-P&G-20250609-1681,143.73,2025-09-05 00:00:00
+142,1688,480392515116,Mirinda Orange 1.5L,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-114,Quality issue reported by customers,RET-PPP-20250613-1688,57.52,2025-12-10 00:00:00
+143,1719,965412919731,Energen Cereal Milk Chocolate Drink 40g,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-23,Damaged packaging discovered during inventory check,RET-PSC-20250622-1719,8.53,2025-07-26 00:00:00
+144,1729,480392525110,Pepsi 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-25,Product recall by manufacturer,RET-CBP-20250626-1729,21.34,2025-08-04 00:00:00
+145,1737,642611907726,Ajinomoto Seasoning Mix 50g,14,Del Monte Philippines Inc.,SUPPLIER_RETURN,-19,Expired stock - supplier credit agreement,RET-DMP-20250627-1737,12.27,2025-11-27 00:00:00
+146,1747,480191198062,Royal Tru Orange 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-107,Product recall by manufacturer,RET-CBP-20250701-1747,57.64,2025-08-19 00:00:00
+147,1753,542353276241,Royal 1L (1 Case),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-2,Product recall by manufacturer,RET-CBP-20250703-1753,336.31,2025-11-17 00:00:00
+148,1783,000008586780,Datu Puti Patis 1L,10,Unilever Philippines,SUPPLIER_RETURN,-5,Product recall by manufacturer,RET-UP-20250713-1783,78.03,2026-01-07 00:00:00
+149,1788,480036141081,Nestle Bear Brand Fortified 33g,5,URC (Universal Robina Corporation),SUPPLIER_RETURN,-34,Damaged packaging discovered during inventory check,RET-U(R-20250716-1788,10.69,2025-09-01 00:00:00
+150,1792,480198112720,Royal Swakto 195ml (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-3,Near expiry - supplier policy return,RET-SMC-20250717-1792,119.77,2025-09-14 00:00:00
+151,1793,489120804013,Oishi Prawn Crackers 60g,6,Monde Nissin Corporation,SUPPLIER_RETURN,-32,Near expiry - supplier policy return,RET-MNC-20250717-1793,16.58,2025-08-20 00:00:00
+152,1797,870021639476,Downy Sunrise Fresh Fabric Conditioner Sachet 20ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-30,Expired stock - supplier credit agreement,RET-P&G-20250717-1797,6.42,2025-11-05 00:00:00
+153,1803,490243078997,Joy Dishwashing Liquid Lemon Sachet 40ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-13,Damaged packaging discovered during inventory check,RET-P&G-20250718-1803,11.23,2025-09-10 00:00:00
+154,1808,748485200019,555 Sardines in Tomato Sauce 155g,7,Century Pacific Food Inc.,SUPPLIER_RETURN,-23,Expired stock - supplier credit agreement,RET-CPF-20250720-1808,23.53,2025-11-23 00:00:00
+155,1810,480392515114,Mountain Dew 1.5L,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-29,Near expiry - supplier policy return,RET-CBP-20250721-1810,53.49,2025-10-01 00:00:00
+156,1822,480198112000,Coke 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-57,Quality issue reported by customers,RET-CBP-20250724-1822,24.08,2025-10-05 00:00:00
+157,1832,642611907726,Ajinomoto Seasoning Mix 50g,10,Unilever Philippines,SUPPLIER_RETURN,-6,Damaged packaging discovered during inventory check,RET-UP-20250727-1832,12.31,2025-12-06 00:00:00
+158,1837,870021639476,Downy Sunrise Fresh Fabric Conditioner Sachet 20ml,9,Procter & Gamble Philippines,SUPPLIER_RETURN,-9,Damaged packaging discovered during inventory check,RET-P&G-20250729-1837,6.43,2025-09-19 00:00:00
+159,1872,642611907726,Ajinomoto Seasoning Mix 50g,10,Unilever Philippines,SUPPLIER_RETURN,-21,Near expiry - supplier policy return,RET-UP-20250809-1872,12.33,2025-10-18 00:00:00
+160,1887,480611352020,Juicy Lemon 237 ml (1 Bundle),2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-5,Near expiry - supplier policy return,RET-CBP-20250813-1887,136.23,2025-12-03 00:00:00
+161,1892,480198112010,Royal Tru Orange 500ml,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-32,Near expiry - supplier policy return,RET-PPP-20250816-1892,24.14,2025-12-24 00:00:00
+162,1905,965412919613,Energen Cereal Drink Mix Vanilla Hanger 40g,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-19,Near expiry - supplier policy return,RET-CBP-20250821-1905,8.05,2025-09-27 00:00:00
+163,1924,480198118062,Sprite 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-41,Damaged packaging discovered during inventory check,RET-SMC-20250826-1924,58.01,2025-10-11 00:00:00
+164,1930,480088814685,Sunsilk Strong & Long 350ml,10,Unilever Philippines,SUPPLIER_RETURN,-9,Quality issue reported by customers,RET-UP-20250827-1930,145.05,2025-12-20 00:00:00
+165,1951,965412919731,Energen Cereal Milk Chocolate Drink 40g,8,Alaska Milk Corporation,SUPPLIER_RETURN,-5,Product recall by manufacturer,RET-AMC-20250905-1951,8.6,2025-12-31 00:00:00
+166,1977,480004784003,Zonrox Original Bleach 250ml,10,Unilever Philippines,SUPPLIER_RETURN,-18,Damaged packaging discovered during inventory check,RET-UP-20250910-1977,36.59,2025-11-13 00:00:00
+167,1980,480198112000,Coke 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-21,Damaged packaging discovered during inventory check,RET-CBP-20250912-1980,24.22,2025-11-08 00:00:00
+168,2000,480864731007,Tang Orange 250g,3,Pepsi-Cola Products Philippines,SUPPLIER_RETURN,-42,Damaged packaging discovered during inventory check,RET-PPP-20250919-2000,210.06,2025-11-30 00:00:00
+169,2004,480864702009,Eden Cheese 165g,4,Nestle Philippines Inc.,SUPPLIER_RETURN,-70,Quality issue reported by customers,RET-NPI-20250920-2004,75.42,2025-12-22 00:00:00
+170,2011,480374937310,Coke 1L (1 Case),1,San Miguel Corporation,SUPPLIER_RETURN,-2,Expired stock - supplier credit agreement,RET-SMC-20250922-2011,339.45,2025-11-01 00:00:00
+171,2062,965412919731,Energen Cereal Milk Chocolate Drink 40g,15,Philippine Seven Corp (7-Eleven Dist.),SUPPLIER_RETURN,-32,Quality issue reported by customers,RET-PSC-20251008-2062,8.64,2026-01-05 00:00:00
+172,2069,642647382226,Sisters Night Plus Cottony Napkin,10,Unilever Philippines,SUPPLIER_RETURN,-6,Near expiry - supplier policy return,RET-UP-20251009-2069,43.19,2026-01-06 00:00:00
+173,2116,480392515110,Pepsi 1.5L,1,San Miguel Corporation,SUPPLIER_RETURN,-17,Damaged packaging discovered during inventory check,RET-SMC-20251025-2116,54.08,2026-01-05 00:00:00
+174,2119,544900000099,Coca-Cola Mismo 295ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-84,Near expiry - supplier policy return,RET-CBP-20251026-2119,19.47,2025-11-26 00:00:00
+175,2156,480198112000,Coke 500ml,2,Coca-Cola Beverages Philippines,SUPPLIER_RETURN,-44,Quality issue reported by customers,RET-CBP-20251106-2156,24.37,2025-12-10 00:00:00

@@ -1,0 +1,16 @@
+id,name,contact_person,contact_number,email,address,notes,status
+1,San Miguel Corporation,Juan dela Cruz,+63 2 8632 2000,orders@sanmiguel.com.ph,"40 San Miguel Avenue, Ortigas Center, Pasig City","Primary distributor for BEVERAGES, SODA",ACTIVE
+2,Coca-Cola Beverages Philippines,Maria Santos,+63 2 8884 2653,sales@coca-cola.com.ph,"2286 Don Chino Roces Ave., Makati City","Primary distributor for SODA, SOFTDRINKS_CASE",ACTIVE
+3,Pepsi-Cola Products Philippines,Roberto Reyes,+63 2 8878 9000,distribution@pepsi.com.ph,"Pepsi Building, Meralco Avenue, Pasig City","Primary distributor for SODA, SOFTDRINKS_CASE",ACTIVE
+4,Nestle Philippines Inc.,Ana Garcia,+63 2 8687 5000,orders@nestle.com.ph,"Rockwell Business Center, Makati City","Primary distributor for BEVERAGES, DAIRY",ACTIVE
+5,URC (Universal Robina Corporation),Miguel Torres,+63 2 8633 7631,sales@urc.com.ph,"110 E. Rodriguez Jr. Ave., Quezon City","Primary distributor for SNACK, BEVERAGES",ACTIVE
+6,Monde Nissin Corporation,Linda Bautista,+63 2 8810 6001,orders@mondenissin.com.ph,"Km 18 West Service Road, Parañaque City","Primary distributor for INSTANT_NOODLES, SNACK",ACTIVE
+7,Century Pacific Food Inc.,Carlos Mendoza,+63 2 8836 1580,distribution@centurypacific.com.ph,"7th Floor, Centerpoint Building, Ortigas Center","Primary distributor for CANNED_GOODS, DAIRY",ACTIVE
+8,Alaska Milk Corporation,Teresa Villanueva,+63 2 8867 8888,sales@alaskamilk.com.ph,"4th Floor, Corinthian Plaza, Paseo de Roxas, Makati","Primary distributor for DAIRY, BEVERAGES",ACTIVE
+9,Procter & Gamble Philippines,Marco Gonzales,+63 2 8838 0000,orders@pg.com.ph,"19th Floor, Net One Center, BGC, Taguig","Primary distributor for PERSONAL_CARE, HOUSEHOLD",ACTIVE
+10,Unilever Philippines,Diana Ramos,+63 2 8892 0611,supply@unilever.com.ph,"1351 United Nations Ave., Ermita, Manila","Primary distributor for PERSONAL_CARE, HOUSEHOLD",ACTIVE
+11,NutriAsia Inc.,Ramon Castillo,+63 2 8571 2836,sales@nutriasia.com.ph,"8th Floor, The Salcedo Towers, Makati","Primary distributor for CONDIMENTS, CANNED_GOODS",ACTIVE
+12,Rebisco Group of Companies,Patricia Lim,+63 2 8635 9901,orders@rebisco.com.ph,"224 Quirino Highway, Novaliches, Quezon City",Primary distributor for SNACK,ACTIVE
+13,Oishi Snack Time,Kevin Sy,+63 2 8631 0101,distribution@oishi.com.ph,"Liwasang Bonifacio, Tondo, Manila","Primary distributor for SNACK, BEVERAGES",ACTIVE
+14,Del Monte Philippines Inc.,Maricar Cruz,+63 2 8895 0000,orders@delmonte.com.ph,"JMT Corporate Condominium, Ortigas, Pasig","Primary distributor for CANNED_GOODS, CONDIMENTS",ACTIVE
+15,Philippine Seven Corp (7-Eleven Dist.),Joseph Tan,+63 2 8856 0711,supplier@7-eleven.com.ph,"7-Eleven Building, EDSA corner Connecticut, Mandaluyong","Primary distributor for SNACK, BEVERAGES",ACTIVE
