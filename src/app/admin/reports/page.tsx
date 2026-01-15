@@ -97,7 +97,7 @@ function ReportsSidebar() {
       {/* Back Button */}
       <div className="h-10 px-2 flex items-center border-b border-stone-200/80 shrink-0">
         <Button variant="ghost" size="sm" asChild className="h-7 px-2 gap-1 text-xs w-full justify-start">
-          <Link href="/admin/dashboard">
+          <Link href="/admin">
             <ChevronLeft className="h-3.5 w-3.5" />
             Dashboard
           </Link>

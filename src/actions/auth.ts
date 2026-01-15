@@ -1,6 +1,6 @@
 "use server";
 
-import { signIn } from "@/auth";
+import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import {
@@ -11,6 +11,7 @@ import {
   type VendorRegisterInput,
 } from "@/lib/validations/auth";
 import { AuthError } from "next-auth";
+import { logLogin, logLogout } from "@/lib/logger";
 
 export type ActionResult = {
   success: boolean;
@@ -35,15 +36,29 @@ export async function login(data: LoginInput): Promise<ActionResult> {
     // Determine user type before signing in
     const { identifier } = parsed.data;
     let userType: "staff" | "vendor" = "staff";
+    let userId: number | undefined;
+    let email: string | undefined;
 
     if (isEmail(identifier)) {
       // Check if this email belongs to a vendor
       const customer = await prisma.customer.findUnique({
         where: { email: identifier },
-        select: { is_vendor: true },
+        select: { customer_id: true, is_vendor: true, email: true },
       });
       if (customer?.is_vendor) {
         userType = "vendor";
+        userId = customer.customer_id;
+        email = customer.email || undefined;
+      }
+    } else {
+      // Staff login - get staff ID
+      const staff = await prisma.staff.findUnique({
+        where: { username: identifier },
+        select: { staff_id: true, email: true },
+      });
+      if (staff) {
+        userId = staff.staff_id;
+        email = staff.email || undefined;
       }
     }
 
@@ -52,6 +67,9 @@ export async function login(data: LoginInput): Promise<ActionResult> {
       password: parsed.data.password,
       redirect: false,
     });
+
+    // Log successful login
+    await logLogin(identifier, userType, userId, email);
 
     return { success: true, userType };
   } catch (error) {
@@ -98,4 +116,21 @@ export async function vendorRegister(data: VendorRegisterInput): Promise<ActionR
   });
 
   return { success: true };
+}
+
+/**
+ * Logout action with audit logging
+ */
+export async function logout(username: string, userType: "staff" | "vendor"): Promise<ActionResult> {
+  try {
+    // Log the logout event before signing out
+    await logLogout(username, userType);
+    
+    await signOut({ redirect: false });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Logout error:", error);
+    return { success: false, error: "Failed to logout" };
+  }
 }

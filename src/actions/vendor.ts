@@ -469,10 +469,11 @@ export async function getCustomerId(): Promise<number | null> {
 
 /**
  * Update vendor profile (email and contact)
+ * Note: Avatar URL support requires adding avatar_url field to Customer model
  */
 export async function updateVendorProfile(
   customerId: number,
-  data: { email?: string; contact?: string }
+  data: { email?: string; contact?: string; avatarUrl?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await auth();
@@ -508,6 +509,7 @@ export async function updateVendorProfile(
       data: {
         ...(data.email && { email: data.email }),
         ...(data.contact && { contact_details: data.contact }),
+        ...(data.avatarUrl && { avatar_url: data.avatarUrl }),
       },
     });
 

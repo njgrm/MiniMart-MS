@@ -27,6 +27,9 @@ import {
   Tag,
   Boxes,
   Hash,
+  LogIn,
+  LogOut,
+  Receipt,
 } from "lucide-react";
 import {
   Dialog,
@@ -59,6 +62,9 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; icon: typeof Plus; col
   ORDER_CANCEL: { label: "Order Cancelled", icon: XCircle, color: "text-red-700 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-900/30" },
   EDIT_EXPIRY: { label: "Expiry Changed", icon: Calendar, color: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-900/30" },
   EDIT_BATCH: { label: "Batch Edited", icon: ClipboardEdit, color: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-900/30" },
+  LOGIN: { label: "Logged In", icon: LogIn, color: "text-emerald-700 dark:text-emerald-400", bgColor: "bg-emerald-100 dark:bg-emerald-900/30" },
+  LOGOUT: { label: "Logged Out", icon: LogOut, color: "text-slate-700 dark:text-slate-400", bgColor: "bg-slate-100 dark:bg-slate-900/30" },
+  ZREAD_CLOSE: { label: "Z-Read Close", icon: Receipt, color: "text-cyan-700 dark:text-cyan-400", bgColor: "bg-cyan-100 dark:bg-cyan-900/30" },
 };
 
 // Module colors
@@ -353,6 +359,73 @@ export function LogDetailsModal({ log, open, onOpenChange }: LogDetailsModalProp
     }
     if (metadata?.notes) {
       metadataItems.push({ label: "Notes", value: metadata.notes as string });
+    }
+  }
+
+  // LOGIN/LOGOUT metadata
+  if (log.action === "LOGIN" || log.action === "LOGOUT") {
+    if (metadata?.user_type) {
+      metadataItems.push({ label: "User Type", value: String(metadata.user_type) });
+    }
+    if (metadata?.email) {
+      metadataItems.push({ label: "Email", value: String(metadata.email) });
+    }
+    if (metadata?.ip_address) {
+      metadataItems.push({ label: "IP Address", value: String(metadata.ip_address) });
+    }
+    if (metadata?.session_status) {
+      metadataItems.push({ label: "Session", value: String(metadata.session_status) });
+    }
+  }
+
+  // Z-Read Close metadata
+  if (log.action === "ZREAD_CLOSE") {
+    if (metadata?.total_sales !== undefined) {
+      metadataItems.push({ 
+        label: "Total Sales", 
+        value: `₱${Number(metadata.total_sales).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` 
+      });
+    }
+    if (metadata?.total_transactions !== undefined) {
+      metadataItems.push({ label: "Total Transactions", value: String(metadata.total_transactions) });
+    }
+    if (metadata?.cash_sales !== undefined) {
+      metadataItems.push({ 
+        label: "Cash Sales", 
+        value: `₱${Number(metadata.cash_sales).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` 
+      });
+    }
+    if (metadata?.gcash_sales !== undefined) {
+      metadataItems.push({ 
+        label: "GCash Sales", 
+        value: `₱${Number(metadata.gcash_sales).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` 
+      });
+    }
+    if (metadata?.expected_drawer !== undefined) {
+      metadataItems.push({ 
+        label: "Expected Drawer", 
+        value: `₱${Number(metadata.expected_drawer).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` 
+      });
+    }
+    if (metadata?.actual_drawer !== undefined) {
+      metadataItems.push({ 
+        label: "Actual Drawer", 
+        value: `₱${Number(metadata.actual_drawer).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` 
+      });
+    }
+    if (metadata?.variance !== undefined) {
+      const variance = Number(metadata.variance);
+      metadataItems.push({ 
+        label: "Variance", 
+        value: `₱${Math.abs(variance).toLocaleString("en-PH", { minimumFractionDigits: 2 })} ${variance >= 0 ? '(over)' : '(short)'}`,
+        warning: variance !== 0
+      });
+    }
+    if (metadata?.starting_cash !== undefined) {
+      metadataItems.push({ 
+        label: "Starting Cash", 
+        value: `₱${Number(metadata.starting_cash).toLocaleString("en-PH", { minimumFractionDigits: 2 })}` 
+      });
     }
   }
 

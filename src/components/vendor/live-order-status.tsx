@@ -97,7 +97,7 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
     return (
       <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-8 sm:p-10">
         <div className="text-center max-w-md mx-auto">
-          <div className="size-20 mx-auto mb-5 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
+          <div className="size-20 mx-auto mb-5 rounded-full bg-card dark:bg-zinc-800 flex items-center justify-center">
             <IconShoppingCart className="size-10 text-stone-400" />
           </div>
           <h2 className="text-2xl font-bold text-[#2d1b1a] dark:text-white mb-3">

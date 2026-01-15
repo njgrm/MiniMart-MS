@@ -36,6 +36,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { NotificationBell } from "@/components/ui/notification-bell";
 import logoFull from "../../../assets/christian_minimart_logo_words.png";
@@ -79,6 +89,7 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -191,12 +202,12 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
                 <DropdownMenuItem asChild>
                   <Link href="/vendor/profile">
                     <IconUser className="mr-2 size-4" />
-                    Profile
+                    My Profile
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={handleLogout}
+                  onClick={() => setShowLogoutConfirm(true)}
                   className="text-destructive focus:text-destructive focus:bg-destructive/10"
                 >
                   <IconLogout className="mr-2 size-4" />
@@ -249,12 +260,19 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>{user?.name || "Vendor"}</DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/vendor/profile">
+                  <IconUser className="mr-2 size-4" />
+                  My Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setTheme(isDark ? "light" : "dark")}>
                 {isDark ? <IconSun className="mr-2 size-4" /> : <IconMoon className="mr-2 size-4" />}
                 {isDark ? "Light Mode" : "Dark Mode"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <DropdownMenuItem onClick={() => setShowLogoutConfirm(true)} className="text-destructive">
                 <IconLogout className="mr-2 size-4" />
                 Logout
               </DropdownMenuItem>
@@ -332,6 +350,28 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
       </main>
 
       <Toaster richColors position="top-right" />
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to log out? You will need to sign in again to access your vendor account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-[#AC0F16] hover:bg-[#8a0c12] text-white"
+            >
+              <IconLogout className="size-4 mr-2" />
+              Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
+import { subDays } from "date-fns";
+import { DateRange } from "react-day-picker";
 import Link from "next/link";
 import {
   useReactTable,
@@ -47,12 +49,22 @@ import {
   SortableHeader,
 } from "@/components/reports/report-shell";
 import { DataTablePagination } from "@/components/data-table-pagination";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { Progress } from "@/components/ui/progress";
-import { type MarginReportResult, type MarginItem } from "@/actions/reports";
+import { getMarginAnalysis, type MarginReportResult, type MarginItem } from "@/actions/reports";
 import { cn } from "@/lib/utils";
 
 interface ProfitMarginClientProps {
   data: MarginReportResult;
+}
+
+// Helper: Format category names (SOFTDRINKS_CASE -> Softdrinks Case)
+function formatCategoryName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 // Helper: Format peso with normal weight sign (returns JSX)
@@ -141,7 +153,9 @@ const statusConfig: Record<
   },
 };
 
-export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
+export function ProfitMarginClient({ data: initialData }: ProfitMarginClientProps) {
+  const [isPending, startTransition] = useTransition();
+  const [data, setData] = useState<MarginReportResult>(initialData);
   // Default sort: margin_percent ascending to show problems first
   const [sorting, setSorting] = useState<SortingState>([
     { id: "margin_percent", desc: false },
@@ -149,6 +163,20 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 30),
+    to: new Date(),
+  });
+
+  const handleDateChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    if (range?.from && range?.to) {
+      startTransition(async () => {
+        const result = await getMarginAnalysis({ from: range.from!, to: range.to! });
+        setData(result);
+      });
+    }
+  };
 
   // Get unique categories
   const categories = useMemo(
@@ -185,7 +213,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
               {row.original.product_name}
             </Link>
             <p className="text-xs text-muted-foreground truncate">
-              {row.original.category}
+              {formatCategoryName(row.original.category)}
               {row.original.barcode && ` • ${row.original.barcode}`}
             </p>
           </div>
@@ -203,10 +231,11 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       },
       {
         accessorKey: "cost_price",
-        header: () => (
-          <span className="uppercase text-[11px] font-semibold tracking-wider text-muted-foreground">
+        header: ({ column }) => (
+          <SortableHeader column={column}>
+            <DollarSign className="h-3.5 w-3.5" />
             Cost
-          </span>
+          </SortableHeader>
         ),
         cell: ({ row }) => (
           <div className="font-mono tabular-nums text-sm">
@@ -217,10 +246,11 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       },
       {
         accessorKey: "retail_price",
-        header: () => (
-          <span className="uppercase text-[11px] font-semibold tracking-wider text-muted-foreground">
-            Retail
-          </span>
+        header: ({ column }) => (
+          <SortableHeader column={column}>
+            <DollarSign className="h-3.5 w-3.5" />
+            Price
+          </SortableHeader>
         ),
         cell: ({ row }) => (
           <div className="font-mono tabular-nums text-sm">
@@ -297,8 +327,8 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       {
         accessorKey: "units_sold_30d",
         header: () => (
-          <span className="uppercase text-[11px] font-semibold tracking-wider text-muted-foreground">
-            Sold (30d)
+          <span className="uppercase text-[11px] font-semibold tracking-wider text-foreground">
+            Sold
           </span>
         ),
         cell: ({ row }) => (
@@ -310,7 +340,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         accessorKey: "total_profit_30d",
         header: ({ column }) => (
           <SortableHeader column={column}>
-            Profit (30d)
+            Profit
           </SortableHeader>
         ),
         cell: ({ row }) => {
@@ -353,10 +383,10 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
 
   // Print table data - ALL rows for print preview
   const printTableData = useMemo(() => {
-    const headers = ["Product", "Category", "Cost", "Retail", "Margin %", "Status", "Sold (30d)", "Profit (30d)"];
+    const headers = ["Product", "Category", "Cost", "Price", "Margin %", "Status", "Sold", "Profit"];
     const rows = filteredData.map(item => [
       item.product_name,
-      item.category,
+      formatCategoryName(item.category),
       `₱${item.cost_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
       `₱${item.retail_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
       `${item.margin_percent.toFixed(1)}%`,
@@ -377,16 +407,16 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         { header: "Category", key: "category", width: 15 },
         { header: "Barcode", key: "barcode", width: 15 },
         { header: "Cost Price (₱)", key: "cost_price", width: 14 },
-        { header: "Retail Price (₱)", key: "retail_price", width: 14 },
+        { header: "Price (₱)", key: "retail_price", width: 14 },
         { header: "Margin Amount (₱)", key: "margin_amount", width: 14 },
         { header: "Margin %", key: "margin_percent", width: 10 },
         { header: "Status", key: "status", width: 12 },
-        { header: "Units Sold (30d)", key: "units_sold_30d", width: 15 },
-        { header: "Profit (30d) (₱)", key: "total_profit_30d", width: 14 },
+        { header: "Units Sold", key: "units_sold_30d", width: 15 },
+        { header: "Profit (₱)", key: "total_profit_30d", width: 14 },
       ],
       rows: filteredData.map((item) => ({
         product_name: item.product_name,
-        category: item.category,
+        category: formatCategoryName(item.category),
         barcode: item.barcode || "",
         cost_price: item.cost_price,
         retail_price: item.retail_price,
@@ -402,11 +432,18 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
   return (
     <ReportShell
       title="Profit Margin Analysis"
-      description="Compare cost vs retail price, identify low-margin products needing repricing. Sorted by margin % (lowest first)."
+      description="Compare cost vs retail price, identify low-margin products needing repricing."
       icon={TrendingUp}
       generatedBy="Admin"
       excelExport={excelExport}
       printTableData={printTableData}
+      toolbarContent={
+        <DateRangePicker
+          date={dateRange}
+          onDateChange={handleDateChange}
+          align="end"
+        />
+      }
     >
       {/* Filters - Screen Only */}
       <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
@@ -448,35 +485,37 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <CompactCard
-          label="Negative Margin"
-          value={data.summary.negative_margin_count.toLocaleString()}
-          subtitle="Products selling below cost"
-          icon={AlertCircle}
-          variant="danger"
-        />
-        <CompactCard
-          label="Low Margin"
-          value={data.summary.low_margin_count.toLocaleString()}
-          subtitle="Products with <10% margin"
-          icon={AlertTriangle}
-          variant="warning"
-        />
-        <CompactCard
-          label="Avg Margin"
-          value={`${data.summary.avg_margin_percent}%`}
-          subtitle="Across all products"
-          icon={Percent}
-        />
-        <CompactCard
-          label="Total Profit (30d)"
-          value={formatPeso(data.summary.total_potential_profit)}
-          subtitle="From sold products"
-          icon={DollarSign}
-          variant="success"
-        />
-      </div>
+      <LoadingOverlay isLoading={isPending}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <CompactCard
+            label="Negative Margin"
+            value={data.summary.negative_margin_count.toLocaleString()}
+            subtitle="Products selling below cost"
+            icon={AlertCircle}
+            variant="danger"
+          />
+          <CompactCard
+            label="Low Margin"
+            value={data.summary.low_margin_count.toLocaleString()}
+            subtitle="Products with <10% margin"
+            icon={AlertTriangle}
+            variant="warning"
+          />
+          <CompactCard
+            label="Avg Margin"
+            value={`${data.summary.avg_margin_percent}%`}
+            subtitle="Across all products"
+            icon={Percent}
+          />
+          <CompactCard
+            label="Total Profit"
+            value={formatPeso(data.summary.total_potential_profit)}
+            subtitle="From sold products"
+            icon={DollarSign}
+            variant="success"
+          />
+        </div>
+      </LoadingOverlay>
 
       {/* Alert for problematic margins */}
       {(data.summary.negative_margin_count > 0 || data.summary.low_margin_count > 0) && (
@@ -504,19 +543,20 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       )}
 
       {/* Detailed Table - Card Wrapper */}
-      <Card className="border-stone-200/80 bg-card  shadow-sm">
-        <CardHeader className="py-0 px-6 border-b pb-0 mb-0 border-stone-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-sm font-semibold pb-0 mb-0">Product Margin Details</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5 pb-0 mb-0">
-                {table.getFilteredRowModel().rows.length} products • Sorted by margin % (lowest first)
-              </p>
+      <LoadingOverlay isLoading={isPending}>
+        <Card className="border-stone-200/80 bg-card shadow-sm">
+          <CardHeader className="py-0 px-6 border-b pb-0 mb-0 border-stone-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-semibold pb-0 mb-0">Product Margin Details</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5 pb-0 mb-0">
+                  {table.getFilteredRowModel().rows.length} products • Sorted by margin % (lowest first)
+                </p>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 pb-0 translate-y-[-6.5vh]">
-          <div className="overflow-x-auto border border-stone-200/80 rounded-lg">
+          </CardHeader>
+          <CardContent className="p-4 pb-0 translate-y-[-6.5vh]">
+            <div className="overflow-x-auto border border-stone-200/80 rounded-lg">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -571,8 +611,9 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
           <div className="px-4 py-3 border-t border-stone-100 print-hidden" data-print-hidden="true">
             <DataTablePagination table={table} />
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </LoadingOverlay>
     </ReportShell>
   );
 }

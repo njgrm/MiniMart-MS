@@ -1144,3 +1144,58 @@ export async function getTopProductsByDateRange(
 
   return { products, categories };
 }
+
+// ============================================
+// Z-Read / End of Day Close
+// ============================================
+
+import { logZReadClose } from "@/lib/logger";
+import { format } from "date-fns";
+
+export interface ZReadCloseInput {
+  totalSales: number;
+  cashSales: number;
+  gcashSales: number;
+  totalTransactions: number;
+  openingFund: number;
+  expenses: number;
+  cashInDrawer: number;
+  variance?: number;
+}
+
+/**
+ * Close the day and log Z-Read event to audit trail
+ */
+export async function closeZRead(
+  username: string,
+  data: ZReadCloseInput
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const today = format(new Date(), "yyyy-MM-dd");
+    
+    // Log the Z-Read close event
+    await logZReadClose(username, {
+      date: today,
+      totalSales: data.totalSales,
+      cashSales: data.cashSales,
+      gcashSales: data.gcashSales,
+      totalTransactions: data.totalTransactions,
+      openingFund: data.openingFund,
+      expenses: data.expenses,
+      cashInDrawer: data.cashInDrawer,
+      variance: data.variance,
+    });
+
+    // In production, you might also:
+    // - Archive today's transactions
+    // - Reset shift counters
+    // - Create a Z-Read record in database
+
+    revalidatePath("/admin");
+    
+    return { success: true };
+  } catch (error) {
+    console.error("Z-Read close error:", error);
+    return { success: false, error: "Failed to close Z-Read" };
+  }
+}

@@ -1,12 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { format } from "date-fns"
+import { format, subDays, startOfYear, isSameDay, isBefore, isAfter, startOfMonth } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { DateRange } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
@@ -19,6 +20,22 @@ interface DateRangePickerProps {
   onDateChange: (date: DateRange | undefined) => void
   className?: string
   align?: "start" | "center" | "end"
+  showPresets?: boolean
+}
+
+// Preset date ranges
+const presets = [
+  { label: "30 Days", getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
+  { label: "90 Days", getValue: () => ({ from: subDays(new Date(), 90), to: new Date() }) },
+  { label: "This Year", getValue: () => ({ from: startOfYear(new Date()), to: new Date() }) },
+];
+
+// Helper to check if a preset is currently active
+function isPresetActive(preset: { getValue: () => DateRange }, date: DateRange | undefined): boolean {
+  if (!date?.from || !date?.to) return false;
+  const presetValue = preset.getValue();
+  if (!presetValue.from || !presetValue.to) return false;
+  return isSameDay(date.from, presetValue.from) && isSameDay(date.to, presetValue.to);
 }
 
 export function DateRangePicker({
@@ -26,9 +43,83 @@ export function DateRangePicker({
   onDateChange,
   className,
   align = "start",
+  showPresets = true,
 }: DateRangePickerProps) {
+  // Independent month states for each calendar
+  const [leftMonth, setLeftMonth] = React.useState<Date>(
+    date?.from ? startOfMonth(date.from) : startOfMonth(subDays(new Date(), 30))
+  );
+  const [rightMonth, setRightMonth] = React.useState<Date>(
+    date?.to ? startOfMonth(date.to) : startOfMonth(new Date())
+  );
+
+  // Handle date selection for range
+  const handleSelect = (selectedDate: Date | undefined) => {
+    if (!selectedDate) return;
+
+    if (!date?.from) {
+      // First click - set start date
+      onDateChange({ from: selectedDate, to: undefined });
+    } else if (!date.to) {
+      // Second click - set end date
+      if (isBefore(selectedDate, date.from)) {
+        // If selecting before start, swap them
+        onDateChange({ from: selectedDate, to: date.from });
+      } else {
+        onDateChange({ from: date.from, to: selectedDate });
+      }
+    } else {
+      // Third click - start new selection
+      onDateChange({ from: selectedDate, to: undefined });
+    }
+  };
+
+  // Get modifiers for highlighting the range
+  const rangeModifiers = React.useMemo(() => {
+    if (!date?.from) return {};
+    
+    return {
+      selected: date.from,
+      range_start: date.from,
+      range_end: date.to,
+      range_middle: date.to ? {
+        after: date.from,
+        before: date.to,
+      } : undefined,
+    };
+  }, [date]);
+
   return (
-    <div className={cn("grid gap-2", className)}>
+    <div className={cn("flex items-center gap-2", className)}>
+      {/* Quick Preset Badges */}
+      {showPresets && (
+        <div className="hidden sm:flex items-center gap-1">
+          {presets.map((preset) => {
+            const isActive = isPresetActive(preset, date);
+            return (
+              <Badge
+                key={preset.label}
+                variant={isActive ? "default" : "outline"}
+                className={cn(
+                  "cursor-pointer transition-colors text-xs px-2 py-1",
+                  isActive 
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                    : "hover:bg-primary hover:text-primary-foreground"
+                )}
+                onClick={() => {
+                  const newRange = preset.getValue();
+                  onDateChange(newRange);
+                  setLeftMonth(startOfMonth(newRange.from));
+                  setRightMonth(startOfMonth(newRange.to));
+                }}
+              >
+                {preset.label}
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+      
       <Popover>
         <PopoverTrigger asChild>
           <Button
@@ -55,14 +146,42 @@ export function DateRangePicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align={align}>
-          <Calendar
-            initialFocus
-            mode="range"
-            defaultMonth={date?.from}
-            selected={date}
-            onSelect={onDateChange}
-            numberOfMonths={2}
-          />
+          <div className="flex flex-col md:flex-row">
+            {/* Left Calendar - Start Date */}
+            <div className="border-b md:border-b-0 md:border-r">
+              <Calendar
+                mode="single"
+                selected={date?.from}
+                onSelect={handleSelect}
+                month={leftMonth}
+                onMonthChange={setLeftMonth}
+                captionLayout="dropdown"
+                modifiers={rangeModifiers}
+                modifiersClassNames={{
+                  range_start: "bg-primary text-primary-foreground rounded-l-md",
+                  range_end: "bg-primary text-primary-foreground rounded-r-md",
+                  range_middle: "bg-primary/20 rounded-none",
+                }}
+              />
+            </div>
+            {/* Right Calendar - End Date */}
+            <div>
+              <Calendar
+                mode="single"
+                selected={date?.to}
+                onSelect={handleSelect}
+                month={rightMonth}
+                onMonthChange={setRightMonth}
+                captionLayout="dropdown"
+                modifiers={rangeModifiers}
+                modifiersClassNames={{
+                  range_start: "bg-primary text-primary-foreground rounded-l-md",
+                  range_end: "bg-primary text-primary-foreground rounded-r-md",
+                  range_middle: "bg-primary/20 rounded-none",
+                }}
+              />
+            </div>
+          </div>
         </PopoverContent>
       </Popover>
     </div>

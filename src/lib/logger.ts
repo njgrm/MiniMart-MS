@@ -480,3 +480,106 @@ export async function logOrderCancel(
     },
   });
 }
+
+// =============================================================================
+// Auth Logging Functions
+// =============================================================================
+
+/**
+ * Log a user login event
+ */
+export async function logLogin(
+  username: string,
+  userType: "staff" | "vendor",
+  userId?: number,
+  email?: string,
+  ipAddress?: string
+): Promise<void> {
+  await logActivity({
+    userId,
+    username,
+    action: "LOGIN",
+    module: "AUTH",
+    entity: "User",
+    entityId: userId,
+    entityName: username,
+    details: `${userType === "vendor" ? "Vendor" : "Staff"} "${username}" logged in successfully.`,
+    metadata: {
+      user_type: userType,
+      email: email || null,
+      login_time: new Date().toISOString(),
+    },
+    ipAddress,
+  });
+}
+
+/**
+ * Log a user logout event
+ */
+export async function logLogout(
+  username: string,
+  userType: "staff" | "vendor",
+  userId?: number,
+  ipAddress?: string
+): Promise<void> {
+  await logActivity({
+    userId,
+    username,
+    action: "LOGOUT",
+    module: "AUTH",
+    entity: "User",
+    entityId: userId,
+    entityName: username,
+    details: `${userType === "vendor" ? "Vendor" : "Staff"} "${username}" logged out.`,
+    metadata: {
+      user_type: userType,
+      logout_time: new Date().toISOString(),
+    },
+    ipAddress,
+  });
+}
+
+// =============================================================================
+// POS / Register Logging Functions
+// =============================================================================
+
+/**
+ * Log Z-Read (End of Day) register close event
+ */
+export async function logZReadClose(
+  username: string,
+  data: {
+    date: string;
+    totalSales: number;
+    cashSales: number;
+    gcashSales: number;
+    totalTransactions: number;
+    openingFund: number;
+    expenses: number;
+    cashInDrawer: number;
+    variance?: number;
+  }
+): Promise<void> {
+  const details = `Z-Read closed. Total Sales: ₱${data.totalSales.toFixed(2)} (Cash: ₱${data.cashSales.toFixed(2)}, GCash: ₱${data.gcashSales.toFixed(2)}). Transactions: ${data.totalTransactions}.`;
+  
+  await logActivity({
+    username,
+    action: "ZREAD_CLOSE",
+    module: "POS",
+    entity: "Register",
+    entityName: `Z-Read ${data.date}`,
+    details,
+    metadata: {
+      date: data.date,
+      total_sales: data.totalSales,
+      cash_sales: data.cashSales,
+      gcash_sales: data.gcashSales,
+      total_transactions: data.totalTransactions,
+      opening_fund: data.openingFund,
+      expenses: data.expenses,
+      cash_in_drawer: data.cashInDrawer,
+      variance: data.variance || 0,
+      close_time: new Date().toISOString(),
+    },
+  });
+}

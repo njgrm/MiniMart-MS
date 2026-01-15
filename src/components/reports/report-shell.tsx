@@ -502,13 +502,7 @@ export function ReportShell({
         </div>
         
         <div className="flex items-center translate-x-[-1.5vh]  gap-2 shrink-0">
-          {/* Loading indicator */}
-          {isLoading && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span className="hidden sm:inline">Loading...</span>
-            </div>
-          )}
+          {/* Loading indicator removed from toolbar - use content loading states instead */}
           
           {/* Custom toolbar content (e.g., date picker) */}
           {toolbarContent}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import {
@@ -37,6 +37,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { closeZRead } from "@/actions/sales";
+import { toast } from "sonner";
 
 export interface CashRegisterData {
   openingFund: number;
@@ -56,6 +58,7 @@ interface CashRegisterCardProps {
 
 export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [xReadOpen, setXReadOpen] = useState(false);
   const [zReadConfirmOpen, setZReadConfirmOpen] = useState(false);
   const [zReadReportOpen, setZReadReportOpen] = useState(false);
@@ -83,12 +86,34 @@ export function CashRegisterCard({ data, className }: CashRegisterCardProps) {
     setZReadConfirmOpen(true);
   };
 
-  // Confirm Z-Read and show final report
+  // Confirm Z-Read and show final report with audit logging
   const confirmZRead = () => {
     setZReadConfirmOpen(false);
-    setZReadReportOpen(true);
-    // In production, this would call a server action to reset daily totals
-    // await resetDailySales();
+    
+    startTransition(async () => {
+      // Log the Z-Read close event
+      const result = await closeZRead("Admin", {
+        totalSales,
+        cashSales: data.cashSales,
+        gcashSales: data.gcashSales,
+        totalTransactions: data.transactionCount,
+        openingFund: data.openingFund,
+        expenses: data.expenses,
+        cashInDrawer: calculatedDrawer,
+        variance: calculatedDrawer - data.expectedDrawer,
+      });
+
+      if (result.success) {
+        toast.success("Z-Read closed successfully", {
+          description: "End of day report has been logged to audit trail.",
+        });
+        setZReadReportOpen(true);
+      } else {
+        toast.error("Failed to close Z-Read", {
+          description: result.error,
+        });
+      }
+    });
   };
 
   // Print report (for both X and Z read)

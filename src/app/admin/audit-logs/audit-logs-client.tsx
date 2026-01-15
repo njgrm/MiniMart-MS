@@ -26,6 +26,9 @@ import {
   ChevronsLeft,
   ChevronsRight,
   User,
+  LogIn,
+  LogOut,
+  Receipt,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,6 +83,9 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; icon: typeof Plus; col
   ORDER_CANCEL: { label: "Cancelled", icon: XCircle, color: "bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-300 ring-1 ring-red-400/50", isHighRisk: true },
   EDIT_EXPIRY: { label: "Expiry", icon: Calendar, color: "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 ring-1 ring-orange-400/50", isHighRisk: true },
   EDIT_BATCH: { label: "Batch", icon: ClipboardEdit, color: "bg-orange-200 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300 ring-1 ring-orange-400/50", isHighRisk: true },
+  LOGIN: { label: "Logged In", icon: LogIn, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" },
+  LOGOUT: { label: "Logged Out", icon: LogOut, color: "bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400" },
+  ZREAD_CLOSE: { label: "Z-Read", icon: Receipt, color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
 };
 
 // Module badge colors
@@ -289,6 +295,41 @@ function DiffSummary({ log }: { log: AuditLogEntry }): React.ReactNode {
       <Badge variant="outline" className="text-[10px]">
         {count?.toLocaleString() ?? "—"} items
       </Badge>
+    );
+  }
+  
+  // LOGIN
+  if (log.action === "LOGIN") {
+    const userType = metadata?.user_type as string | undefined;
+    return (
+      <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-200">
+        {userType === "vendor" ? "Vendor" : "Staff"}
+      </Badge>
+    );
+  }
+  
+  // LOGOUT
+  if (log.action === "LOGOUT") {
+    return (
+      <Badge variant="outline" className="text-[10px] text-slate-600 border-slate-200">
+        session ended
+      </Badge>
+    );
+  }
+  
+  // ZREAD_CLOSE
+  if (log.action === "ZREAD_CLOSE") {
+    const totalSales = metadata?.total_sales as number | undefined;
+    const txnCount = metadata?.total_transactions as number | undefined;
+    return (
+      <div className="flex items-center gap-1.5 text-sm">
+        <span className="font-bold font-mono text-cyan-600 dark:text-cyan-400">
+          ₱{totalSales?.toLocaleString() ?? 0}
+        </span>
+        {txnCount && (
+          <Badge variant="outline" className="text-[9px]">{txnCount} txn</Badge>
+        )}
+      </div>
     );
   }
   

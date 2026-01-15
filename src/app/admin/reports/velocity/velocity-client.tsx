@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { useState, useMemo, useTransition } from "react";
+import { format, subDays } from "date-fns";
+import { DateRange } from "react-day-picker";
 import Link from "next/link";
 import {
   useReactTable,
@@ -23,7 +24,6 @@ import {
   Snowflake,
   Zap,
   Search,
-  Filter,
   Boxes,
 } from "lucide-react";
 import {
@@ -49,11 +49,22 @@ import {
 } from "@/components/reports/report-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTablePagination } from "@/components/data-table-pagination";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import {
+  getVelocityReport,
   type VelocityReportResult,
   type VelocityItem,
 } from "@/actions/reports";
 import { Progress } from "@/components/ui/progress";
+
+// Helper function to format category name from SNAKE_CASE to Title Case
+function formatCategoryName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 // Helper function for normal weight peso sign
 function formatPeso(amount: number): React.ReactNode {
@@ -148,12 +159,28 @@ const statusConfig: Record<
   },
 };
 
-export function VelocityReportClient({ data }: VelocityReportClientProps) {
+export function VelocityReportClient({ data: initialData }: VelocityReportClientProps) {
+  const [isPending, startTransition] = useTransition();
+  const [data, setData] = useState<VelocityReportResult>(initialData);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 30),
+    to: new Date(),
+  });
+
+  const handleDateChange = (range: DateRange | undefined) => {
+    setDateRange(range);
+    if (range?.from && range?.to) {
+      startTransition(async () => {
+        const result = await getVelocityReport({ from: range.from!, to: range.to! });
+        setData(result);
+      });
+    }
+  };
 
   // Get unique categories
   const categories = useMemo(
@@ -190,7 +217,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
               {row.original.product_name}
             </Link>
             <p className="text-xs text-muted-foreground truncate">
-              {row.original.category}
+              {formatCategoryName(row.original.category)}
               {row.original.barcode && ` • ${row.original.barcode}`}
             </p>
           </div>
@@ -244,7 +271,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         accessorKey: "units_sold_30d",
         header: () => (
           <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
-            Sold (30d)
+            Sold
           </div>
         ),
         cell: ({ row }) => (
@@ -362,10 +389,10 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
 
   // Print table data - ALL rows for print preview
   const printTableData = useMemo(() => {
-    const headers = ["Product", "Category", "Status", "Stock", "Sold (30d)", "Velocity", "Days Left", "Capital"];
+    const headers = ["Product", "Category", "Status", "Stock", "Sold  ", "Velocity", "Days Left", "Capital"];
     const rows = filteredData.map(item => [
       item.product_name,
-      item.category,
+      formatCategoryName(item.category),
       statusConfig[item.status].label,
       item.current_stock.toLocaleString(),
       item.units_sold_30d.toLocaleString(),
@@ -387,7 +414,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         { header: "Barcode", key: "barcode", width: 15 },
         { header: "Status", key: "status", width: 12 },
         { header: "Current Stock", key: "current_stock", width: 12 },
-        { header: "Units Sold (30d)", key: "units_sold_30d", width: 15 },
+        { header: "Units Sold", key: "units_sold_30d", width: 15 },
         { header: "Daily Velocity", key: "daily_velocity", width: 12 },
         { header: "Days of Supply", key: "days_of_supply", width: 12 },
         { header: "Cost Price (₱)", key: "cost_price", width: 12 },
@@ -397,7 +424,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
       ],
       rows: filteredData.map((item) => ({
         product_name: item.product_name,
-        category: item.category,
+        category: formatCategoryName(item.category),
         barcode: item.barcode || "",
         status: statusConfig[item.status].label,
         current_stock: item.current_stock,
@@ -415,11 +442,18 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
   return (
     <ReportShell
       title="Inventory Velocity Report"
-      description="Identify Dead Stock (0 sales in 30 days) vs Fast Movers. Critical for Dynamic ROP optimization and capital efficiency."
+      description="Identify Dead Stock (0 sales in 30 days) vs Fast Movers."
       icon={Activity}
       generatedBy="Admin"
       excelExport={excelExport}
       printTableData={printTableData}
+      toolbarContent={
+        <DateRangePicker
+          date={dateRange}
+          onDateChange={handleDateChange}
+          align="end"
+        />
+      }
     >
       {/* Filters - Screen Only */}
       <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
@@ -434,7 +468,6 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
-            <Filter className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -453,7 +486,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map((cat) => (
               <SelectItem key={cat} value={cat}>
-                {cat}
+                {formatCategoryName(cat)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -461,7 +494,8 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <LoadingOverlay isLoading={isPending}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <CompactCard
           label="Dead Stock Items"
           value={data.summary.dead_stock_count.toLocaleString()}
@@ -486,10 +520,12 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
           icon={Zap}
           variant="success"
         />
-      </div>
+        </div>
+      </LoadingOverlay>
 
       {/* Capital Analysis */}
-      <Card>
+      <LoadingOverlay isLoading={isPending}>
+        <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold">Capital Efficiency Analysis</CardTitle>
         </CardHeader>
@@ -538,9 +574,11 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
           </div>
         </CardContent>
       </Card>
+      </LoadingOverlay>
 
       {/* Detailed Table with Tanstack */}
-      <Card>
+      <LoadingOverlay isLoading={isPending}>
+        <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold">Product Velocity Details</CardTitle>
           <CardDescription>{table.getFilteredRowModel().rows.length} products</CardDescription>
@@ -634,6 +672,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
           </CardContent>
         </Card>
       </div>
+      </LoadingOverlay>
     </ReportShell>
   );
 }

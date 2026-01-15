@@ -213,8 +213,12 @@ export async function getSpoilageReport(
  * Crucial for Dynamic ROP logic defense - identifies products with no movement
  * Uses DailySalesAggregate for consistent velocity calculation
  */
-export async function getVelocityReport(): Promise<VelocityReportResult> {
-  const thirtyDaysAgo = subDays(new Date(), 30);
+export async function getVelocityReport(
+  dateRange?: DateRangeInput
+): Promise<VelocityReportResult> {
+  const from = dateRange?.from ?? subDays(new Date(), 30);
+  const to = dateRange?.to ?? new Date();
+  const daysDiff = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)));
 
   // Get all active products with inventory
   const products = await prisma.product.findMany({
@@ -227,10 +231,13 @@ export async function getVelocityReport(): Promise<VelocityReportResult> {
     },
   });
 
-  // Get 30-day sales aggregates for all products
+  // Get sales aggregates for the date range
   const salesAggregates = await prisma.dailySalesAggregate.findMany({
     where: {
-      date: { gte: thirtyDaysAgo },
+      date: { 
+        gte: startOfDay(from),
+        lte: endOfDay(to),
+      },
     },
     select: {
       product_id: true,
@@ -262,7 +269,7 @@ export async function getVelocityReport(): Promise<VelocityReportResult> {
     const retailPrice = Number(p.retail_price);
     const sales = salesMap.get(p.product_id);
     const unitsSold30d = sales?.totalSold ?? 0;
-    const dailyVelocity = unitsSold30d / 30;
+    const dailyVelocity = unitsSold30d / daysDiff;
     const daysOfSupply = dailyVelocity > 0 ? currentStock / dailyVelocity : Infinity;
 
     // Classify status
@@ -426,8 +433,9 @@ export async function getZReadHistory(
  * Compares cost vs retail price and highlights low-margin items
  * Helps identify pricing issues and optimize profitability
  */
-export async function getMarginAnalysis(): Promise<MarginReportResult> {
-  const thirtyDaysAgo = subDays(new Date(), 30);
+export async function getMarginAnalysis(dateRange?: DateRangeInput): Promise<MarginReportResult> {
+  const endDate = dateRange?.to ?? new Date();
+  const startDate = dateRange?.from ?? subDays(endDate, 30);
 
   // Get all active products
   const products = await prisma.product.findMany({
@@ -437,10 +445,10 @@ export async function getMarginAnalysis(): Promise<MarginReportResult> {
     },
   });
 
-  // Get 30-day sales for profit calculation
+  // Get sales for profit calculation within date range
   const salesAggregates = await prisma.dailySalesAggregate.findMany({
     where: {
-      date: { gte: thirtyDaysAgo },
+      date: { gte: startDate, lte: endDate },
     },
     select: {
       product_id: true,
@@ -466,7 +474,8 @@ export async function getMarginAnalysis(): Promise<MarginReportResult> {
 
   const items: MarginItem[] = products.map((p) => {
     const costPrice = Number(p.cost_price) || 0;
-    const retailPrice = Number(p.retail_price);
+    // Use wholesale_price as fallback for softdrinks cases (retail_price = 0)
+    const retailPrice = Number(p.retail_price) > 0 ? Number(p.retail_price) : Number(p.wholesale_price);
     const marginAmount = retailPrice - costPrice;
     const marginPercent = retailPrice > 0 ? (marginAmount / retailPrice) * 100 : 0;
 
@@ -555,11 +564,14 @@ export interface CategorySalesResult {
 
 /**
  * Get Sales by Category Report
- * Aggregates sales data by product category for the last 30 days
+ * Aggregates sales data by product category for the specified date range
  * Shows revenue distribution and profit contribution by category
  */
-export async function getSalesByCategory(): Promise<CategorySalesResult> {
-  const thirtyDaysAgo = subDays(new Date(), 30);
+export async function getSalesByCategory(
+  dateRange?: DateRangeInput
+): Promise<CategorySalesResult> {
+  const from = dateRange?.from ?? subDays(new Date(), 30);
+  const to = dateRange?.to ?? new Date();
 
   // Get all active products with their categories
   const products = await prisma.product.findMany({
@@ -583,10 +595,13 @@ export async function getSalesByCategory(): Promise<CategorySalesResult> {
     categoryProducts.set(p.category, existing);
   }
 
-  // Get 30-day sales aggregates
+  // Get sales aggregates for date range
   const salesAggregates = await prisma.dailySalesAggregate.findMany({
     where: {
-      date: { gte: thirtyDaysAgo },
+      date: { 
+        gte: startOfDay(from),
+        lte: endOfDay(to),
+      },
     },
     select: {
       product_id: true,

@@ -27,6 +27,7 @@ model Customer {
   contact_details String?
   email           String?       @unique
   password_hash   String?
+  avatar_url      String?
   is_vendor       Boolean       @default(false)
   status          String        @default("ACTIVE")
   deletedAt       DateTime?
@@ -364,6 +365,9 @@ enum AuditAction {
   ORDER_CANCEL
   EDIT_EXPIRY
   EDIT_BATCH
+  LOGIN
+  LOGOUT
+  ZREAD_CLOSE
 }
 
 /// Event sources for the forecasting system

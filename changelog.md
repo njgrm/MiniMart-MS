@@ -6,6 +6,231 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-15
 
+### Comprehensive Audit Logging Enhancements
+
+**Verdict:** Fixed product image changes not being tracked in audit logs, added LOGIN/LOGOUT tracking, and added Z-Read (end of day) close logging for complete operational audit trail.
+
+#### 1. Fixed Product Image Change Tracking
+
+**Files Modified:**
+- `src/actions/product.ts`
+
+**Problem:** Updating a product's image showed "0 field" change in audit logs because `image_url` was not included in oldData/newData objects.
+
+**Solution:**
+- Added `image_url` field to both `oldData` and `newData` objects in `updateProduct()` function
+- The logger's `generateChangeDiff()` now correctly detects image URL changes
+
+#### 2. Authentication Logging (Login/Logout)
+
+**Files Modified:**
+- `prisma/schema.prisma` - Added `LOGIN`, `LOGOUT` to AuditAction enum
+- `src/lib/logger.ts` - Added `logLogin()` and `logLogout()` functions
+- `src/actions/auth.ts` - Integrated login logging, added `logout()` server action
+
+**Changes:**
+- New `logLogin()` function captures: username, user_type, email, ip_address, session_status
+- New `logLogout()` function captures: username, user_type, ip_address, session_status
+- Login action now creates audit log entry on successful authentication
+- New `logout()` server action that logs the event before calling signOut()
+
+#### 3. Z-Read (End of Day) Close Logging
+
+**Files Modified:**
+- `prisma/schema.prisma` - Added `ZREAD_CLOSE` to AuditAction enum
+- `src/lib/logger.ts` - Added `logZReadClose()` function
+- `src/actions/sales.ts` - Added `closeZRead()` server action
+- `src/components/dashboard/cash-register-card.tsx` - Integrated closeZRead with toast feedback
+
+**Changes:**
+- New `logZReadClose()` function captures: total_sales, total_transactions, cash_sales, gcash_sales, expected_drawer, actual_drawer, variance, starting_cash
+- Cash register Z-Read confirmation now calls `closeZRead()` server action
+- Shows success/error toast notifications on completion
+
+#### 4. Audit Logs UI Updates
+
+**Files Modified:**
+- `src/app/admin/audit-logs/audit-logs-client.tsx`
+- `src/components/audit/log-details-modal.tsx`
+
+**Changes:**
+- Added new icons: LogIn, LogOut, Receipt
+- Added ACTION_CONFIG entries for LOGIN, LOGOUT, ZREAD_CLOSE with appropriate colors
+- Added DiffSummary display handlers for new action types
+- Log details modal now shows metadata for:
+  - LOGIN/LOGOUT: User type, email, IP address, session status
+  - ZREAD_CLOSE: Total sales, transactions, cash/gcash breakdown, drawer variance
+
+#### 5. Database Migration
+
+**Migration:** `20260115101651_add_audit_action_types`
+
+- Added `LOGIN`, `LOGOUT`, `ZREAD_CLOSE` to AuditAction enum in PostgreSQL
+
+---
+
+### Reports & Date Range Picker Improvements - Phase 4
+
+**Verdict:** Enhanced date range picker with independent calendar controls, added loading overlays to report content areas, and added date range support to all report pages.
+
+#### 1. Customer Avatar URL Field
+
+**Files Modified:**
+- `prisma/schema.prisma`
+- `src/actions/vendor.ts`
+
+**Changes:**
+- Added `avatar_url` field to Customer model via Prisma migration
+- Enabled avatar persistence in `updateVendorProfile()` server action
+- Vendor profile photos now persist to database
+
+#### 2. Date Range Picker - Independent Controls
+
+**Files Modified:**
+- `src/components/ui/date-range-picker.tsx`
+
+**Problem:** Year/month controls in calendar were linked - changing one side affected the other.
+
+**Solution:**
+- Split into two separate Calendar components with independent state
+- `leftMonth` and `rightMonth` states for each calendar side
+- Users can now navigate each calendar independently for complete date selection freedom
+- Added preset badges with active state indicator (primary color when selected)
+
+#### 3. Loading Indicators - Content Areas
+
+**Files Modified:**
+- `src/components/ui/loading-overlay.tsx` (NEW)
+- `src/components/reports/report-shell.tsx`
+- All report client components
+
+**Changes:**
+- Created `LoadingOverlay` component with semi-transparent overlay and spinner
+- Removed loading indicator from toolbar (was too cramped)
+- Added loading overlays to summary cards and data tables
+- Provides instant visual feedback during data fetching
+
+#### 4. Date Range Support - All Reports
+
+**Files Modified:**
+- `src/actions/reports.ts` - Updated `getVelocityReport()`, `getSalesByCategory()`, and `getMarginAnalysis()` to accept dateRange
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+- `src/app/admin/reports/sales-category/sales-category-client.tsx`
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+- `src/app/admin/reports/spoilage/spoilage-client.tsx`
+
+**Implementation:**
+- Moved `DateRangePicker` to `toolbarContent` prop in all report pages for consistent placement
+- Added `useTransition` for async data fetching with loading states
+- Reports now support dynamic date ranges instead of hardcoded 30-day window
+- Added `LoadingOverlay` to summary cards and data tables
+- Consistent UX across all report pages
+
+#### 5. Profit Margin - Sortable Columns
+
+**Files Modified:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+
+**Changes:**
+- Added `SortableHeader` to Cost Price column
+- Added `SortableHeader` to Retail Price column
+- Users can now sort by cost, price, or margin percentage
+
+#### 6. Preset Badge Active State
+
+**Files Modified:**
+- `src/components/ui/date-range-picker.tsx`
+
+**Changes:**
+- Added `isPresetActive()` helper to detect when current date matches a preset
+- Active preset shows primary background color
+- Non-active presets show outline variant with hover effect
+
+---
+
+## [Unreleased] - 2026-01-15
+
+### Vendor Portal & Reports UX Improvements - Phase 3
+
+**Verdict:** Enhanced vendor profile with camera upload, improved navigation, added logout confirmations, and standardized category name formatting across all report pages.
+
+#### 1. Vendor Profile Camera Upload
+
+**Files Modified:**
+- `src/app/vendor/profile/profile-client.tsx`
+
+**Features:**
+- Clickable avatar with camera icon overlay
+- Hidden file input with `accept="image/*" capture="environment"` for mobile camera access
+- Loading state during upload with `Loader` icon animation
+- Uses `uploadImageRaw()` action for server-side storage
+- Note: Database persistence pending Customer model migration (avatar_url field)
+
+#### 2. My Profile in Vendor Navigation
+
+**Files Modified:**
+- `src/app/vendor/layout-client.tsx`
+
+**Changes:**
+- Added "My Profile" option to both desktop and mobile dropdowns
+- Links to `/vendor/profile` page
+- User icon added for visual consistency
+
+#### 3. Logout Confirmation Modals
+
+**Files Modified:**
+- `src/app/vendor/profile/profile-client.tsx`
+- `src/app/vendor/layout-client.tsx`
+
+**Implementation:**
+- AlertDialog confirmation for all logout buttons
+- Consistent styling with destructive action button
+- "Are you sure you want to log out?" message
+- Cancel and Logout options
+
+#### 4. Profit Margin Report - Price Header Fix
+
+**Files Modified:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+- `src/actions/reports.ts`
+
+**Changes:**
+- Changed "Retail" table header to "Price" to accommodate wholesale pricing
+- Updated wholesale price fetch logic: uses wholesale_price when retail_price is 0 (for softdrinks cases)
+- Applied `formatCategoryName()` helper for consistent category display
+
+#### 5. Category Name Formatting (All Reports)
+
+**Files Modified:**
+- `src/app/admin/reports/spoilage/spoilage-client.tsx`
+- `src/app/admin/reports/expiring/expiring-client.tsx`
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+- `src/app/admin/reports/sales-category/sales-category-client.tsx`
+
+**Implementation:**
+- Added `formatCategoryName()` helper function to each report
+- Converts SNAKE_CASE to Title Case (e.g., SOFT_DRINKS → Soft Drinks)
+- Applied to:
+  - Table cell displays
+  - Category filter dropdowns
+  - Print table data
+  - Excel export rows
+
+#### 6. Date Range Picker Enhancements
+
+**Files Modified:**
+- `src/components/ui/date-range-picker.tsx`
+
+**Features:**
+- Added preset badges: "30 Days", "90 Days", "This Year"
+- Each preset auto-sets date range on click
+- Added `captionLayout="dropdown"` to Calendar for quick year selection
+- Users can now select year from dropdown instead of clicking through months
+
+---
+
+## [Unreleased] - 2026-01-15
+
 ### Vendor Portal UX Improvements - Phase 2
 
 **Verdict:** Fixed database field mapping, redesigned profile page with mobile-first design, and fixed duplicate notification toasts.

@@ -108,7 +108,7 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
     return (
       <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-6">
         <div className="text-center py-8">
-          <div className="size-12 mx-auto mb-3 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
+          <div className="size-12 mx-auto mb-3 rounded-full bg-card dark:bg-zinc-800 flex items-center justify-center">
             <IconHistory className="size-6 text-stone-400" />
           </div>
           <p className="text-stone-500 dark:text-zinc-400 text-sm mb-4">

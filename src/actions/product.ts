@@ -348,6 +348,7 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
       current_stock: existingProduct.inventory?.current_stock ?? 0,
       reorder_level: existingProduct.inventory?.reorder_level ?? 10,
       barcode: existingProduct.barcode || null,
+      image_url: existingProduct.image_url || null,
     };
 
     // Check if new name conflicts with another product
@@ -420,6 +421,7 @@ export async function updateProduct(data: UpdateProductInput): Promise<ActionRes
       current_stock,
       reorder_level,
       barcode: barcode || null,
+      image_url: (typeof image_url === 'string' ? image_url : null) || null,
     };
     
     await logProductUpdate(

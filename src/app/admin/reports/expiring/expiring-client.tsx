@@ -52,6 +52,14 @@ import { Progress } from "@/components/ui/progress";
 import { type ExpiringReportResult, type ExpiringItem } from "@/actions/reports";
 import Link from "next/link";
 
+// Helper function to format category name from SNAKE_CASE to Title Case
+function formatCategoryName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 // Helper function for normal weight peso sign
 function formatPeso(amount: number): React.ReactNode {
   return (
@@ -192,7 +200,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
               {row.original.product_name}
             </Link>
             <p className="text-xs text-muted-foreground truncate">
-              {row.original.category}
+              {formatCategoryName(row.original.category)}
               {row.original.batch_number && ` • Batch: ${row.original.batch_number}`}
             </p>
           </div>
@@ -350,7 +358,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
     const headers = ["Product", "Category", "Status", "Expiry Date", "Days Left", "Qty", "Value at Risk"];
     const rows = filteredData.map(item => [
       item.product_name,
-      item.category,
+      formatCategoryName(item.category),
       urgencyConfig[item.urgency].label,
       format(new Date(item.expiry_date), "MMM d, yyyy"),
       item.days_until_expiry <= 0 ? "EXPIRED" : `${item.days_until_expiry}d`,
@@ -380,7 +388,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
       ],
       rows: filteredData.map((item) => ({
         product_name: item.product_name,
-        category: item.category,
+        category: formatCategoryName(item.category),
         barcode: item.barcode || "",
         batch_number: item.batch_number || "",
         urgency: urgencyConfig[item.urgency].label,
@@ -411,7 +419,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
             placeholder="Search products, batches..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9"
+            className="pl-9 py-2.25"
           />
         </div>
         <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
@@ -435,7 +443,7 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
             <SelectItem value="all">All Categories</SelectItem>
             {categories.map((cat) => (
               <SelectItem key={cat} value={cat}>
-                {cat}
+                {formatCategoryName(cat)}
               </SelectItem>
             ))}
           </SelectContent>

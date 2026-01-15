@@ -39,6 +39,7 @@ import {
 import { SortableHeader } from "@/components/ui/sortable-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { getZReadHistory, type ZReadHistoryResult, type ZReadRecord } from "@/actions/reports";
 import { cn } from "@/lib/utils";
 
@@ -528,7 +529,6 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
       icon={Receipt}
       generatedBy="Admin"
       dateRange={shellDateRange}
-      isLoading={isPending}
       excelExport={excelExport}
       printSummary={printSummary}
       toolbarContent={
@@ -541,47 +541,50 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
       printTableData={printTableData}
     >
       {/* Summary Cards - Days/Txn small, Sales/Profit large */}
-      <div className="grid grid-cols-12 gap-3">
-        {/* Small Cards */}
-        <div className="col-span-2">
-          <CompactCard
-            label="Days"
-            value={data.summary.total_days.toString()}
-            subtitle={`${stats.avgTransactionsPerDay} txn/day`}
-            icon={Calendar}
-          />
+      <LoadingOverlay isLoading={isPending}>
+        <div className="grid grid-cols-12 gap-3">
+          {/* Small Cards */}
+          <div className="col-span-2">
+            <CompactCard
+              label="Days"
+              value={data.summary.total_days.toString()}
+              subtitle={`${stats.avgTransactionsPerDay} txn/day`}
+              icon={Calendar}
+            />
+          </div>
+          <div className="col-span-2">
+            <CompactCard
+              label="Transactions"
+              value={data.summary.total_transactions.toLocaleString()}
+              icon={Receipt}
+              trend={stats.txnTrend !== 0 ? { value: stats.txnTrend, label: trendLabel } : undefined}
+            />
+          </div>
+          {/* Large Cards - Using formatPeso for non-bold peso sign */}
+          <div className="col-span-4">
+            <LargeCard
+              label="Gross Sales"
+              value={formatPeso(data.summary.total_gross_sales)}
+              subtitle={`${formatPesoString(data.summary.avg_daily_sales, 0)}/day avg`}
+              icon={DollarSign}
+              trend={stats.salesTrend !== 0 ? { value: stats.salesTrend, label: trendLabel } : undefined}
+            />
+          </div>
+          <div className="col-span-4">
+            <LargeCard
+              label="Profit"
+              value={formatPeso(data.summary.total_profit)}
+              subtitle={`${formatPesoString(stats.avgProfitPerDay, 0)}/day avg`}
+              icon={TrendingUp}
+              trend={stats.profitTrend !== 0 ? { value: stats.profitTrend, label: trendLabel } : undefined}
+            />
+          </div>
         </div>
-        <div className="col-span-2">
-          <CompactCard
-            label="Transactions"
-            value={data.summary.total_transactions.toLocaleString()}
-            icon={Receipt}
-            trend={stats.txnTrend !== 0 ? { value: stats.txnTrend, label: trendLabel } : undefined}
-          />
-        </div>
-        {/* Large Cards - Using formatPeso for non-bold peso sign */}
-        <div className="col-span-4">
-          <LargeCard
-            label="Gross Sales"
-            value={formatPeso(data.summary.total_gross_sales)}
-            subtitle={`${formatPesoString(data.summary.avg_daily_sales, 0)}/day avg`}
-            icon={DollarSign}
-            trend={stats.salesTrend !== 0 ? { value: stats.salesTrend, label: trendLabel } : undefined}
-          />
-        </div>
-        <div className="col-span-4">
-          <LargeCard
-            label="Profit"
-            value={formatPeso(data.summary.total_profit)}
-            subtitle={`${formatPesoString(stats.avgProfitPerDay, 0)}/day avg`}
-            icon={TrendingUp}
-            trend={stats.profitTrend !== 0 ? { value: stats.profitTrend, label: trendLabel } : undefined}
-          />
-        </div>
-      </div>
+      </LoadingOverlay>
 
       {/* Daily Records Table - Separate Card */}
-      <Card className="border-stone-200/80 bg-card pb-0 shadow-sm">
+      <LoadingOverlay isLoading={isPending}>
+        <Card className="border-stone-200/80 bg-card pb-0 shadow-sm">
         <CardHeader className="py-0 px-4 border-b border-stone-100">
           <div className="flex items-center justify-between">
             <div>
@@ -646,6 +649,7 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
           </div>
         </CardContent>
       </Card>
+      </LoadingOverlay>
     </ReportShell>
   );
 }

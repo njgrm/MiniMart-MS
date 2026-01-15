@@ -12,7 +12,6 @@ import {
   DollarSign,
   Calendar,
   Search,
-  RefreshCw,
   Boxes,
   TrendingUp,
   TrendingDown,
@@ -27,17 +26,25 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   ReportShell,
 } from "@/components/reports/report-shell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import {
   getSpoilageReport,
   type SpoilageReportResult,
   type SpoilageItem,
 } from "@/actions/reports";
+
+// Helper: Format category names (SOFTDRINKS_CASE -> Softdrinks Case)
+function formatCategoryName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 // Helper function for normal weight peso sign
 function formatPeso(amount: number): React.ReactNode {
@@ -125,15 +132,6 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
     }
   };
 
-  const handleRefresh = () => {
-    if (dateRange?.from && dateRange?.to) {
-      startTransition(async () => {
-        const result = await getSpoilageReport({ from: dateRange.from!, to: dateRange.to! });
-        setData(result);
-      });
-    }
-  };
-
   // Filter items by search query
   const filteredItems = data.items.filter((item) => {
     if (!searchQuery) return true;
@@ -167,7 +165,7 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
       rows: filteredItems.map((item) => ({
         date: format(item.logged_at, "yyyy-MM-dd"),
         product_name: item.product_name,
-        category: item.category,
+        category: formatCategoryName(item.category),
         barcode: item.barcode || "",
         movement_type: movementTypeLabels[item.movement_type]?.label || item.movement_type,
         quantity_lost: item.quantity_lost,
@@ -186,7 +184,7 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
     const rows = filteredItems.map(item => [
       format(item.logged_at, "MMM d"),
       item.product_name,
-      item.category,
+      formatCategoryName(item.category),
       movementTypeLabels[item.movement_type]?.label || item.movement_type,
       `-${item.quantity_lost}`,
       `₱${item.estimated_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
@@ -211,13 +209,20 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
   return (
     <ReportShell
       title="Spoilage & Wastage Report"
-      description="Track stock losses from damage, expiry, and supplier returns. Critical for loss prevention and FEFO validation."
+      description="Track stock losses from damage, expiry, and supplier returns."
       icon={Trash2}
       dateRange={dateRange?.from && dateRange?.to ? { from: dateRange.from, to: dateRange.to } : undefined}
       generatedBy="Admin"
       excelExport={excelExport}
       printSummary={printSummary}
       printTableData={printTableData}
+      toolbarContent={
+        <DateRangePicker
+          date={dateRange}
+          onDateChange={handleDateChange}
+          align="end"
+        />
+      }
     >
       {/* Filters - Screen Only */}
       <div className="flex flex-col sm:flex-row gap-3 print-hidden" data-print-hidden="true">
@@ -227,20 +232,14 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
             placeholder="Search products, categories, reasons..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 py-2.25"
           />
         </div>
-        <DateRangePicker
-          date={dateRange}
-          onDateChange={handleDateChange}
-        />
-        <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isPending}>
-          <RefreshCw className={`h-4 w-4 ${isPending ? "animate-spin" : ""}`} />
-        </Button>
       </div>
 
       {/* Summary Cards - Larger with subtitles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <LoadingOverlay isLoading={isPending}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <CompactCard
           label="Total Incidents"
           value={data.summary.total_items.toString()}
@@ -268,7 +267,8 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
           subtitle={`${data.items.length} records found`}
           icon={Calendar}
         />
-      </div>
+        </div>
+      </LoadingOverlay>
 
       {/* Breakdown by Type */}
       {Object.keys(data.summary.by_type).length > 0 && (
@@ -314,24 +314,25 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
       )}
 
       {/* Detailed Table */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Detailed Records</CardTitle>
-          <CardDescription>{filteredItems.length} records found</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50 print:bg-gray-100">
-                  <TableHead className="w-[100px]">Date</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="w-[130px]">Type</TableHead>
-                  <TableHead className="text-left w-[80px]">Qty</TableHead>
-                  <TableHead className="text-left w-[100px]">Est. Loss</TableHead>
-                  <TableHead className="print:hidden">Reason</TableHead>
-                  <TableHead className="w-[100px] print:hidden">Logged By</TableHead>
-                </TableRow>
+      <LoadingOverlay isLoading={isPending}>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Detailed Records</CardTitle>
+            <CardDescription>{filteredItems.length} records found</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 print:bg-gray-100">
+                    <TableHead className="w-[100px]">Date</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="w-[130px]">Type</TableHead>
+                    <TableHead className="text-left w-[80px]">Qty</TableHead>
+                    <TableHead className="text-left w-[100px]">Est. Loss</TableHead>
+                    <TableHead className="print:hidden">Reason</TableHead>
+                    <TableHead className="w-[100px] print:hidden">Logged By</TableHead>
+                  </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredItems.length === 0 ? (
@@ -360,7 +361,7 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
                             {item.product_name}
                           </Link>
                           <p className="text-xs text-muted-foreground truncate">
-                            {item.category}
+                            {formatCategoryName(item.category)}
                             {item.barcode && ` • ${item.barcode}`}
                           </p>
                         </div>
@@ -391,8 +392,9 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
               </TableBody>
             </Table>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </LoadingOverlay>
     </ReportShell>
   );
 }
