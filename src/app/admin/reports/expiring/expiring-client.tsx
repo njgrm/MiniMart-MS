@@ -22,6 +22,8 @@ import {
   XCircle,
   Timer,
   Boxes,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import {
   Table,
@@ -42,14 +44,66 @@ import {
 } from "@/components/ui/select";
 import {
   ReportShell,
-  ReportSummaryCard,
-  ReportSection,
   SortableHeader,
 } from "@/components/reports/report-shell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
 import { type ExpiringReportResult, type ExpiringItem } from "@/actions/reports";
 import Link from "next/link";
+
+// Helper function for normal weight peso sign
+function formatPeso(amount: number): React.ReactNode {
+  return (
+    <>
+      <span className="font-normal">₱</span>
+      {amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+    </>
+  );
+}
+
+// Design system CompactCard with trend support
+interface CompactCardProps {
+  label: string;
+  value: string | React.ReactNode;
+  icon: React.ElementType;
+  trend?: { value: number; label: string };
+  variant?: "default" | "success" | "warning" | "danger";
+}
+
+function CompactCard({ label, value, icon: Icon, trend, variant = "default" }: CompactCardProps) {
+  const variantStyles = {
+    default: "text-foreground",
+    success: "text-[#2EAFC5]",
+    warning: "text-[#F1782F]",
+    danger: "text-[#AC0F16]",
+  };
+
+  return (
+    <Card className="bg-card">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={`h-4 w-4 ${variantStyles[variant]}`} />
+            <span className="text-sm text-muted-foreground">{label}</span>
+          </div>
+          {trend && (
+            <div className={`flex items-center gap-1 text-xs ${trend.value >= 0 ? "text-[#2EAFC5]" : "text-[#AC0F16]"}`}>
+              {trend.value >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              <span>{trend.value >= 0 ? "+" : ""}{trend.value}%</span>
+            </div>
+          )}
+        </div>
+        <p className={`text-2xl font-bold font-mono tabular-nums mt-2 ${variantStyles[variant]}`}>
+          {value}
+        </p>
+        {trend && (
+          <p className="text-xs text-muted-foreground mt-1">{trend.label}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface ExpiringReportClientProps {
   data: ExpiringReportResult;
@@ -235,15 +289,15 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
       {
         accessorKey: "value_at_risk",
         header: ({ column }) => (
-          <div className="text-right">
-            <SortableHeader column={column} className="justify-end">
+          <div className="text-left">
+            <SortableHeader column={column} className="justify-start">
               Value at Risk
             </SortableHeader>
           </div>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums text-[#AC0F16] font-medium">
-            ₱{row.original.value_at_risk.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="text-left font-mono tabular-nums text-[#AC0F16] font-medium">
+            {formatPeso(row.original.value_at_risk)}
           </div>
         ),
         size: 130,
@@ -390,83 +444,88 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ReportSummaryCard
+        <CompactCard
           label="Expired"
           value={data.summary.expired_count.toLocaleString()}
           icon={XCircle}
           variant="danger"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Critical (≤7 days)"
           value={data.summary.critical_count.toLocaleString()}
           icon={AlertCircle}
           variant="danger"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Warning (≤14 days)"
           value={data.summary.warning_count.toLocaleString()}
           icon={AlertTriangle}
           variant="warning"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Total Value at Risk"
-          value={`₱${data.summary.total_value_at_risk.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          value={formatPeso(data.summary.total_value_at_risk)}
           icon={DollarSign}
           variant="danger"
         />
       </div>
 
       {/* Urgency Breakdown */}
-      <ReportSection title="Urgency Breakdown">
-        <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-50">
-                <XCircle className="h-5 w-5 text-[#AC0F16]" />
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Urgency Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-red-50">
+                  <XCircle className="h-5 w-5 text-[#AC0F16]" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Expired</p>
+                  <p className="text-xl font-bold font-mono text-[#AC0F16] tabular-nums">
+                    {data.summary.expired_count.toLocaleString()} batches
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Expired</p>
-                <p className="text-xl font-bold font-mono text-[#AC0F16] tabular-nums">
-                  {data.summary.expired_count.toLocaleString()} batches
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-red-50">
+                  <AlertCircle className="h-5 w-5 text-[#AC0F16]" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Within 7 Days</p>
+                  <p className="text-xl font-bold font-mono text-[#AC0F16] tabular-nums">
+                    {data.summary.critical_count.toLocaleString()} batches
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-50">
-                <AlertCircle className="h-5 w-5 text-[#AC0F16]" />
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#F1782F]/10">
+                  <AlertTriangle className="h-5 w-5 text-[#F1782F]" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Within 14 Days</p>
+                  <p className="text-xl font-bold font-mono text-[#F1782F] tabular-nums">
+                    {data.summary.warning_count.toLocaleString()} batches
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Within 7 Days</p>
-                <p className="text-xl font-bold font-mono text-[#AC0F16] tabular-nums">
-                  {data.summary.critical_count.toLocaleString()} batches
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[#F1782F]/10">
-                <AlertTriangle className="h-5 w-5 text-[#F1782F]" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Within 14 Days</p>
-                <p className="text-xl font-bold font-mono text-[#F1782F] tabular-nums">
-                  {data.summary.warning_count.toLocaleString()} batches
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-[#2EAFC5]/10">
-                <Timer className="h-5 w-5 text-[#2EAFC5]" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Within 30 Days</p>
-                <p className="text-xl font-bold font-mono text-[#2EAFC5] tabular-nums">
-                  {data.summary.caution_count.toLocaleString()} batches
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-[#2EAFC5]/10">
+                  <Timer className="h-5 w-5 text-[#2EAFC5]" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Within 30 Days</p>
+                  <p className="text-xl font-bold font-mono text-[#2EAFC5] tabular-nums">
+                    {data.summary.caution_count.toLocaleString()} batches
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </ReportSection>
+        </CardContent>
+      </Card>
 
       {/* Alert for critical items */}
       {(data.summary.expired_count > 0 || data.summary.critical_count > 0) && (
@@ -494,87 +553,95 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
       )}
 
       {/* Detailed Table */}
-      <ReportSection
-        title="Expiring Batches"
-        description={`${table.getFilteredRowModel().rows.length} batches`}
-      >
-        <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
-                    {headerGroup.headers.map((header) => (
-                      <TableHead 
-                        key={header.id} 
-                        className="h-11"
-                        style={{ width: header.column.getSize() }}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
-                      <div className="flex flex-col items-center gap-2">
-                        <Boxes className="h-8 w-8 text-muted-foreground/50" />
-                        <p>No expiring products found within 30 days.</p>
-                        <p className="text-xs">Your inventory is in good shape!</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="print:text-sm hover:bg-muted/30"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell 
-                          key={cell.id}
-                          style={{ width: cell.column.getSize() }}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Expiring Batches</CardTitle>
+          <CardDescription>{table.getFilteredRowModel().rows.length} batches</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
+                      {headerGroup.headers.map((header) => (
+                        <TableHead 
+                          key={header.id} 
+                          className="h-11"
+                          style={{ width: header.column.getSize() }}
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                          <p>No expiring products found within 30 days.</p>
+                          <p className="text-xs">Your inventory is in good shape!</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="print:text-sm hover:bg-muted/30"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell 
+                            key={cell.id}
+                            style={{ width: cell.column.getSize() }}
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
 
-        {/* Pagination */}
-        <div className="mt-4 print-hidden" data-print-hidden="true">
-          <DataTablePagination table={table} />
-        </div>
-      </ReportSection>
+          {/* Pagination */}
+          <div className="mt-4 print-hidden" data-print-hidden="true">
+            <DataTablePagination table={table} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* FEFO Recommendations */}
       <div className="print-hidden" data-print-hidden="true">
-        <ReportSection title="FEFO Compliance Tips">
-          <div className="bg-[#2EAFC5]/5 border border-[#2EAFC5]/20 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <CalendarClock className="h-5 w-5 text-[#2EAFC5] mt-0.5" />
-              <div className="space-y-2">
-                <p className="font-medium text-[#2EAFC5]">First Expired, First Out (FEFO)</p>
-                <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-                  <li>Always sell items with nearest expiry date first</li>
-                  <li>Run promotions on items expiring within 14 days</li>
-                  <li>Consider return-to-supplier for items nearing expiry</li>
-                  <li>Monitor this report weekly to prevent wastage</li>
-                </ul>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">FEFO Compliance Tips</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-[#2EAFC5]/5 border border-[#2EAFC5]/20 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <CalendarClock className="h-5 w-5 text-[#2EAFC5] mt-0.5" />
+                <div className="space-y-2">
+                  <p className="font-medium text-[#2EAFC5]">First Expired, First Out (FEFO)</p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                    <li>Always sell items with nearest expiry date first</li>
+                    <li>Run promotions on items expiring within 14 days</li>
+                    <li>Consider return-to-supplier for items nearing expiry</li>
+                    <li>Monitor this report weekly to prevent wastage</li>
+                  </ul>
+                </div>
               </div>
             </div>
-          </div>
-        </ReportSection>
+          </CardContent>
+        </Card>
       </div>
     </ReportShell>
   );

@@ -60,7 +60,11 @@ export function NotificationBell({ userId, userType }: NotificationBellProps) {
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const lastCountRef = useRef(0);
+  
+  // Track which notification IDs have already shown a toast (persists across polls)
+  const toastedIdsRef = useRef<Set<string>>(new Set());
+  // Track if this is the initial fetch (skip toast on first load)
+  const isInitialFetchRef = useRef(true);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -69,23 +73,35 @@ export function NotificationBell({ userId, userType }: NotificationBellProps) {
       setNotifications(result.notifications);
       setUnreadCount(result.newCount);
 
-      // Show toast for new notifications
-      if (result.newCount > lastCountRef.current && lastCountRef.current > 0) {
-        const newNotification = result.notifications.find((n) => !n.is_read);
-        if (newNotification) {
-          toast.info(newNotification.title, {
-            description: newNotification.message,
-            action: newNotification.href
+      // Only show toast for NEW unread notifications we haven't toasted before
+      // Skip on initial fetch to avoid toasting existing notifications
+      if (!isInitialFetchRef.current) {
+        const newUnreadNotifications = result.notifications.filter(
+          (n) => !n.is_read && !toastedIdsRef.current.has(n.id)
+        );
+
+        // Show toast for each truly new notification
+        for (const notification of newUnreadNotifications) {
+          toastedIdsRef.current.add(notification.id);
+          toast.info(notification.title, {
+            description: notification.message,
+            action: notification.href
               ? {
                   label: "View",
-                  onClick: () => router.push(newNotification.href!),
+                  onClick: () => router.push(notification.href!),
                 }
               : undefined,
           });
         }
+      } else {
+        // On initial fetch, just add all existing notification IDs to the set
+        // so we don't toast them on subsequent polls
+        result.notifications.forEach((n) => {
+          toastedIdsRef.current.add(n.id);
+        });
+        isInitialFetchRef.current = false;
       }
 
-      lastCountRef.current = result.newCount;
       setIsLoading(false);
     } catch (error) {
       console.error("Failed to fetch notifications:", error);

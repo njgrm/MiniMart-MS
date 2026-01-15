@@ -151,12 +151,37 @@ export async function processAndSaveImage(
     console.log(`[process-image] Created Blob with type: ${imageBlob.type}, size: ${imageBlob.size} bytes`);
 
     // Step 3: Remove background using AI
+    // Note: GLib-GObject warnings may appear in console during processing.
+    // These are from the native ONNX runtime and can be safely ignored.
     console.log(`[process-image] Running AI background removal...`);
-    const resultBlob = await removeBackground(imageBlob, bgRemovalConfig);
     
-    // Convert the result Blob to Buffer
-    const bgRemovedBuffer = await blobToBuffer(resultBlob);
-    console.log(`[process-image] Background removed successfully!`);
+    // Temporarily suppress stderr for native library warnings (GLib-GObject)
+    // These warnings don't affect functionality but clutter the console
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    let suppressedWarnings = 0;
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stderr as any).write = (chunk: any, ...args: any[]) => {
+      const str = chunk?.toString?.() || "";
+      // Suppress GLib-GObject and ONNX warnings
+      if (str.includes("GLib-GObject") || str.includes("g_type_class_add_private")) {
+        suppressedWarnings++;
+        return true; // Pretend we wrote it
+      }
+      return originalStderrWrite(chunk, ...args);
+    };
+    
+    let bgRemovedBuffer: Buffer;
+    try {
+      const resultBlob = await removeBackground(imageBlob, bgRemovalConfig);
+      
+      // Convert the result Blob to Buffer
+      bgRemovedBuffer = await blobToBuffer(resultBlob);
+      console.log(`[process-image] Background removed successfully!${suppressedWarnings > 0 ? ` (${suppressedWarnings} native warnings suppressed)` : ""}`);
+    } finally {
+      // Always restore stderr even if bg removal fails
+      process.stderr.write = originalStderrWrite;
+    }
 
     // Step 4: Post-process with sharp
     // - trim(): Automatically crops transparent pixels
@@ -233,9 +258,30 @@ export async function processImageBuffer(fileBuffer: Buffer): Promise<{
     const pngBuffer = await sharpInstance(fileBuffer).png().toBuffer();
     const imageBlob = bufferToBlob(pngBuffer, "image/png");
 
-    // Remove background using AI
-    const resultBlob = await removeBackground(imageBlob, bgRemovalConfig);
-    const bgRemovedBuffer = await blobToBuffer(resultBlob);
+    // Remove background using AI with warning suppression
+    const originalStderrWrite = process.stderr.write.bind(process.stderr);
+    let suppressedWarnings = 0;
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stderr as any).write = (chunk: any, ...args: any[]) => {
+      const str = chunk?.toString?.() || "";
+      if (str.includes("GLib-GObject") || str.includes("g_type_class_add_private")) {
+        suppressedWarnings++;
+        return true;
+      }
+      return originalStderrWrite(chunk, ...args);
+    };
+    
+    let bgRemovedBuffer: Buffer;
+    try {
+      const resultBlob = await removeBackground(imageBlob, bgRemovalConfig);
+      bgRemovedBuffer = await blobToBuffer(resultBlob);
+      if (suppressedWarnings > 0) {
+        console.log(`[process-image] Background removed (${suppressedWarnings} native warnings suppressed)`);
+      }
+    } finally {
+      process.stderr.write = originalStderrWrite;
+    }
 
     // Post-process with sharp
     const processedBuffer = await sharpInstance(bgRemovedBuffer)

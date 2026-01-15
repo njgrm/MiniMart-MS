@@ -55,8 +55,8 @@ export function ReportsLayoutClient({ children }: { children: React.ReactNode })
       {/* Reports Sidebar Navigation - Hidden on mobile */}
       <aside className="w-44 shrink-0 border-r border-stone-200/80 bg-card hidden lg:flex lg:flex-col">
         {/* Back Button - Height matches toolbar h-12 */}
-        <div className="h-12 px-2 flex items-center border-b border-stone-200/80 shrink-0">
-          <Button variant="ghost" size="sm" asChild className="h-8 px-2 gap-1.5 text-xs w-full justify-start">
+        <div className="h-14 px-2 flex items-center border-b border-stone-200/80 shrink-0">
+          <Button variant="ghost" size="sm" asChild className="h-10 px-2 gap-1.5 text-sm w-full justify-start">
             <Link href="/admin/reports">
               <ChevronLeft className="h-4 w-4" />
               All Reports

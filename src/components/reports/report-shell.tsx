@@ -470,7 +470,7 @@ export function ReportShell({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar - Title + Description */}
-      <div className="shrink-0 bg-card border-b border-stone-200/80 h-12 flex items-center justify-between px-4">
+      <div className="shrink-0 bg-card border-b border-stone-200/80 h-14 flex items-center justify-between px-4">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <TooltipProvider>
             <Tooltip>
@@ -501,7 +501,7 @@ export function ReportShell({
           </div>
         </div>
         
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center translate-x-[-1.5vh]  gap-2 shrink-0">
           {/* Loading indicator */}
           {isLoading && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -522,7 +522,7 @@ export function ReportShell({
                     size="sm"
                     onClick={handleExcelExport}
                     disabled={isExporting}
-                    className={cn("h-7 gap-1 text-xs", exportSuccess && "border-[#2EAFC5] text-[#2EAFC5]")}
+                    className={cn("h-9 gap-1 text-xs", exportSuccess && "border-[#2EAFC5] text-[#2EAFC5]")}
                   >
                     {isExporting ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -542,7 +542,7 @@ export function ReportShell({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" onClick={handlePrint} className="h-7 gap-1 text-xs bg-[#AC0F16] hover:bg-[#8a0c12]">
+                <Button size="sm" onClick={handlePrint} className="h-9 gap-1 text-xs bg-[#AC0F16] hover:bg-[#8a0c12]">
                   <Printer className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Print</span>
                 </Button>

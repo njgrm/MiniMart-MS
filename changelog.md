@@ -6,6 +6,222 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-15
 
+### Vendor Portal UX Improvements - Phase 2
+
+**Verdict:** Fixed database field mapping, redesigned profile page with mobile-first design, and fixed duplicate notification toasts.
+
+#### 1. Database Field Fix
+
+**Files Modified:**
+- `src/actions/vendor.ts`
+
+**Problem:** Server action used `contact` but database field is `contact_details`.
+
+**Fix:** Changed `{ contact: data.contact }` to `{ contact_details: data.contact }` in `updateVendorProfile()`.
+
+#### 2. Profile Page Redesign (Mobile-First)
+
+**Files Modified:**
+- `src/app/vendor/profile/profile-client.tsx`
+
+**Design Changes:**
+- Dark header section with large avatar and camera icon overlay
+- Name and email displayed in header
+- Content area with rounded top corners that overlaps header
+- Grouped menu sections with consistent row styling
+- Inline editing for email and contact with save/cancel buttons
+- Quick Actions section (Browse Products, Order History)
+- Destructive logout button with red styling
+- Full dark mode support
+
+**UX Pattern:**
+- Touch-friendly row items (44px+ height)
+- Visual hierarchy with section labels
+- Consistent icon styling in circular containers
+
+#### 3. Notification Polling Fix (Duplicate Toast Prevention)
+
+**Files Modified:**
+- `src/components/ui/notification-bell.tsx`
+
+**Problem:** Polling caused same notifications to show toast repeatedly.
+
+**Solution:**
+- Added `toastedIdsRef` Set to track which notification IDs have been shown as toasts
+- Added `isInitialFetchRef` to skip toasting on first load
+- Only new notifications that haven't been toasted will trigger a toast
+- Existing notifications are added to the "seen" set on initial fetch
+
+**Behavior Change:**
+- First page load: No toasts (existing notifications silently loaded)
+- Subsequent polls: Only truly NEW notifications trigger toasts
+- Each notification ID can only trigger one toast ever
+
+---
+
+## [Previous] - 2026-01-15
+
+### Vendor Portal UX Improvements
+- `src/app/vendor/order/order-client.tsx`
+
+**Changes:**
+- **Removed category dropdown** - Wholesale products are now the only category, no filter needed
+- **Added direct quantity editing** - Users can now type exact quantities in both product cards and cart items
+- **Number input styling** - Clean inputs with hidden spinners for professional look
+- **Added `setQuantity()` function** - Allows setting exact quantity values rather than just +/- buttons
+
+#### 2. Profile Page Editable Fields
+
+**Files Created:**
+- `updateVendorProfile()` server action in `src/actions/vendor.ts`
+
+**Files Modified:**
+- `src/app/vendor/profile/profile-client.tsx`
+
+**Changes:**
+- **Email editing** - Click edit icon to modify email with validation
+- **Contact editing** - Click edit icon to modify phone number with Philippine format validation
+- **Toast feedback** - Success/error notifications for all profile updates
+- **Inline edit UX** - Save/cancel buttons appear during editing mode
+
+#### 3. Warm White Design System Implementation
+
+**Files Modified:**
+- `src/app/vendor/vendor-dashboard.tsx` - Quick Stats and Quick Actions sections
+- `src/app/vendor/layout-client.tsx` - Main layout background
+- `src/app/vendor/order/order-client.tsx` - Product cards and cart
+- `src/app/vendor/history/history-client.tsx` - Order history cards
+- `src/app/vendor/profile/profile-client.tsx` - Profile card
+- `src/components/vendor/live-order-status.tsx` - Order status cards
+- `src/components/vendor/quick-reorder-row.tsx` - Quick reorder section
+- `src/components/vendor/recent-orders-list.tsx` - Recent orders list
+
+**Design System Applied:**
+| Element | Old Class | New Class |
+|---------|-----------|-----------|
+| Card backgrounds | `bg-card`, `bg-white` | `bg-[#F8F6F1] dark:bg-zinc-900` |
+| Page backgrounds | `bg-zinc-50` | `bg-[#FAFAF9]` |
+| Borders | `border-border` | `border-stone-200 dark:border-zinc-700` |
+| Primary text | `text-foreground` | `text-[#2d1b1a] dark:text-white` |
+| Muted text | `text-muted-foreground` | `text-stone-500 dark:text-zinc-400` |
+| Hover states | `hover:bg-muted` | `hover:bg-stone-100 dark:hover:bg-zinc-800` |
+
+---
+
+## [Previous] - 2026-01-15
+
+### Reports Command Center Fixes & Performance Optimizations
+
+**Verdict:** Fixed critical Server Component error blocking site access, optimized database queries, and added caching.
+
+#### 1. Server Component onClick Fix
+
+**Problem:** WidgetCard component passed onClick handler to Button, which is not allowed in React Server Components.
+
+**Files Created:**
+- `src/components/reports/widget-export-button.tsx` - New Client Component for export functionality
+
+**Files Modified:**
+- `src/app/admin/reports/page.tsx` - Extracted interactive export button to client component
+
+**Changes:**
+- Created `WidgetExportButton` client component with proper event handling
+- Removed inline onClick from WidgetCard (now RSC-compatible)
+- Cleaned up unused imports (Download icon, Tooltip components)
+
+#### 2. Query Performance Optimization
+
+**File Modified:** `src/actions/reports.ts`
+
+**Problem:** `getEnhancedDashboardData` ran 7 sequential database queries for sparkline data.
+
+**Optimizations:**
+- Single batch query fetches all 7 days of transactions at once
+- Sparkline data built from in-memory filtering (not additional queries)
+- Used `aggregate()` for same-day-last-week comparison instead of fetching full records
+- Reduced database round trips from ~10+ to ~5
+
+#### 3. Caching Layer Added
+
+**File Modified:** `src/actions/reports.ts`
+
+**Changes:**
+- Wrapped `fetchEnhancedDashboardData` with `unstable_cache`
+- Cache duration: 60 seconds
+- Cache tags: `["dashboard", "reports"]` for targeted invalidation
+- Renamed internal function to `fetchEnhancedDashboardData`, exported cached wrapper as `getEnhancedDashboardData`
+
+---
+
+## [Previous] - 2026-01-15
+
+### Reports Module UI/UX Standardization (Phase 12) - Z-Read Pattern Rollout
+
+**Verdict:** Standardized all report pages to follow Z-Read "Golden Standard" pattern with consistent styling, peso formatting, and Card-based layouts.
+
+#### 1. Report Pages Standardized
+
+**Files Modified:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+- `src/app/admin/reports/spoilage/spoilage-client.tsx`
+- `src/app/admin/reports/expiring/expiring-client.tsx`
+- `src/app/admin/reports/sales-category/sales-category-client.tsx`
+
+**Changes Applied:**
+- **formatPeso Helper:** Normal weight peso sign (`₱`) with bold numbers
+- **CompactCard Component:** Replaced `ReportSummaryCard` with `CompactCard` supporting trend indicators
+- **Card Wrappers:** Replaced `ReportSection` with `Card`/`CardHeader`/`CardContent` for tables
+- **Left-Aligned Columns:** Changed numeric columns from right-aligned to left-aligned per design standards
+- **TrendingUp/TrendingDown Icons:** Added for trend visualization support
+
+#### 2. Report Shell Widget Cards
+
+**File Modified:** `src/app/admin/reports/page.tsx`
+
+**Changes:**
+- WidgetCard now fully clickable (entire card is a Link)
+- Added hover effects: `hover:border-primary/30`, `hover:shadow-md`, `hover:bg-muted/20`
+- Added ExternalLink icon and "View Report →" text for click affordance
+- Improved accessibility with cursor-pointer
+
+#### 3. Dashboard Peso Formatting
+
+**File Modified:** `src/app/admin/dashboard-client.tsx`
+
+**Changes:**
+- Added `formatPeso()` helper function
+- Applied to: Estimated Profit, Total Revenue, Total Cost metric cards
+- Peso sign uses normal weight while numbers remain bold
+
+#### 4. TypeScript Bug Fixes
+
+**File Modified:** `src/actions/reports.ts`
+
+**Fix:** Changed InventoryBatch property references:
+- `batch.current_quantity` → `batch.quantity`
+- `batch.batch_id` → `batch.id`
+- `batch.inventory.product` → `batch.product`
+
+#### 5. Vendor Products Filter
+
+**File Modified:** `src/actions/vendor.ts`
+
+**Change:** Added category filter to `getVendorProducts()` to only return `SOFTDRINKS_CASE` items (wholesale only)
+
+#### 6. Image Upload Warning Suppression
+
+**File Modified:** `src/lib/process-image.ts`
+
+**Fix:** Added stderr suppression for GLib-GObject warnings during AI background removal
+- Warnings from native ONNX runtime no longer clutter console
+- Processing functionality unchanged
+- Logged count of suppressed warnings for debugging
+
+---
+
+## [Previous] - 2026-01-15
+
 ### Reports Module UI/UX Enhancement (Phase 11) - Control Logic & Data Fixes
 
 **Verdict:** Added date range filtering, fixed data bugs, improved typography for Peso sign.

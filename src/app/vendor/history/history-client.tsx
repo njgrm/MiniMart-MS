@@ -196,11 +196,11 @@ export function VendorHistoryClient({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#2d1b1a] dark:text-white flex items-center gap-2">
             <IconHistory className="size-6" />
             Order History
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-stone-500 dark:text-zinc-400">
             View and manage your past orders
           </p>
         </div>
@@ -217,17 +217,17 @@ export function VendorHistoryClient({
       </div>
 
       {/* Orders List */}
-      <Card>
+      <Card className="bg-[#F8F6F1] dark:bg-zinc-900 border-stone-200 dark:border-zinc-700">
         <CardHeader>
-          <CardTitle>Your Orders</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-[#2d1b1a] dark:text-white">Your Orders</CardTitle>
+          <CardDescription className="text-stone-500 dark:text-zinc-400">
             {orders.length} total order{orders.length !== 1 ? "s" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-280px)]">
             {orders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+              <div className="flex flex-col items-center justify-center h-64 text-stone-500 dark:text-zinc-400">
                 <IconPackage className="size-12 mb-4 opacity-50" />
                 <p>No orders yet</p>
                 <p className="text-sm">Your orders will appear here</p>
@@ -280,14 +280,14 @@ export function VendorHistoryClient({
                       <div className="p-4">
                         {/* Order Summary */}
                         <CollapsibleTrigger asChild>
-                          <div className="flex items-center justify-between cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors">
+                          <div className="flex items-center justify-between cursor-pointer hover:bg-stone-100 dark:hover:bg-zinc-800 -m-2 p-2 rounded-lg transition-colors">
                             <div className="flex items-center gap-4">
-                              <div className="size-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                                <IconPackage className="size-6 text-primary" />
+                              <div className="size-12 rounded-lg bg-[#AC0F16]/10 flex items-center justify-center">
+                                <IconPackage className="size-6 text-[#AC0F16]" />
                               </div>
                               <div>
-                                <p className="font-semibold">Order #{order.order_id}</p>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="font-semibold text-[#2d1b1a] dark:text-white">Order #{order.order_id}</p>
+                                <p className="text-sm text-stone-500 dark:text-zinc-400">
                                   {formatDate(order.order_date)}
                                 </p>
                               </div>
@@ -303,9 +303,9 @@ export function VendorHistoryClient({
                                 </Badge>
                               </div>
                               {isExpanded ? (
-                                <IconChevronUp className="size-5 text-muted-foreground" />
+                                <IconChevronUp className="size-5 text-stone-500 dark:text-zinc-400" />
                               ) : (
-                                <IconChevronDown className="size-5 text-muted-foreground" />
+                                <IconChevronDown className="size-5 text-stone-500 dark:text-zinc-400" />
                               )}
                             </div>
                           </div>
@@ -316,16 +316,16 @@ export function VendorHistoryClient({
                           <div className="mt-4 pt-4 border-t">
                             {/* Items */}
                             <div className="space-y-2 mb-4">
-                              <p className="text-sm font-medium text-muted-foreground">Items</p>
-                              <div className="bg-muted/50 rounded-lg divide-y">
+                              <p className="text-sm font-medium text-stone-500 dark:text-zinc-400">Items</p>
+                              <div className="bg-stone-100/50 dark:bg-zinc-800/50 rounded-lg divide-y divide-stone-200 dark:divide-zinc-700">
                                 {order.items.map((item, idx) => (
                                   <div
                                     key={idx}
                                     className="flex items-center justify-between p-3"
                                   >
                                     <div>
-                                      <p className="font-medium">{item.product_name}</p>
-                                      <p className="text-sm text-muted-foreground">
+                                      <p className="font-medium text-[#2d1b1a] dark:text-white">{item.product_name}</p>
+                                      <p className="text-sm text-stone-500 dark:text-zinc-400">
                                         {item.quantity} × {formatCurrency(item.price)}
                                       </p>
                                     </div>
@@ -344,7 +344,7 @@ export function VendorHistoryClient({
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <div className="flex items-center gap-1 text-xs text-stone-500 dark:text-zinc-400">
                                         <IconInfoCircle className="size-4" />
                                         <span>Why can&apos;t I cancel?</span>
                                       </div>

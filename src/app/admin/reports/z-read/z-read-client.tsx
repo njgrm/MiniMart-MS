@@ -641,7 +641,7 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
           </div>
 
           {/* Pagination */}
-          <div className="px-3 mt-3 pb-0 border-t top-0 translate-y-1 border-stone-100" data-print-hidden="true">
+          <div className="px-3 mt-3 pb-0 border-t top-0 translate-y-2.5 border-stone-100" data-print-hidden="true">
             <DataTablePagination table={table} />
           </div>
         </CardContent>

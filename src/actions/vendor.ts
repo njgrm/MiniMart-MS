@@ -66,6 +66,10 @@ export interface CartItem {
 
 /**
  * Get products available for vendors (with wholesale prices)
+ * 
+ * WHOLESALE ONLY: Only returns products in the SOFTDRINKS_CASE category.
+ * These are case/bundle items meant for resellers, not retail customers.
+ * 
  * If wholesale_price is 0, use retail_price instead.
  * This allows products to have different distribution vs in-store pricing.
  * 
@@ -79,6 +83,7 @@ export async function getVendorProducts(): Promise<VendorProduct[]> {
   const products = await prisma.product.findMany({
     where: {
       deletedAt: null, // Only active products
+      category: "SOFTDRINKS_CASE", // WHOLESALE ONLY - Case items for resellers
     },
     include: {
       inventory: {
@@ -460,6 +465,58 @@ export async function getCustomerId(): Promise<number | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
   return parseInt(session.user.id);
+}
+
+/**
+ * Update vendor profile (email and contact)
+ */
+export async function updateVendorProfile(
+  customerId: number,
+  data: { email?: string; contact?: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    // Verify the customer ID matches the session
+    const sessionCustomerId = parseInt(session.user.id);
+    if (sessionCustomerId !== customerId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Validate email format if provided
+    if (data.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email)) {
+        return { success: false, error: "Invalid email format" };
+      }
+    }
+
+    // Validate contact format if provided (Philippine format)
+    if (data.contact) {
+      const contactRegex = /^(\+63|0)?9\d{9}$/;
+      if (!contactRegex.test(data.contact.replace(/[\s-]/g, ""))) {
+        return { success: false, error: "Invalid contact number format" };
+      }
+    }
+
+    // Update the customer
+    await prisma.customer.update({
+      where: { customer_id: customerId },
+      data: {
+        ...(data.email && { email: data.email }),
+        ...(data.contact && { contact_details: data.contact }),
+      },
+    });
+
+    revalidatePath("/vendor/profile");
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating vendor profile:", error);
+    return { success: false, error: "Failed to update profile" };
+  }
 }
 
 /**

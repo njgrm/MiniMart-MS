@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-table";
 import {
   TrendingUp,
+  TrendingDown,
   AlertTriangle,
   DollarSign,
   Search,
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -42,16 +44,69 @@ import {
 } from "@/components/ui/select";
 import {
   ReportShell,
-  ReportSummaryCard,
-  ReportSection,
   SortableHeader,
 } from "@/components/reports/report-shell";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
 import { type MarginReportResult, type MarginItem } from "@/actions/reports";
+import { cn } from "@/lib/utils";
 
 interface ProfitMarginClientProps {
   data: MarginReportResult;
+}
+
+// Helper: Format peso with normal weight sign (returns JSX)
+function formatPeso(amount: number, options?: { decimals?: number; className?: string }) {
+  const decimals = options?.decimals ?? 2;
+  const formatted = amount.toLocaleString(undefined, { 
+    minimumFractionDigits: decimals, 
+    maximumFractionDigits: decimals 
+  });
+  return (
+    <span className={options?.className}>
+      <span className="font-normal">₱</span>{formatted}
+    </span>
+  );
+}
+
+// Compact Summary Card Component
+interface CompactCardProps {
+  label: string;
+  value: string | number | React.ReactNode;
+  subtitle?: string;
+  icon: React.ElementType;
+  variant?: "default" | "success" | "warning" | "danger";
+}
+
+function CompactCard({ label, value, subtitle, icon: Icon, variant = "default" }: CompactCardProps) {
+  const variantStyles = {
+    default: { bg: "bg-card border-stone-200/80", iconBg: "bg-stone-100 text-stone-600", value: "text-foreground" },
+    success: { bg: "bg-[#2EAFC5]/5 border-[#2EAFC5]/20", iconBg: "bg-[#2EAFC5]/10 text-[#2EAFC5]", value: "text-[#2EAFC5]" },
+    warning: { bg: "bg-[#F1782F]/5 border-[#F1782F]/20", iconBg: "bg-[#F1782F]/10 text-[#F1782F]", value: "text-[#F1782F]" },
+    danger: { bg: "bg-[#AC0F16]/5 border-[#AC0F16]/20", iconBg: "bg-[#AC0F16]/10 text-[#AC0F16]", value: "text-[#AC0F16]" },
+  };
+  const styles = variantStyles[variant];
+
+  return (
+    <Card className={cn("border shadow-sm h-full", styles.bg)}>
+      <CardContent className="p-3 py-4 h-full flex flex-col">
+        <div className="flex items-start gap-2">
+          <div className={cn("p-1.5 rounded-lg", styles.iconBg)}>
+            <Icon className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+              {label}
+            </p>
+            <p className={cn("text-xl font-bold tabular-nums font-mono", styles.value)}>
+              {value}
+            </p>
+            {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // Design system colors from AGENTS.md
@@ -149,13 +204,13 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       {
         accessorKey: "cost_price",
         header: () => (
-          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+          <span className="uppercase text-[11px] font-semibold tracking-wider text-muted-foreground">
             Cost
-          </div>
+          </span>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums">
-            ₱{row.original.cost_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="font-mono tabular-nums text-sm">
+            {formatPeso(row.original.cost_price)}
           </div>
         ),
         size: 100,
@@ -163,13 +218,13 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       {
         accessorKey: "retail_price",
         header: () => (
-          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+          <span className="uppercase text-[11px] font-semibold tracking-wider text-muted-foreground">
             Retail
-          </div>
+          </span>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums">
-            ₱{row.original.retail_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="font-mono tabular-nums text-sm">
+            {formatPeso(row.original.retail_price)}
           </div>
         ),
         size: 100,
@@ -242,33 +297,27 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       {
         accessorKey: "units_sold_30d",
         header: () => (
-          <div className="text-right font-medium text-muted-foreground uppercase text-[11px] tracking-wide">
+          <span className="uppercase text-[11px] font-semibold tracking-wider text-muted-foreground">
             Sold (30d)
-          </div>
+          </span>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums">{row.original.units_sold_30d.toLocaleString()}</div>
+          <div className="font-mono tabular-nums text-sm">{row.original.units_sold_30d.toLocaleString()}</div>
         ),
         size: 90,
       },
       {
         accessorKey: "total_profit_30d",
         header: ({ column }) => (
-          <div className="text-right">
-            <SortableHeader column={column} className="justify-end">
-              Profit (30d)
-            </SortableHeader>
-          </div>
+          <SortableHeader column={column}>
+            Profit (30d)
+          </SortableHeader>
         ),
         cell: ({ row }) => {
           const profit = row.original.total_profit_30d;
           return (
-            <div
-              className={`text-right font-mono tabular-nums font-medium ${
-                profit < 0 ? "text-[#AC0F16]" : "text-[#2EAFC5]"
-              }`}
-            >
-              ₱{profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            <div className={cn("font-mono tabular-nums font-medium text-sm", profit < 0 ? "text-[#AC0F16]" : "text-[#2EAFC5]")}>
+              {formatPeso(profit)}
             </div>
           );
         },
@@ -367,7 +416,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
             placeholder="Search products..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9"
+            className="pl-9 py-2.25"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -399,27 +448,31 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ReportSummaryCard
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <CompactCard
           label="Negative Margin"
           value={data.summary.negative_margin_count.toLocaleString()}
+          subtitle="Products selling below cost"
           icon={AlertCircle}
           variant="danger"
         />
-        <ReportSummaryCard
-          label="Low Margin (<10%)"
+        <CompactCard
+          label="Low Margin"
           value={data.summary.low_margin_count.toLocaleString()}
+          subtitle="Products with <10% margin"
           icon={AlertTriangle}
           variant="warning"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Avg Margin"
           value={`${data.summary.avg_margin_percent}%`}
+          subtitle="Across all products"
           icon={Percent}
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Total Profit (30d)"
-          value={`₱${data.summary.total_potential_profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          value={formatPeso(data.summary.total_potential_profit)}
+          subtitle="From sold products"
           icon={DollarSign}
           variant="success"
         />
@@ -450,13 +503,20 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
         </div>
       )}
 
-      {/* Detailed Table */}
-      <ReportSection
-        title="Product Margin Details"
-        description={`${table.getFilteredRowModel().rows.length} products`}
-      >
-        <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <div className="overflow-x-auto">
+      {/* Detailed Table - Card Wrapper */}
+      <Card className="border-stone-200/80 bg-card  shadow-sm">
+        <CardHeader className="py-0 px-6 border-b pb-0 mb-0 border-stone-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-semibold pb-0 mb-0">Product Margin Details</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5 pb-0 mb-0">
+                {table.getFilteredRowModel().rows.length} products • Sorted by margin % (lowest first)
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 pb-0 translate-y-[-6.5vh]">
+          <div className="overflow-x-auto border border-stone-200/80 rounded-lg">
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -464,7 +524,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
                     {headerGroup.headers.map((header) => (
                       <TableHead 
                         key={header.id} 
-                        className="h-11"
+                        className="h-10 px-4"
                         style={{ width: header.column.getSize() }}
                       >
                         {header.isPlaceholder
@@ -494,6 +554,7 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
                       {row.getVisibleCells().map((cell) => (
                         <TableCell 
                           key={cell.id}
+                          className="px-4 py-2.5"
                           style={{ width: cell.column.getSize() }}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -505,13 +566,13 @@ export function ProfitMarginClient({ data }: ProfitMarginClientProps) {
               </TableBody>
             </Table>
           </div>
-        </div>
 
-        {/* Pagination */}
-        <div className="mt-4 print-hidden" data-print-hidden="true">
-          <DataTablePagination table={table} />
-        </div>
-      </ReportSection>
+          {/* Pagination */}
+          <div className="px-4 py-3 border-t border-stone-100 print-hidden" data-print-hidden="true">
+            <DataTablePagination table={table} />
+          </div>
+        </CardContent>
+      </Card>
     </ReportShell>
   );
 }

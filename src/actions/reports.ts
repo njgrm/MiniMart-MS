@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { Prisma, StockMovementType } from "@prisma/client";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
+import { unstable_cache } from "next/cache";
 
 // ============================================================================
 // Types
@@ -667,11 +668,11 @@ export interface ExpiringItem {
   barcode: string | null;
   batch_id: number;
   batch_number: string | null;
-  quantity: number;
+  current_quantity: number;
   expiry_date: Date;
   days_until_expiry: number;
   cost_price: number;
-  value_at_risk: number; // quantity * cost_price
+  value_at_risk: number; // current_quantity * cost_price
   urgency: "expired" | "critical" | "warning" | "caution";
   supplier_name: string | null;
 }
@@ -744,7 +745,7 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
       barcode: product.barcode,
       batch_id: batch.id,
       batch_number: batch.supplier_ref,
-      quantity: batch.quantity,
+      current_quantity: batch.quantity,
       expiry_date: expiryDate,
       days_until_expiry: daysUntilExpiry,
       cost_price: costPrice,
@@ -764,461 +765,13 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
     items,
     summary: {
       total_batches: items.length,
-      total_units_at_risk: items.reduce((sum, i) => sum + i.quantity, 0),
+      total_units_at_risk: items.reduce((sum, i) => sum + i.current_quantity, 0),
       total_value_at_risk: items.reduce((sum, i) => sum + i.value_at_risk, 0),
       expired_count: expired.length,
       critical_count: critical.length,
       warning_count: warning.length,
       caution_count: caution.length,
     },
-  };
-}
-
-// ============================================================================
-// Dashboard Summary Actions (Lightweight metrics for Reports landing page)
-// ============================================================================
-
-export interface DashboardSummary {
-  deadStockCount: number;
-  deadStockCapital: number;
-  spoilageLossThisMonth: number;
-  lastZReadDate: Date | null;
-  lastZReadAmount: number;
-  expiringCriticalCount: number;
-}
-
-/**
- * Get lightweight summary data for the Reports dashboard
- * Optimized for fast loading - only fetches aggregate counts
- */
-export async function getReportsDashboardSummary(): Promise<DashboardSummary> {
-  const thirtyDaysAgo = subDays(new Date(), 30);
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const today = startOfDay(new Date());
-  const sevenDaysFromNow = subDays(today, -7);
-
-  // Run all queries in parallel for speed
-  const [
-    deadStockData,
-    spoilageData,
-    lastZRead,
-    expiringData,
-  ] = await Promise.all([
-    // Dead stock count and capital - using Prisma for safety
-    (async () => {
-      // Get products with no sales in last 30 days
-      const salesProductIds = await prisma.dailySalesAggregate.findMany({
-        where: { date: { gte: thirtyDaysAgo } },
-        select: { product_id: true },
-        distinct: ['product_id'],
-      });
-      const productIdsWithSales = new Set(salesProductIds.map(s => s.product_id));
-      
-      const products = await prisma.product.findMany({
-        where: {
-          deletedAt: null,
-          status: "ACTIVE",
-        },
-        include: { inventory: true },
-      });
-      
-      let count = 0;
-      let capital = 0;
-      for (const p of products) {
-        const stock = p.inventory?.current_stock ?? 0;
-        if (stock > 0 && !productIdsWithSales.has(p.product_id)) {
-          count++;
-          capital += stock * Number(p.cost_price || 0);
-        }
-      }
-      return { count, capital };
-    })(),
-    
-    // Spoilage loss this month
-    prisma.stockMovement.aggregate({
-      where: {
-        movement_type: { in: ["DAMAGE", "SUPPLIER_RETURN"] },
-        quantity_change: { lt: 0 },
-        created_at: { gte: startOfMonth },
-      },
-      _sum: {
-        quantity_change: true,
-      },
-    }),
-    
-    // Last Z-Read (most recent completed transaction date)
-    prisma.transaction.findFirst({
-      where: { status: "COMPLETED" },
-      orderBy: { created_at: "desc" },
-      select: { created_at: true, total_amount: true },
-    }),
-    
-    // Critical expiring items (within 7 days) - use 'quantity' not 'current_quantity'
-    prisma.inventoryBatch.count({
-      where: {
-        status: "ACTIVE",
-        deletedAt: null,
-        quantity: { gt: 0 },
-        expiry_date: {
-          lte: sevenDaysFromNow,
-        },
-      },
-    }),
-  ]);
-
-  // Calculate spoilage loss - need to get costs
-  let spoilageLoss = 0;
-  if (spoilageData._sum.quantity_change) {
-    const movements = await prisma.stockMovement.findMany({
-      where: {
-        movement_type: { in: ["DAMAGE", "SUPPLIER_RETURN"] },
-        quantity_change: { lt: 0 },
-        created_at: { gte: startOfMonth },
-      },
-      include: {
-        inventory: {
-          include: { product: true },
-        },
-      },
-    });
-    
-    spoilageLoss = movements.reduce((sum, m) => {
-      const cost = Number(m.cost_price) || Number(m.inventory.product.cost_price) || 0;
-      return sum + Math.abs(m.quantity_change) * cost;
-    }, 0);
-  }
-
-  return {
-    deadStockCount: deadStockData.count,
-    deadStockCapital: Math.round(deadStockData.capital * 100) / 100,
-    spoilageLossThisMonth: Math.round(spoilageLoss * 100) / 100,
-    lastZReadDate: lastZRead?.created_at ?? null,
-    lastZReadAmount: lastZRead ? Number(lastZRead.total_amount) : 0,
-    expiringCriticalCount: expiringData,
-  };
-}
-
-// ============================================================================
-// Enhanced Dashboard Data (Live Widgets for Reports Shell)
-// ============================================================================
-
-export interface TodaySnapshot {
-  date: Date;
-  transactionCount: number;
-  grossSales: number;
-  grossProfit: number;
-  cashSales: number;
-  gcashSales: number;
-  voidCount: number;
-  voidAmount: number;
-  avgTicket: number;
-  // Comparison with same day last week
-  salesChangePercent: number;
-  profitChangePercent: number;
-}
-
-export interface SalesSparklineData {
-  date: string; // ISO date
-  revenue: number;
-  profit: number;
-}
-
-export interface TopCategoryData {
-  category: string;
-  revenue: number;
-  percent: number;
-}
-
-export interface TopDeadStockItem {
-  productId: number;
-  productName: string;
-  daysWithoutSale: number;
-  capitalTied: number;
-}
-
-export interface InventoryHealthData {
-  healthyPercent: number;
-  deadStockCount: number;
-  slowMoverCount: number;
-  fastMoverCount: number;
-  totalProducts: number;
-}
-
-export interface EnhancedDashboardData {
-  // Today's live Z-Read data
-  todaySnapshot: TodaySnapshot | null;
-  // Last 7 days of sales for sparkline
-  salesSparkline: SalesSparklineData[];
-  // Top 3 categories by revenue (last 30 days)
-  topCategories: TopCategoryData[];
-  // Top 3 dead stock items by capital tied
-  topDeadStock: TopDeadStockItem[];
-  // Inventory health summary
-  inventoryHealth: InventoryHealthData;
-  // Existing summary data
-  spoilageLossThisMonth: number;
-  expiringCriticalCount: number;
-  lastZReadDate: Date | null;
-}
-
-/**
- * Get comprehensive dashboard data for live widgets
- * This powers the "Command Center" view of the Reports shell
- */
-export async function getEnhancedDashboardData(): Promise<EnhancedDashboardData> {
-  const today = startOfDay(new Date());
-  const todayEnd = endOfDay(new Date());
-  const sevenDaysAgo = subDays(today, 7);
-  const thirtyDaysAgo = subDays(today, 30);
-  const sameDayLastWeek = subDays(today, 7);
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const sevenDaysFromNow = subDays(today, -7);
-
-  // Run all queries in parallel
-  const [
-    todayTransactions,
-    lastWeekSameDayTransactions,
-    last7DaysSales,
-    top3Categories,
-    inventoryHealthData,
-    spoilageData,
-    expiringData,
-    lastZRead,
-  ] = await Promise.all([
-    // Today's transactions with payment info
-    prisma.transaction.findMany({
-      where: {
-        status: "COMPLETED",
-        created_at: { gte: today, lte: todayEnd },
-      },
-      select: {
-        total_amount: true,
-        payment: {
-          select: { payment_method: true },
-        },
-      },
-    }),
-
-    // Same day last week for comparison
-    prisma.transaction.findMany({
-      where: {
-        status: "COMPLETED",
-        created_at: { 
-          gte: startOfDay(sameDayLastWeek), 
-          lte: endOfDay(sameDayLastWeek) 
-        },
-      },
-      select: { total_amount: true },
-    }),
-
-    // Last 7 days sales aggregates for sparkline
-    prisma.dailySalesAggregate.groupBy({
-      by: ['date'],
-      where: {
-        date: { gte: sevenDaysAgo },
-      },
-      _sum: {
-        revenue: true,
-        profit: true,
-      },
-      orderBy: { date: 'asc' },
-    }),
-
-    // Top 3 categories by revenue (last 30 days) - need to aggregate manually
-    (async () => {
-      // Get sales data
-      const salesData = await prisma.dailySalesAggregate.findMany({
-        where: { date: { gte: thirtyDaysAgo } },
-        select: { product_id: true, revenue: true },
-      });
-      
-      // Get products for category info
-      const productIds = [...new Set(salesData.map(s => s.product_id))];
-      const products = await prisma.product.findMany({
-        where: { product_id: { in: productIds } },
-        select: { product_id: true, category: true },
-      });
-      const productMap = new Map(products.map(p => [p.product_id, p.category]));
-      
-      // Group by category
-      const categoryMap = new Map<string, number>();
-      for (const sale of salesData) {
-        const cat = productMap.get(sale.product_id) || "Uncategorized";
-        categoryMap.set(cat, (categoryMap.get(cat) || 0) + Number(sale.revenue));
-      }
-      
-      // Sort and take top 3
-      return Array.from(categoryMap.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([category, revenue]) => ({ category, revenue }));
-    })(),
-
-    // Inventory health - get all products with sales data
-    (async () => {
-      const salesProductIds = await prisma.dailySalesAggregate.findMany({
-        where: { date: { gte: thirtyDaysAgo } },
-        select: { product_id: true },
-        distinct: ['product_id'],
-      });
-      const productIdsWithSales = new Set(salesProductIds.map(s => s.product_id));
-
-      const products = await prisma.product.findMany({
-        where: { deletedAt: null, status: "ACTIVE" },
-        include: { inventory: true },
-      });
-
-      let deadStock = 0, slowMover = 0, fastMover = 0, healthy = 0;
-      const deadStockItems: { productId: number; productName: string; daysWithoutSale: number; capitalTied: number }[] = [];
-
-      for (const p of products) {
-        const stock = p.inventory?.current_stock ?? 0;
-        if (stock <= 0) continue;
-        
-        if (!productIdsWithSales.has(p.product_id)) {
-          deadStock++;
-          deadStockItems.push({
-            productId: p.product_id,
-            productName: p.product_name,
-            daysWithoutSale: 30,
-            capitalTied: stock * Number(p.cost_price || 0),
-          });
-        } else {
-          // Get 30d sales for this product
-          const sales = await prisma.dailySalesAggregate.aggregate({
-            where: { product_id: p.product_id, date: { gte: thirtyDaysAgo } },
-            _sum: { quantity_sold: true },
-          });
-          const velocity = (sales._sum.quantity_sold || 0) / 30;
-          
-          if (velocity < 0.1) slowMover++;
-          else if (velocity > 2) fastMover++;
-          else healthy++;
-        }
-      }
-
-      // Sort dead stock by capital tied and take top 3
-      const topDeadStock = deadStockItems
-        .sort((a, b) => b.capitalTied - a.capitalTied)
-        .slice(0, 3);
-
-      return {
-        deadStock,
-        slowMover,
-        fastMover,
-        healthy,
-        total: products.filter(p => (p.inventory?.current_stock ?? 0) > 0).length,
-        topDeadStock,
-      };
-    })(),
-
-    // Spoilage this month
-    prisma.stockMovement.findMany({
-      where: {
-        movement_type: { in: ["DAMAGE", "SUPPLIER_RETURN"] },
-        quantity_change: { lt: 0 },
-        created_at: { gte: startOfMonth },
-      },
-      include: { inventory: { include: { product: true } } },
-    }),
-
-    // Critical expiring items
-    prisma.inventoryBatch.count({
-      where: {
-        status: "ACTIVE",
-        deletedAt: null,
-        quantity: { gt: 0 },
-        expiry_date: { lte: sevenDaysFromNow },
-      },
-    }),
-
-    // Last transaction date
-    prisma.transaction.findFirst({
-      where: { status: "COMPLETED" },
-      orderBy: { created_at: "desc" },
-      select: { created_at: true },
-    }),
-  ]);
-
-  // Calculate today's snapshot
-  let todaySnapshot: TodaySnapshot | null = null;
-  if (todayTransactions.length > 0) {
-    const grossSales = todayTransactions.reduce((sum, t) => sum + Number(t.total_amount), 0);
-    const cashSales = todayTransactions
-      .filter(t => t.payment?.payment_method === "CASH")
-      .reduce((sum, t) => sum + Number(t.total_amount), 0);
-    const gcashSales = todayTransactions
-      .filter(t => t.payment?.payment_method === "GCASH")
-      .reduce((sum, t) => sum + Number(t.total_amount), 0);
-    
-    const lastWeekSales = lastWeekSameDayTransactions.reduce((sum, t) => sum + Number(t.total_amount), 0);
-    const salesChangePercent = lastWeekSales > 0 
-      ? Math.round(((grossSales - lastWeekSales) / lastWeekSales) * 100)
-      : 0;
-
-    // Estimate profit (typically ~10-15% margin)
-    const grossProfit = grossSales * 0.12; // Rough estimate
-
-    todaySnapshot = {
-      date: today,
-      transactionCount: todayTransactions.length,
-      grossSales: Math.round(grossSales * 100) / 100,
-      grossProfit: Math.round(grossProfit * 100) / 100,
-      cashSales: Math.round(cashSales * 100) / 100,
-      gcashSales: Math.round(gcashSales * 100) / 100,
-      voidCount: 0, // Would need void transaction tracking
-      voidAmount: 0,
-      avgTicket: Math.round((grossSales / todayTransactions.length) * 100) / 100,
-      salesChangePercent,
-      profitChangePercent: salesChangePercent, // Same for now
-    };
-  }
-
-  // Build sparkline data
-  const salesSparkline: SalesSparklineData[] = last7DaysSales.map(day => ({
-    date: format(day.date, 'yyyy-MM-dd'),
-    revenue: Number(day._sum.revenue) || 0,
-    profit: Number(day._sum.profit) || 0,
-  }));
-
-  // Calculate total revenue for percentage
-  const totalCategoryRevenue = top3Categories.reduce((sum, c) => sum + c.revenue, 0);
-  
-  // Build top categories
-  const topCategories: TopCategoryData[] = top3Categories.map(c => ({
-    category: c.category || 'Unknown',
-    revenue: c.revenue,
-    percent: totalCategoryRevenue > 0 
-      ? Math.round(c.revenue / totalCategoryRevenue * 100)
-      : 0,
-  }));
-
-  // Calculate spoilage loss
-  const spoilageLoss = spoilageData.reduce((sum, m) => {
-    const cost = Number(m.cost_price) || Number(m.inventory.product.cost_price) || 0;
-    return sum + Math.abs(m.quantity_change) * cost;
-  }, 0);
-
-  // Inventory health
-  const inventoryHealth: InventoryHealthData = {
-    healthyPercent: inventoryHealthData.total > 0
-      ? Math.round(((inventoryHealthData.healthy + inventoryHealthData.fastMover) / inventoryHealthData.total) * 100)
-      : 100,
-    deadStockCount: inventoryHealthData.deadStock,
-    slowMoverCount: inventoryHealthData.slowMover,
-    fastMoverCount: inventoryHealthData.fastMover,
-    totalProducts: inventoryHealthData.total,
-  };
-
-  return {
-    todaySnapshot,
-    salesSparkline,
-    topCategories,
-    topDeadStock: inventoryHealthData.topDeadStock,
-    inventoryHealth,
-    spoilageLossThisMonth: Math.round(spoilageLoss * 100) / 100,
-    expiringCriticalCount: expiringData,
-    lastZReadDate: lastZRead?.created_at ?? null,
   };
 }
 
@@ -1250,3 +803,278 @@ export async function prepareExcelData<T extends Record<string, unknown>>(
     rows: items,
   };
 }
+
+// ============================================================================
+// Enhanced Dashboard Data (Reports Command Center)
+// ============================================================================
+
+export interface TopCategoryData {
+  category: string;
+  revenue: number;
+  percent: number;
+}
+
+export interface TopDeadStockItem {
+  productId: number;
+  productName: string;
+  capitalTied: number;
+}
+
+export interface EnhancedDashboardData {
+  todaySnapshot: {
+    grossSales: number;
+    transactionCount: number;
+    avgTicket: number;
+    cashSales: number;
+    gcashSales: number;
+    grossProfit: number;
+    salesChangePercent: number;
+  };
+  salesSparkline: { date: string; revenue: number; profit: number }[];
+  topCategories: TopCategoryData[];
+  inventoryHealth: {
+    totalProducts: number;
+    fastMoverCount: number;
+    slowMoverCount: number;
+    deadStockCount: number;
+  };
+  topDeadStock: TopDeadStockItem[];
+  spoilageLossThisMonth: number;
+  expiringCriticalCount: number;
+}
+
+/**
+ * Get enhanced dashboard data for Reports Command Center
+ * Aggregates multiple data sources for the overview page
+ * 
+ * OPTIMIZED: Uses single batch query for sparkline data instead of 7 sequential queries
+ * CACHED: Results cached for 60 seconds to reduce database load
+ */
+async function fetchEnhancedDashboardData(): Promise<EnhancedDashboardData> {
+  const today = new Date();
+  const startOfToday = startOfDay(today);
+  const endOfToday = endOfDay(today);
+  const sevenDaysAgo = startOfDay(subDays(today, 6)); // Include today = 7 days
+  const thirtyDaysAgo = subDays(today, 30);
+  const sameDayLastWeek = subDays(today, 7);
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  // ---- BATCH QUERY: Get all transactions for last 7 days in ONE query ----
+  const last7DaysTransactions = await prisma.transaction.findMany({
+    where: {
+      status: "COMPLETED",
+      created_at: { gte: sevenDaysAgo, lte: endOfToday },
+    },
+    include: { 
+      items: true,
+      payment: true,
+    },
+  });
+
+  // ---- Process Today's Snapshot from batch data ----
+  const todayTransactions = last7DaysTransactions.filter(
+    (t) => t.created_at >= startOfToday && t.created_at <= endOfToday
+  );
+
+  const grossSales = todayTransactions.reduce((sum, t) => sum + Number(t.total_amount), 0);
+  const transactionCount = todayTransactions.length;
+  const avgTicket = transactionCount > 0 ? grossSales / transactionCount : 0;
+  const cashSales = todayTransactions
+    .filter((t) => t.payment?.payment_method === "CASH")
+    .reduce((sum, t) => sum + Number(t.total_amount), 0);
+  const gcashSales = todayTransactions
+    .filter((t) => t.payment?.payment_method === "GCASH")
+    .reduce((sum, t) => sum + Number(t.total_amount), 0);
+  
+  // Calculate profit from transaction items (cost_at_sale)
+  let grossProfit = 0;
+  for (const txn of todayTransactions) {
+    for (const item of txn.items) {
+      const revenue = Number(item.subtotal);
+      const cost = Number(item.cost_at_sale) * item.quantity;
+      grossProfit += revenue - cost;
+    }
+  }
+
+  // Same day last week comparison - single query
+  const lastWeekDayStart = startOfDay(sameDayLastWeek);
+  const lastWeekDayEnd = endOfDay(sameDayLastWeek);
+  const lastWeekAggregate = await prisma.transaction.aggregate({
+    where: {
+      status: "COMPLETED",
+      created_at: { gte: lastWeekDayStart, lte: lastWeekDayEnd },
+    },
+    _sum: { total_amount: true },
+  });
+  const lastWeekSales = Number(lastWeekAggregate._sum.total_amount) || 0;
+  const salesChangePercent = lastWeekSales > 0
+    ? Math.round(((grossSales - lastWeekSales) / lastWeekSales) * 100)
+    : 0;
+
+  // ---- Build Sparkline from batch data (no additional queries!) ----
+  const sparklineData: { date: string; revenue: number; profit: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const day = subDays(today, i);
+    const dayStart = startOfDay(day);
+    const dayEnd = endOfDay(day);
+    
+    // Filter from already-fetched batch
+    const dayTransactions = last7DaysTransactions.filter(
+      (t) => t.created_at >= dayStart && t.created_at <= dayEnd
+    );
+
+    const dayRevenue = dayTransactions.reduce((sum, t) => sum + Number(t.total_amount), 0);
+    let dayProfit = 0;
+    for (const txn of dayTransactions) {
+      for (const item of txn.items) {
+        const revenue = Number(item.subtotal);
+        const cost = Number(item.cost_at_sale) * item.quantity;
+        dayProfit += revenue - cost;
+      }
+    }
+
+    sparklineData.push({
+      date: format(day, "yyyy-MM-dd"),
+      revenue: dayRevenue,
+      profit: dayProfit,
+    });
+  }
+
+  // ---- Top Categories (Last 30 Days) - Single query ----
+  const last30DaysTransactions = await prisma.transaction.findMany({
+    where: {
+      status: "COMPLETED",
+      created_at: { gte: thirtyDaysAgo },
+    },
+    include: {
+      items: {
+        include: { product: true },
+      },
+    },
+  });
+
+  const categoryRevenue: Record<string, number> = {};
+  let totalRevenue = 0;
+  for (const txn of last30DaysTransactions) {
+    for (const item of txn.items) {
+      const category = item.product?.category || "UNCATEGORIZED";
+      const revenue = Number(item.subtotal);
+      categoryRevenue[category] = (categoryRevenue[category] || 0) + revenue;
+      totalRevenue += revenue;
+    }
+  }
+
+  const topCategories: TopCategoryData[] = Object.entries(categoryRevenue)
+    .map(([category, revenue]) => ({
+      category,
+      revenue,
+      percent: totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 100) : 0,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 3);
+
+  // ---- Inventory Health ----
+  const allProducts = await prisma.product.findMany({
+    where: { status: "ACTIVE", deletedAt: null },
+    include: { inventory: true },
+  });
+
+  // Reuse 30-day transaction data for product sales
+  const productSales: Record<number, number> = {};
+  for (const txn of last30DaysTransactions) {
+    for (const item of txn.items) {
+      productSales[item.product_id] = (productSales[item.product_id] || 0) + item.quantity;
+    }
+  }
+
+  let fastMoverCount = 0;
+  let slowMoverCount = 0;
+  let deadStockCount = 0;
+  const deadStockItems: TopDeadStockItem[] = [];
+
+  for (const product of allProducts) {
+    const unitsSold = productSales[product.product_id] || 0;
+    const dailyVelocity = unitsSold / 30;
+    const costPrice = Number(product.cost_price) || 0;
+    const currentStock = product.inventory?.current_stock || 0;
+    const capitalTied = currentStock * costPrice;
+
+    if (unitsSold === 0) {
+      deadStockCount++;
+      deadStockItems.push({
+        productId: product.product_id,
+        productName: product.product_name,
+        capitalTied,
+      });
+    } else if (dailyVelocity < 0.5) {
+      slowMoverCount++;
+    } else {
+      fastMoverCount++;
+    }
+  }
+
+  // Sort dead stock by capital tied (descending) and take top 5
+  const topDeadStock = deadStockItems
+    .sort((a, b) => b.capitalTied - a.capitalTied)
+    .slice(0, 5);
+
+  // ---- Spoilage This Month ----
+  const spoilageMovements = await prisma.stockMovement.findMany({
+    where: {
+      movement_type: { in: ["DAMAGE", "SUPPLIER_RETURN", "ADJUSTMENT"] },
+      created_at: { gte: startOfMonth },
+      quantity_change: { lt: 0 },
+    },
+    include: { inventory: { include: { product: true } } },
+  });
+
+  let spoilageLossThisMonth = 0;
+  for (const movement of spoilageMovements) {
+    const costPrice = Number(movement.cost_price) || Number(movement.inventory?.product?.cost_price) || 0;
+    spoilageLossThisMonth += Math.abs(movement.quantity_change) * costPrice;
+  }
+
+  // ---- Expiring Critical (≤7 days) ----
+  const sevenDaysFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const expiringBatches = await prisma.inventoryBatch.count({
+    where: {
+      status: "ACTIVE",
+      deletedAt: null,
+      quantity: { gt: 0 },
+      expiry_date: { lte: sevenDaysFromNow },
+    },
+  });
+
+  return {
+    todaySnapshot: {
+      grossSales,
+      transactionCount,
+      avgTicket,
+      cashSales,
+      gcashSales,
+      grossProfit,
+      salesChangePercent,
+    },
+    salesSparkline: sparklineData,
+    topCategories,
+    inventoryHealth: {
+      totalProducts: allProducts.length,
+      fastMoverCount,
+      slowMoverCount,
+      deadStockCount,
+    },
+    topDeadStock,
+    spoilageLossThisMonth,
+    expiringCriticalCount: expiringBatches,
+  };
+}
+
+/**
+ * Cached version of getEnhancedDashboardData
+ * Revalidates every 60 seconds to reduce database load
+ */
+export const getEnhancedDashboardData = unstable_cache(
+  fetchEnhancedDashboardData,
+  ["enhanced-dashboard-data"],
+  { revalidate: 60, tags: ["dashboard", "reports"] }
+);

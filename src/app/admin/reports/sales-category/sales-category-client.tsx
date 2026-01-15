@@ -14,6 +14,7 @@ import {
   BarChart3,
   DollarSign,
   TrendingUp,
+  TrendingDown,
   Percent,
   Boxes,
 } from "lucide-react";
@@ -27,13 +28,65 @@ import {
 } from "@/components/ui/table";
 import {
   ReportShell,
-  ReportSummaryCard,
-  ReportSection,
   SortableHeader,
 } from "@/components/reports/report-shell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
 import { type CategorySalesResult, type CategorySalesItem } from "@/actions/reports";
+
+// Helper function for normal weight peso sign
+function formatPeso(amount: number): React.ReactNode {
+  return (
+    <>
+      <span className="font-normal">₱</span>
+      {amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+    </>
+  );
+}
+
+// Design system CompactCard with trend support
+interface CompactCardProps {
+  label: string;
+  value: string | React.ReactNode;
+  icon: React.ElementType;
+  trend?: { value: number; label: string };
+  variant?: "default" | "success" | "warning" | "danger";
+}
+
+function CompactCard({ label, value, icon: Icon, trend, variant = "default" }: CompactCardProps) {
+  const variantStyles = {
+    default: "text-foreground",
+    success: "text-[#2EAFC5]",
+    warning: "text-[#F1782F]",
+    danger: "text-[#AC0F16]",
+  };
+
+  return (
+    <Card className="bg-card">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={`h-4 w-4 ${variantStyles[variant]}`} />
+            <span className="text-sm text-muted-foreground">{label}</span>
+          </div>
+          {trend && (
+            <div className={`flex items-center gap-1 text-xs ${trend.value >= 0 ? "text-[#2EAFC5]" : "text-[#AC0F16]"}`}>
+              {trend.value >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              <span>{trend.value >= 0 ? "+" : ""}{trend.value}%</span>
+            </div>
+          )}
+        </div>
+        <p className={`text-2xl font-bold font-mono tabular-nums mt-2 ${variantStyles[variant]}`}>
+          {value}
+        </p>
+        {trend && (
+          <p className="text-xs text-muted-foreground mt-1">{trend.label}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface SalesCategoryClientProps {
   data: CategorySalesResult;
@@ -74,29 +127,29 @@ export function SalesCategoryClient({ data }: SalesCategoryClientProps) {
       {
         accessorKey: "units_sold_30d",
         header: ({ column }) => (
-          <div className="text-right">
-            <SortableHeader column={column} className="justify-end">
+          <div className="text-left">
+            <SortableHeader column={column} className="justify-start">
               Units Sold
             </SortableHeader>
           </div>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums">{row.original.units_sold_30d.toLocaleString()}</div>
+          <div className="text-left font-mono tabular-nums">{row.original.units_sold_30d.toLocaleString()}</div>
         ),
         size: 110,
       },
       {
         accessorKey: "revenue_30d",
         header: ({ column }) => (
-          <div className="text-right">
-            <SortableHeader column={column} className="justify-end">
+          <div className="text-left">
+            <SortableHeader column={column} className="justify-start">
               Revenue (30d)
             </SortableHeader>
           </div>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums font-medium">
-            ₱{row.original.revenue_30d.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="text-left font-mono tabular-nums font-medium">
+            {formatPeso(row.original.revenue_30d)}
           </div>
         ),
         size: 140,
@@ -122,15 +175,15 @@ export function SalesCategoryClient({ data }: SalesCategoryClientProps) {
       {
         accessorKey: "profit_30d",
         header: ({ column }) => (
-          <div className="text-right">
-            <SortableHeader column={column} className="justify-end">
+          <div className="text-left">
+            <SortableHeader column={column} className="justify-start">
               Profit (30d)
             </SortableHeader>
           </div>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums text-[#2EAFC5] font-medium">
-            ₱{row.original.profit_30d.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="text-left font-mono tabular-nums text-[#2EAFC5] font-medium">
+            {formatPeso(row.original.profit_30d)}
           </div>
         ),
         size: 130,
@@ -235,24 +288,24 @@ export function SalesCategoryClient({ data }: SalesCategoryClientProps) {
     >
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ReportSummaryCard
+        <CompactCard
           label="Categories"
           value={data.summary.total_categories.toLocaleString()}
           icon={BarChart3}
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Total Revenue"
-          value={`₱${data.summary.total_revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          value={formatPeso(data.summary.total_revenue)}
           icon={DollarSign}
           variant="success"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Total Profit"
-          value={`₱${data.summary.total_profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          value={formatPeso(data.summary.total_profit)}
           icon={TrendingUp}
           variant="success"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Avg Margin"
           value={`${data.summary.avg_margin}%`}
           icon={Percent}
@@ -261,100 +314,108 @@ export function SalesCategoryClient({ data }: SalesCategoryClientProps) {
 
       {/* Top Category Highlight */}
       {topCategory && (
-        <ReportSection title="Top Performing Category">
-          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Category</p>
-                <p className="text-2xl font-bold text-foreground">{topCategory.category}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Revenue</p>
-                <p className="text-2xl font-bold font-mono text-foreground tabular-nums">
-                  ₱{topCategory.revenue_30d.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Revenue Share</p>
-                <div className="flex items-center gap-3">
-                  <Progress value={topCategory.revenue_share} className="flex-1 h-3 bg-stone-200" indicatorClassName="bg-[#2EAFC5]" />
-                  <span className="text-lg font-mono font-bold tabular-nums">{topCategory.revenue_share.toFixed(1)}%</span>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Top Performing Category</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Category</p>
+                  <p className="text-2xl font-bold text-foreground">{topCategory.category}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Revenue</p>
+                  <p className="text-2xl font-bold font-mono text-foreground tabular-nums">
+                    {formatPeso(topCategory.revenue_30d)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Revenue Share</p>
+                  <div className="flex items-center gap-3">
+                    <Progress value={topCategory.revenue_share} className="flex-1 h-3 bg-stone-200" indicatorClassName="bg-[#2EAFC5]" />
+                    <span className="text-lg font-mono font-bold tabular-nums">{topCategory.revenue_share.toFixed(1)}%</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Profit</p>
+                  <p className="text-2xl font-bold font-mono text-[#2EAFC5] tabular-nums">
+                    {formatPeso(topCategory.profit_30d)}
+                  </p>
                 </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Profit</p>
-                <p className="text-2xl font-bold font-mono text-[#2EAFC5] tabular-nums">
-                  ₱{topCategory.profit_30d.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
             </div>
-          </div>
-        </ReportSection>
+          </CardContent>
+        </Card>
       )}
 
       {/* Category Table */}
-      <ReportSection
-        title="All Categories"
-        description={`${data.items.length} categories`}
-      >
-        <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
-                    {headerGroup.headers.map((header) => (
-                      <TableHead 
-                        key={header.id} 
-                        className="h-11"
-                        style={{ width: header.column.getSize() }}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
-                      <div className="flex flex-col items-center gap-2">
-                        <Boxes className="h-8 w-8 text-muted-foreground/50" />
-                        <p>No category data available.</p>
-                        <p className="text-xs">Import sales data to see category analytics.</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="print:text-sm hover:bg-muted/30"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell 
-                          key={cell.id}
-                          style={{ width: cell.column.getSize() }}
+      <Card>
+        <CardHeader className="pb-0">
+          <CardTitle className="text-base font-semibold mb-0 pb-0">All Categories</CardTitle>
+          <CardDescription className="translate-y-[-1vh]">{data.items.length} categories</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border bg-card overflow-hidden  print:border-gray-300">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
+                      {headerGroup.headers.map((header) => (
+                        <TableHead 
+                          key={header.id} 
+                          className="h-11"
+                          style={{ width: header.column.getSize() }}
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                          <p>No category data available.</p>
+                          <p className="text-xs">Import sales data to see category analytics.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="print:text-sm hover:bg-muted/30"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell 
+                            key={cell.id}
+                            style={{ width: cell.column.getSize() }}
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
 
-        {/* Pagination */}
-        <div className="mt-4 print-hidden" data-print-hidden="true">
-          <DataTablePagination table={table} />
-        </div>
-      </ReportSection>
+          {/* Pagination */}
+          <div className="mt-4 print-hidden" data-print-hidden="true">
+            <DataTablePagination table={table} />
+          </div>
+        </CardContent>
+      </Card>
     </ReportShell>
   );
 }

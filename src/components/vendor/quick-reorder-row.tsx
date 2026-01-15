@@ -60,12 +60,12 @@ export function QuickReorderRow({ items, onAddToCart }: QuickReorderRowProps) {
   // Empty state
   if (items.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6">
+      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-6">
         <div className="text-center py-8">
-          <div className="size-12 mx-auto mb-3 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-            <IconPackage className="size-6 text-zinc-400" />
+          <div className="size-12 mx-auto mb-3 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
+            <IconPackage className="size-6 text-stone-400" />
           </div>
-          <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-4">
+          <p className="text-stone-500 dark:text-zinc-400 text-sm mb-4">
             No purchase history yet. Start ordering to see your favorites here!
           </p>
           <Button
@@ -83,14 +83,14 @@ export function QuickReorderRow({ items, onAddToCart }: QuickReorderRowProps) {
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="flex items-center justify-between p-4 border-b border-stone-100 dark:border-zinc-800">
         <div>
           <h2 className="font-semibold text-[#2d1b1a] dark:text-white">
             Quick Re-order
           </h2>
-          <p className="text-xs text-zinc-500">Your most purchased items</p>
+          <p className="text-xs text-stone-500">Your most purchased items</p>
         </div>
         <Button
           variant="ghost"

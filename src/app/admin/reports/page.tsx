@@ -11,7 +11,6 @@ import {
   CalendarClock,
   FileText,
   Archive,
-  Download,
   ExternalLink,
   CreditCard,
   Banknote,
@@ -33,13 +32,8 @@ import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { MiniSparkline } from "@/components/reports/mini-sparkline";
+import { WidgetExportButton } from "@/components/reports/widget-export-button";
 
 export const metadata = {
   title: "Reports | Christian Minimart",
@@ -374,7 +368,7 @@ function TopDeadStockList({ items }: { items: TopDeadStockItem[] }) {
 }
 
 // ============================================================================
-// Widget Card Component - Ghost Buttons
+// Widget Card Component - Fully Clickable with Hover Effect
 // ============================================================================
 
 interface WidgetCardProps {
@@ -390,69 +384,33 @@ interface WidgetCardProps {
 
 function WidgetCard({ title, href, icon: Icon, iconColor, iconBg, children, footerActions = true, disableExport = false }: WidgetCardProps) {
   return (
-    <Card className="border-stone-200/80 bg-card hover:shadow-md transition-shadow h-full flex flex-col">
-      <CardHeader className="pb-2 pt-3 px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={cn("p-1.5 rounded-lg", iconBg)}>
-              <Icon className={cn("h-4 w-4", iconColor)} />
+    <Link href={href} className="block h-full group">
+      <Card className="border-stone-200/80 bg-card hover:shadow-lg hover:border-primary/30 transition-all h-full flex flex-col cursor-pointer">
+        <CardHeader className="pb-2 pt-3 px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={cn("p-1.5 rounded-lg transition-colors group-hover:scale-105", iconBg)}>
+                <Icon className={cn("h-4 w-4", iconColor)} />
+              </div>
+              <CardTitle className="text-sm font-semibold group-hover:text-primary transition-colors">{title}</CardTitle>
             </div>
-            <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-primary transition-colors" />
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 px-4 pb-2">
-        {children}
-      </CardContent>
-      {footerActions && (
-        <div className="px-3 py-2 border-t border-stone-100 flex items-center gap-1">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className={cn(
-                    "h-7 px-2 text-xs gap-1",
-                    disableExport && "opacity-40 cursor-not-allowed"
-                  )}
-                  disabled={disableExport}
-                  asChild={!disableExport}
-                >
-                  {disableExport ? (
-                    <span className="flex items-center gap-1">
-                      <Download className="h-3.5 w-3.5" />
-                      Export
-                    </span>
-                  ) : (
-                    <Link href={`${href}?export=xlsx`} className="flex items-center gap-1">
-                      <Download className="h-3.5 w-3.5" />
-                      Export
-                    </Link>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {disableExport ? "Nothing to export" : "Download Excel"}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" asChild>
-                  <Link href={href} className="flex items-center gap-1">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    View
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Open full report</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      )}
-    </Card>
+        </CardHeader>
+        <CardContent className="flex-1 px-4 pb-2">
+          {children}
+        </CardContent>
+        {footerActions && (
+          <div className="px-3 py-2 border-t border-stone-100 flex items-center gap-1">
+            <WidgetExportButton href={href} disabled={disableExport} />
+            <span className="flex-1" />
+            <span className="text-xs text-muted-foreground group-hover:text-primary transition-colors">
+              View Report →
+            </span>
+          </div>
+        )}
+      </Card>
+    </Link>
   );
 }
 
@@ -463,8 +421,8 @@ function WidgetCard({ title, href, icon: Icon, iconColor, iconBg, children, foot
 async function ReportsDashboard() {
   const data = await getEnhancedDashboardData();
 
-  const sparklineRevenue = data.salesSparkline.map(d => d.revenue);
-  const sparklineProfit = data.salesSparkline.map(d => d.profit);
+  const sparklineRevenue = data.salesSparkline.map((d: { revenue: number }) => d.revenue);
+  const sparklineProfit = data.salesSparkline.map((d: { profit: number }) => d.profit);
   const totalInventory = data.inventoryHealth.totalProducts;
 
   return (
@@ -525,7 +483,7 @@ async function ReportsDashboard() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">7-Day Total</span>
                       <span className="text-sm font-mono font-semibold text-[#2EAFC5]">
-                        <span className="font-normal">₱</span>{sparklineProfit.reduce((a, b) => a + b, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        <span className="font-normal">₱</span>{sparklineProfit.reduce((a: number, b: number) => a + b, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </span>
                     </div>
                   </div>

@@ -9,28 +9,17 @@ import {
   IconPlus,
   IconMinus,
   IconTrash,
-  IconX,
   IconCheck,
   IconPackage,
-  IconArrowLeft,
   IconReceipt,
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -107,7 +96,6 @@ export function VendorOrderClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const hasAddedPreSelectRef = useRef(false);
   const [cart, setCart] = useState<LocalCartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -155,17 +143,15 @@ export function VendorOrderClient({
     }).format(amount);
   };
 
-  // Filter products
+  // Filter products by search only (no category filter)
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesSearch =
         product.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.barcode?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        selectedCategory === "all" || product.category === selectedCategory;
-      return matchesSearch && matchesCategory;
+      return matchesSearch;
     });
-  }, [products, searchQuery, selectedCategory]);
+  }, [products, searchQuery]);
 
   // Cart calculations
   const cartTotal = useMemo(() => {
@@ -240,6 +226,26 @@ export function VendorOrderClient({
           return item;
         })
         .filter((item) => item.quantity > 0)
+    );
+  };
+
+  // Set exact quantity (for direct input)
+  const setQuantity = (productId: number, newQty: number) => {
+    if (newQty <= 0) {
+      setCart((prev) => prev.filter((item) => item.product_id !== productId));
+      return;
+    }
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.product_id === productId) {
+          if (newQty > item.current_stock) {
+            toast.error(`Maximum stock (${item.current_stock}) reached`);
+            return { ...item, quantity: item.current_stock };
+          }
+          return { ...item, quantity: newQty };
+        }
+        return item;
+      })
     );
   };
 
@@ -319,9 +325,9 @@ export function VendorOrderClient({
             <SheetTrigger asChild>
              
             </SheetTrigger>
-            <SheetContent side="right" className="w-full sm:w-[400px] p-0 flex flex-col m-0 bg-card">
-              <SheetHeader className="px-4 py-3 mb-0 border-b border-border bg-card">
-                <SheetTitle className="flex items-center gap-2 text-foreground">
+            <SheetContent side="right" className="w-full sm:w-[400px] p-0 flex flex-col m-0 bg-[#F8F6F1] dark:bg-zinc-900">
+              <SheetHeader className="px-4 py-3 mb-0 border-b border-stone-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                <SheetTitle className="flex items-center gap-2 text-[#2d1b1a] dark:text-white">
                   <IconShoppingCart className="size-5" />
                   Your Cart ({cartItemCount})
                 </SheetTitle>
@@ -331,6 +337,7 @@ export function VendorOrderClient({
                 cartTotal={cartTotal}
                 cartItemCount={cartItemCount}
                 updateQuantity={updateQuantity}
+                setQuantity={setQuantity}
                 removeFromCart={removeFromCart}
                 clearCart={clearCart}
                 onSubmit={() => setIsConfirmOpen(true)}
@@ -340,30 +347,15 @@ export function VendorOrderClient({
           </Sheet>
         </div>
 
-        {/* Search & Filter */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
-            <Input
-              placeholder="Search products"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 py-2 bg-card border-border"
-            />
-          </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-[180px] bg-card border-border">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {getCategoryDisplayName(cat)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Search */}
+        <div className="relative">
+          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-400" />
+          <Input
+            placeholder="Search wholesale products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 py-2 bg-[#F8F6F1] dark:bg-zinc-900 border-stone-200 dark:border-zinc-700"
+          />
         </div>
       </div>
 
@@ -389,11 +381,11 @@ export function VendorOrderClient({
                     <div
                       key={product.product_id}
                       className={cn(
-                        "bg-card rounded-xl overflow-hidden flex flex-col transition-all relative",
+                        "bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl overflow-hidden flex flex-col transition-all relative",
                         isOutOfStock && "opacity-60",
                         inCart 
                           ? "border-2 border-[#AC0F16]"
-                          : "border border-border"
+                          : "border border-stone-200 dark:border-zinc-700"
                       )}
                     >
                       {/* Quantity Badge - Top Left Circle */}
@@ -452,17 +444,28 @@ export function VendorOrderClient({
                             )}
                           </div>
                           
-                          {/* Quantity Controls - Circle buttons */}
+                          {/* Quantity Controls - With editable input */}
                           {inCart ? (
                             <div className="flex items-center gap-1">
                               <Button
                                 size="icon"
                                 variant="outline"
                                 onClick={() => subtractFromCart(product.product_id)}
-                                className="size-8 rounded-full"
+                                className="size-8 rounded-full border-stone-200 dark:border-zinc-600"
                               >
                                 <IconMinus className="size-4" />
                               </Button>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={product.current_stock}
+                                value={inCart.quantity}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  setQuantity(product.product_id, val);
+                                }}
+                                className="w-12 h-8 text-center text-sm font-semibold px-1 bg-white dark:bg-zinc-800 border-stone-200 dark:border-zinc-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
                               <Button
                                 size="icon"
                                 onClick={() => addToCart(product)}
@@ -504,9 +507,9 @@ export function VendorOrderClient({
         </div>
 
         {/* Desktop Cart Sidebar */}
-        <div className="hidden lg:flex flex-col w-80 shrink-0 bg-card rounded-2xl border border-border overflow-hidden h-[calc(120vh-220px)]">
-          <div className="px-4 py-3 border-b border-border shrink-0">
-            <h2 className="font-semibold text-lg flex items-center gap-2 text-foreground">
+        <div className="hidden lg:flex flex-col w-80 shrink-0 bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-700 overflow-hidden h-[calc(120vh-220px)]">
+          <div className="px-4 py-3 border-b border-stone-200 dark:border-zinc-700 shrink-0 bg-white dark:bg-zinc-800">
+            <h2 className="font-semibold text-lg flex items-center gap-2 text-[#2d1b1a] dark:text-white">
               <IconShoppingCart className="size-5" />
               Your Cart ({cartItemCount})
             </h2>
@@ -516,6 +519,7 @@ export function VendorOrderClient({
             cartTotal={cartTotal}
             cartItemCount={cartItemCount}
             updateQuantity={updateQuantity}
+            setQuantity={setQuantity}
             removeFromCart={removeFromCart}
             clearCart={clearCart}
             onSubmit={() => setIsConfirmOpen(true)}
@@ -527,10 +531,10 @@ export function VendorOrderClient({
 
       {/* Mobile Sticky Bottom Cart Bar */}
       {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border p-4 shadow-lg z-50">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-800 border-t border-stone-200 dark:border-zinc-700 p-4 shadow-lg z-50">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs text-zinc-500">{cartItemCount} items</p>
+              <p className="text-xs text-stone-500 dark:text-zinc-400">{cartItemCount} items</p>
               <p className="text-lg font-bold text-[#AC0F16]">
                 {formatCurrency(cartTotal)}
               </p>
@@ -629,6 +633,7 @@ function CartContent({
   cartTotal,
   cartItemCount,
   updateQuantity,
+  setQuantity,
   removeFromCart,
   clearCart,
   onSubmit,
@@ -639,6 +644,7 @@ function CartContent({
   cartTotal: number;
   cartItemCount: number;
   updateQuantity: (productId: number, delta: number) => void;
+  setQuantity: (productId: number, newQty: number) => void;
   removeFromCart: (productId: number) => void;
   clearCart: () => void;
   onSubmit: () => void;
@@ -660,7 +666,7 @@ function CartContent({
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-card">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-[#F8F6F1] dark:bg-zinc-900">
       {/* Cart items - maximized content area */}
       <div className={cn(
         "flex-1 overflow-y-auto",
@@ -670,11 +676,11 @@ function CartContent({
           {cart.map((item) => (
             <div 
               key={item.product_id} 
-              className="bg-card rounded-xl p-3 shadow-sm border border-border"
+              className="bg-white dark:bg-zinc-800 rounded-xl p-3 shadow-sm border border-stone-200 dark:border-zinc-700"
             >
               <div className="flex items-start gap-3">
                 {/* Image */}
-                <div className="size-14 rounded-lg bg-muted overflow-hidden shrink-0">
+                <div className="size-14 rounded-lg bg-stone-100 dark:bg-zinc-700 overflow-hidden shrink-0">
                   {item.image_url ? (
                     <Image
                       src={item.image_url}
@@ -685,14 +691,14 @@ function CartContent({
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full">
-                      <IconPackage className="size-5 text-muted-foreground" />
+                      <IconPackage className="size-5 text-stone-400 dark:text-zinc-500" />
                     </div>
                   )}
                 </div>
 
                 {/* Details */}
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-foreground line-clamp-2 leading-tight">
+                  <p className="font-medium text-sm text-[#2d1b1a] dark:text-white line-clamp-2 leading-tight">
                     {item.product_name}
                   </p>
                   <p className="text-sm text-[#AC0F16] font-bold mt-1">
@@ -702,39 +708,47 @@ function CartContent({
 
                 {/* Subtotal */}
                 <div className="text-right shrink-0">
-                  <p className="font-bold text-foreground text-sm">
+                  <p className="font-bold text-[#2d1b1a] dark:text-white text-sm">
                     {formatCurrency(item.price * item.quantity)}
                   </p>
                 </div>
               </div>
               
-              {/* Quantity Controls */}
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              {/* Quantity Controls - With editable input */}
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-stone-200 dark:border-zinc-700">
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="icon"
-                    className="size-8 rounded-full"
+                    className="size-8 rounded-full border-stone-200 dark:border-zinc-600"
                     onClick={() => updateQuantity(item.product_id, -1)}
                   >
                     <IconMinus className="size-3" />
                   </Button>
-                  <span className="w-8 text-center font-semibold text-foreground">
-                    {item.quantity}
-                  </span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={item.current_stock}
+                    value={item.quantity}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      setQuantity(item.product_id, val);
+                    }}
+                    className="w-14 h-8 text-center text-sm font-semibold px-1 bg-[#F8F6F1] dark:bg-zinc-900 border-stone-200 dark:border-zinc-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
                   <Button
                     variant="outline"
                     size="icon"
-                    className="size-8 rounded-full"
+                    className="size-8 rounded-full bg-primary hover:bg-primary/80 border-primary-70 dark:border-zinc-600"
                     onClick={() => updateQuantity(item.product_id, 1)}
                   >
-                    <IconPlus className="size-3" />
+                    <IconPlus className="size-3 text-white" />
                   </Button>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 gap-1"
+                  className="text-stone-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 gap-1"
                   onClick={() => removeFromCart(item.product_id)}
                 >
                   <IconTrash className="size-4" />
@@ -747,20 +761,20 @@ function CartContent({
       </div>
 
       {/* Sticky Footer - Fixed at bottom */}
-      <div className="shrink-0 border-t border-border p-4 bg-card shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
+      <div className="shrink-0 border-t border-stone-200 dark:border-zinc-700 p-4 bg-white dark:bg-zinc-800 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
         {/* Clear All Button */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
               variant="ghost"
               size="sm"
-              className="w-full text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 gap-1.5 h-8 mb-3"
+              className="w-full text-stone-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 gap-1.5 h-8 mb-3"
             >
               <IconTrash className="size-4" />
               Clear All
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent>
+          <AlertDialogContent className="bg-[#F8F6F1] dark:bg-zinc-900">
             <AlertDialogHeader>
               <AlertDialogTitle>Clear Cart?</AlertDialogTitle>
               <AlertDialogDescription>
@@ -781,16 +795,16 @@ function CartContent({
         
         {/* Order Summary */}
         <div className="space-y-1.5 mb-3 text-sm">
-          <div className="flex items-center justify-between text-muted-foreground">
+          <div className="flex items-center justify-between text-stone-500 dark:text-zinc-400">
             <span>Items ({cartItemCount})</span>
             <span>{formatCurrency(cartTotal)}</span>
           </div>
-          <div className="flex items-center justify-between text-muted-foreground">
+          <div className="flex items-center justify-between text-stone-500 dark:text-zinc-400">
             <span>Tax (12% VAT)</span>
             <span>{formatCurrency(taxAmount)}</span>
           </div>
-          <div className="flex items-center justify-between pt-1.5 border-t border-border">
-            <span className="font-semibold text-foreground">Total</span>
+          <div className="flex items-center justify-between pt-1.5 border-t border-stone-200 dark:border-zinc-700">
+            <span className="font-semibold text-[#2d1b1a] dark:text-white">Total</span>
             <span className="text-xl font-bold text-[#AC0F16]">
               {formatCurrency(totalWithTax)}
             </span>

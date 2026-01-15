@@ -95,15 +95,15 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
   // Empty state - No active orders
   if (orders.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-8 sm:p-10">
+      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-8 sm:p-10">
         <div className="text-center max-w-md mx-auto">
-          <div className="size-20 mx-auto mb-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-            <IconShoppingCart className="size-10 text-zinc-400" />
+          <div className="size-20 mx-auto mb-5 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
+            <IconShoppingCart className="size-10 text-stone-400" />
           </div>
           <h2 className="text-2xl font-bold text-[#2d1b1a] dark:text-white mb-3">
             No Active Orders
           </h2>
-          <p className="text-zinc-500 dark:text-zinc-400 mb-8 text-base">
+          <p className="text-stone-500 dark:text-zinc-400 mb-8 text-base">
             Start a new wholesale order and track it here in real-time
           </p>
           <Button
@@ -122,14 +122,14 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
   // Single order - Premium centered view
   if (orders.length === 1) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 dark:border-zinc-800">
           <div>
             <h2 className="text-lg font-bold text-[#2d1b1a] dark:text-white">
               Live Order Status
             </h2>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-stone-500">
               Tracking Order #{orders[0].order_id}
             </p>
           </div>
@@ -138,7 +138,7 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
             size="icon"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="text-zinc-500"
+            className="text-stone-500"
           >
             <IconRefresh className={cn("size-5", isRefreshing && "animate-spin")} />
           </Button>
@@ -161,14 +161,14 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
 
   // Multiple orders - Horizontal Carousel
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 dark:border-zinc-800">
         <div>
           <h2 className="text-lg font-bold text-[#2d1b1a] dark:text-white">
             Live Order Status
           </h2>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-stone-500">
             {orders.length} active orders • Swipe to view all
           </p>
         </div>
@@ -177,7 +177,7 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
           size="icon"
           onClick={handleRefresh}
           disabled={isRefreshing}
-          className="text-zinc-500"
+          className="text-stone-500"
         >
           <IconRefresh className={cn("size-5", isRefreshing && "animate-spin")} />
         </Button>

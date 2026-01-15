@@ -179,6 +179,19 @@ export function DashboardClient({
     }).format(amount);
   };
 
+  // Format peso with normal weight sign (for JSX rendering)
+  const formatPeso = (amount: number, decimals: number = 2) => {
+    const formatted = amount.toLocaleString("en-PH", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+    return (
+      <>
+        <span className="font-normal">₱</span>{formatted}
+      </>
+    );
+  };
+
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat("en-PH", {
       minimumFractionDigits: 2,
@@ -381,7 +394,7 @@ export function DashboardClient({
             </div>
             <PercentBadge value={percentages.profit} />
           </div>
-          <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.profit)}</p>
+          <p className="text-lg font-bold tabular-nums text-foreground">{formatPeso(displayStats.primary.profit)}</p>
           <div className="flex items-center gap-1">
             <p className="text-[10px] text-muted-foreground">Profit</p>
             <TooltipProvider delayDuration={100}>
@@ -409,7 +422,7 @@ export function DashboardClient({
             </div>
             <PercentBadge value={percentages.revenue} />
           </div>
-          <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.revenue)}</p>
+          <p className="text-lg font-bold tabular-nums text-foreground">{formatPeso(displayStats.primary.revenue)}</p>
           <div className="flex items-center gap-1">
             <p className="text-[10px] text-muted-foreground">Sales Revenue</p>
             <TooltipProvider delayDuration={100}>
@@ -437,7 +450,7 @@ export function DashboardClient({
             </div>
             <PercentBadge value={percentages.cost} inverted />
           </div>
-          <p className="text-lg font-bold tabular-nums text-foreground">{formatNumber(displayStats.primary.cost)}</p>
+          <p className="text-lg font-bold tabular-nums text-foreground">{formatPeso(displayStats.primary.cost)}</p>
           <div className="flex items-center gap-1">
             <p className="text-[10px] text-muted-foreground">Cost of Goods</p>
             <TooltipProvider delayDuration={100}>

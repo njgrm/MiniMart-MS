@@ -106,12 +106,12 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
   // Empty state
   if (orders.length === 0) {
     return (
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-6">
+      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-6">
         <div className="text-center py-8">
-          <div className="size-12 mx-auto mb-3 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-            <IconHistory className="size-6 text-zinc-400" />
+          <div className="size-12 mx-auto mb-3 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
+            <IconHistory className="size-6 text-stone-400" />
           </div>
-          <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-4">
+          <p className="text-stone-500 dark:text-zinc-400 text-sm mb-4">
             No recent orders. Place your first order today!
           </p>
           <Button
@@ -129,14 +129,14 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
   }
 
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800">
+      <div className="flex items-center justify-between p-4 border-b border-stone-100 dark:border-zinc-800">
         <div>
           <h2 className="font-semibold text-[#2d1b1a] dark:text-white">
             Recent Orders
           </h2>
-          <p className="text-xs text-zinc-500">Last 5 transactions</p>
+          <p className="text-xs text-stone-500">Last 5 transactions</p>
         </div>
         <Button
           variant="ghost"
@@ -150,7 +150,7 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
       </div>
 
       {/* Order List */}
-      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+      <div className="divide-y divide-stone-100 dark:divide-zinc-800">
         {orders.map((order) => {
           const config = statusConfig[order.status] || statusConfig.PENDING;
           const StatusIcon = config.icon;
@@ -159,10 +159,10 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
             <button
               key={order.order_id}
               onClick={() => handleViewOrder(order.order_id)}
-              className="w-full flex items-center gap-3 p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors text-left group"
+              className="w-full flex items-center gap-3 p-4 hover:bg-stone-100/50 dark:hover:bg-zinc-800/50 transition-colors text-left group"
             >
               {/* Order Icon */}
-              <div className="size-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+              <div className="size-10 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
                 <IconReceipt className="size-5 text-[#2d1b1a] dark:text-white" />
               </div>
 

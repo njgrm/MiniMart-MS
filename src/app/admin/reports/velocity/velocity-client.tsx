@@ -18,6 +18,7 @@ import {
   Activity,
   DollarSign,
   TrendingDown,
+  TrendingUp,
   AlertTriangle,
   Snowflake,
   Zap,
@@ -44,16 +45,68 @@ import {
 } from "@/components/ui/select";
 import {
   ReportShell,
-  ReportSummaryCard,
-  ReportSection,
   SortableHeader,
 } from "@/components/reports/report-shell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import {
   type VelocityReportResult,
   type VelocityItem,
 } from "@/actions/reports";
 import { Progress } from "@/components/ui/progress";
+
+// Helper function for normal weight peso sign
+function formatPeso(amount: number): React.ReactNode {
+  return (
+    <>
+      <span className="font-normal">₱</span>
+      {amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+    </>
+  );
+}
+
+// Design system CompactCard with trend support
+interface CompactCardProps {
+  label: string;
+  value: string | React.ReactNode;
+  icon: React.ElementType;
+  trend?: { value: number; label: string };
+  variant?: "default" | "success" | "warning" | "danger";
+}
+
+function CompactCard({ label, value, icon: Icon, trend, variant = "default" }: CompactCardProps) {
+  const variantStyles = {
+    default: "text-foreground",
+    success: "text-[#2EAFC5]",
+    warning: "text-[#F1782F]",
+    danger: "text-[#AC0F16]",
+  };
+
+  return (
+    <Card className="bg-card">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={`h-4 w-4 ${variantStyles[variant]}`} />
+            <span className="text-sm text-muted-foreground">{label}</span>
+          </div>
+          {trend && (
+            <div className={`flex items-center gap-1 text-xs ${trend.value >= 0 ? "text-[#2EAFC5]" : "text-[#AC0F16]"}`}>
+              {trend.value >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              <span>{trend.value >= 0 ? "+" : ""}{trend.value}%</span>
+            </div>
+          )}
+        </div>
+        <p className={`text-2xl font-bold font-mono tabular-nums mt-2 ${variantStyles[variant]}`}>
+          {value}
+        </p>
+        {trend && (
+          <p className="text-xs text-muted-foreground mt-1">{trend.label}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface VelocityReportClientProps {
   data: VelocityReportResult;
@@ -243,15 +296,15 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
       {
         accessorKey: "capital_tied",
         header: ({ column }) => (
-          <div className="text-right">
-            <SortableHeader column={column} className="justify-end">
+          <div className="text-left">
+            <SortableHeader column={column} className="justify-start">
               Capital
             </SortableHeader>
           </div>
         ),
         cell: ({ row }) => (
-          <div className="text-right font-mono tabular-nums">
-            ₱{row.original.capital_tied.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="text-left font-mono tabular-nums">
+            {formatPeso(row.original.capital_tied)}
           </div>
         ),
         size: 120,
@@ -376,7 +429,7 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
             placeholder="Search products, categories..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-9"
+            className="pl-9 py-2.25"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -409,25 +462,25 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <ReportSummaryCard
+        <CompactCard
           label="Dead Stock Items"
           value={data.summary.dead_stock_count.toLocaleString()}
           icon={Snowflake}
           variant="danger"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Dead Stock Capital"
-          value={`₱${data.summary.dead_stock_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          value={formatPeso(data.summary.dead_stock_capital)}
           icon={DollarSign}
           variant="danger"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Slow Movers"
           value={data.summary.slow_mover_count.toLocaleString()}
           icon={TrendingDown}
           variant="warning"
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Fast Movers"
           value={data.summary.fast_mover_count.toLocaleString()}
           icon={Zap}
@@ -436,137 +489,150 @@ export function VelocityReportClient({ data }: VelocityReportClientProps) {
       </div>
 
       {/* Capital Analysis */}
-      <ReportSection title="Capital Efficiency Analysis">
-        <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Total Capital Tied in Inventory</p>
-              <p className="text-2xl font-bold font-mono text-foreground tabular-nums">
-                ₱{data.summary.total_capital_tied.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">At-Risk Capital (Dead + Slow)</p>
-              <p className="text-2xl font-bold font-mono text-[#AC0F16] tabular-nums">
-                ₱{(data.summary.dead_stock_capital + data.summary.slow_mover_capital).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">At-Risk Percentage</p>
-              <div className="flex items-center gap-3">
-                <Progress
-                  value={
-                    data.summary.total_capital_tied > 0
-                      ? ((data.summary.dead_stock_capital + data.summary.slow_mover_capital) /
-                          data.summary.total_capital_tied) *
-                        100
-                      : 0
-                  }
-                  className="flex-1 h-3 bg-stone-200"
-                  indicatorClassName="bg-[#AC0F16]"
-                />
-                <span className="text-lg font-mono font-bold tabular-nums">
-                  {data.summary.total_capital_tied > 0
-                    ? Math.round(
-                        ((data.summary.dead_stock_capital + data.summary.slow_mover_capital) /
-                          data.summary.total_capital_tied) *
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Capital Efficiency Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="bg-[#f5f3ef] dark:bg-muted/30 rounded-lg p-4 border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Total Capital Tied in Inventory</p>
+                <p className="text-2xl font-bold font-mono text-foreground tabular-nums">
+                  {formatPeso(data.summary.total_capital_tied)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">At-Risk Capital (Dead + Slow)</p>
+                <p className="text-2xl font-bold font-mono text-[#AC0F16] tabular-nums">
+                  {formatPeso(data.summary.dead_stock_capital + data.summary.slow_mover_capital)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">At-Risk Percentage</p>
+                <div className="flex items-center gap-3">
+                  <Progress
+                    value={
+                      data.summary.total_capital_tied > 0
+                        ? ((data.summary.dead_stock_capital + data.summary.slow_mover_capital) /
+                            data.summary.total_capital_tied) *
                           100
-                      )
-                    : 0}
-                  %
-                </span>
+                        : 0
+                    }
+                    className="flex-1 h-3 bg-stone-200"
+                    indicatorClassName="bg-[#AC0F16]"
+                  />
+                  <span className="text-lg font-mono font-bold tabular-nums">
+                    {data.summary.total_capital_tied > 0
+                      ? Math.round(
+                          ((data.summary.dead_stock_capital + data.summary.slow_mover_capital) /
+                            data.summary.total_capital_tied) *
+                            100
+                        )
+                      : 0}
+                    %
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </ReportSection>
+        </CardContent>
+      </Card>
 
       {/* Detailed Table with Tanstack */}
-      <ReportSection
-        title="Product Velocity Details"
-        description={`${table.getFilteredRowModel().rows.length} products`}
-      >
-        <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
-                    {headerGroup.headers.map((header) => (
-                      <TableHead 
-                        key={header.id} 
-                        className="h-11"
-                        style={{ width: header.column.getSize() }}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {table.getRowModel().rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
-                      <div className="flex flex-col items-center gap-2">
-                        <Boxes className="h-8 w-8 text-muted-foreground/50" />
-                        <p>No products match your filters.</p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      className="print:text-sm hover:bg-muted/30"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell 
-                          key={cell.id}
-                          style={{ width: cell.column.getSize() }}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Product Velocity Details</CardTitle>
+          <CardDescription>{table.getFilteredRowModel().rows.length} products</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id} className="bg-muted/50 hover:bg-muted/50 print:bg-gray-100">
+                      {headerGroup.headers.map((header) => (
+                        <TableHead 
+                          key={header.id} 
+                          className="h-11"
+                          style={{ width: header.column.getSize() }}
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
                       ))}
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                          <p>No products match your filters.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    table.getRowModel().rows.map((row) => (
+                      <TableRow
+                        key={row.id}
+                        className="print:text-sm hover:bg-muted/30"
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell 
+                            key={cell.id}
+                            style={{ width: cell.column.getSize() }}
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
 
-        {/* Pagination */}
-        <div className="mt-4 print-hidden" data-print-hidden="true">
-          <DataTablePagination table={table} />
-        </div>
-      </ReportSection>
+          {/* Pagination */}
+          <div className="mt-4 print-hidden" data-print-hidden="true">
+            <DataTablePagination table={table} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Recommendations - Screen Only */}
       <div className="print-hidden" data-print-hidden="true">
-        <ReportSection title="Recommendations">
-          <div className="bg-[#F1782F]/10 border border-[#F1782F]/30 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-[#F1782F] mt-0.5" />
-              <div className="space-y-2">
-                <p className="font-medium text-[#F1782F]">Action Items for Dead Stock</p>
-                <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-                  <li>Consider running promotions or bundling dead stock items</li>
-                  <li>Review pricing strategy for slow-moving products</li>
-                  <li>Adjust reorder levels to prevent overstocking</li>
-                  <li>
-                    Capital tied in dead stock:{" "}
-                    <strong className="font-mono">
-                      ₱{data.summary.dead_stock_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </strong>
-                  </li>
-                </ul>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Recommendations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-[#F1782F]/10 border border-[#F1782F]/30 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-[#F1782F] mt-0.5" />
+                <div className="space-y-2">
+                  <p className="font-medium text-[#F1782F]">Action Items for Dead Stock</p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                    <li>Consider running promotions or bundling dead stock items</li>
+                    <li>Review pricing strategy for slow-moving products</li>
+                    <li>Adjust reorder levels to prevent overstocking</li>
+                    <li>
+                      Capital tied in dead stock:{" "}
+                      <strong className="font-mono">
+                        {formatPeso(data.summary.dead_stock_capital)}
+                      </strong>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
-          </div>
-        </ReportSection>
+          </CardContent>
+        </Card>
       </div>
     </ReportShell>
   );

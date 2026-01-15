@@ -100,47 +100,47 @@ export function VendorDashboard({
            {/* Quick Stats - Compact Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Total Spent */}
-        <div className="bg-card rounded-xl border border-border p-3">
+        <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-lg bg-[#2EAFC5]/20 flex items-center justify-center">
               <IconCash className="size-4 text-[#2EAFC5]" />
             </div>
           </div>
-          <p className="text-lg font-bold tabular-nums text-foreground">
+          <p className="text-lg font-bold tabular-nums text-[#2d1b1a] dark:text-white">
             {formatCurrency(stats.totalSpent)}
           </p>
-          <p className="text-[10px] text-muted-foreground">Total Spent</p>
+          <p className="text-[10px] text-stone-500 dark:text-zinc-400">Total Spent</p>
         </div>
 
         {/* Orders */}
-        <div className="bg-card rounded-xl border border-border p-3">
+        <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-lg bg-[#AC0F16]/20 flex items-center justify-center">
               <IconReceipt className="size-4 text-[#AC0F16]" />
             </div>
           </div>
-          <p className="text-lg font-bold tabular-nums text-foreground">
+          <p className="text-lg font-bold tabular-nums text-[#2d1b1a] dark:text-white">
             {stats.totalOrders}
           </p>
-          <p className="text-[10px] text-muted-foreground">Total Orders</p>
+          <p className="text-[10px] text-stone-500 dark:text-zinc-400">Total Orders</p>
         </div>
 
         {/* Items */}
-        <div className="bg-card rounded-xl border border-border p-3">
+        <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-lg bg-[#F1782F]/20 flex items-center justify-center">
               <IconPackage className="size-4 text-[#F1782F]" />
             </div>
           </div>
-          <p className="text-lg font-bold tabular-nums text-foreground">
+          <p className="text-lg font-bold tabular-nums text-[#2d1b1a] dark:text-white">
             {stats.totalItems}
           </p>
-          <p className="text-[10px] text-muted-foreground">Items Ordered</p>
+          <p className="text-[10px] text-stone-500 dark:text-zinc-400">Items Ordered</p>
         </div>
 
         {/* Active/Pending */}
         <div 
-          className="bg-card rounded-xl border border-border p-3 cursor-pointer hover:shadow-md transition-shadow"
+          className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3 cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => router.push("/vendor/history")}
         >
           <div className="flex items-center gap-2 mb-1">
@@ -157,33 +157,33 @@ export function VendorDashboard({
           <p className="text-lg font-bold tabular-nums text-amber-600 dark:text-amber-400">
             {stats.pendingOrders}
           </p>
-          <p className="text-[10px] text-muted-foreground">Active Orders</p>
+          <p className="text-[10px] text-stone-500 dark:text-zinc-400">Active Orders</p>
         </div>
       </div>
 
       {/* Quick Actions Footer */}
-      <div className="bg-card rounded-2xl border border-border p-4">
-        <h3 className="font-medium text-sm text-foreground mb-3">
+      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-700 p-4">
+        <h3 className="font-medium text-sm text-[#2d1b1a] dark:text-white mb-3">
           Quick Actions
         </h3>
         <div className="grid grid-cols-2 gap-3">
           <Button
             variant="outline"
-            className="h-auto py-4 flex-col gap-2 hover:bg-muted border-border"
+            className="h-auto py-4 flex-col gap-2 hover:bg-stone-100 dark:hover:bg-zinc-800 border-stone-200 dark:border-zinc-700"
             onClick={() => router.push("/vendor/order")}
           >
             <IconShoppingCart className="size-6 text-[#AC0F16]" />
-            <span className="text-sm font-medium text-foreground">
+            <span className="text-sm font-medium text-[#2d1b1a] dark:text-white">
               Browse Products
             </span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto py-4 flex-col gap-2 hover:bg-muted border-border"
+            className="h-auto py-4 flex-col gap-2 hover:bg-stone-100 dark:hover:bg-zinc-800 border-stone-200 dark:border-zinc-700"
             onClick={() => router.push("/vendor/history")}
           >
             <IconReceipt className="size-6 text-[#2EAFC5]" />
-            <span className="text-sm font-medium text-foreground">
+            <span className="text-sm font-medium text-[#2d1b1a] dark:text-white">
               Order History
             </span>
           </Button>

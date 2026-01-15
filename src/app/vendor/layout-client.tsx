@@ -323,7 +323,7 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pt-0 pt-14">
-        <div className="flex-1 overflow-auto bg-zinc-50 dark:bg-zinc-950 p-4 md:p-6">
+        <div className="flex-1 overflow-auto bg-[#F8F6F1] dark:bg-zinc-950 p-4 md:p-6">
           {children}
         </div>
       </main>

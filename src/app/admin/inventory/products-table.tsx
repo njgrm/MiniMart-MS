@@ -219,7 +219,7 @@ export function ProductsTable({
                 <Package className="h-4 w-4 text-muted-foreground" />
               )}
             </div>
-          );uu
+          );
         },
         enableSorting: false,
       },

@@ -14,6 +14,8 @@ import {
   Search,
   RefreshCw,
   Boxes,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import {
   Table,
@@ -29,14 +31,70 @@ import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
   ReportShell,
-  ReportSummaryCard,
-  ReportSection,
 } from "@/components/reports/report-shell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   getSpoilageReport,
   type SpoilageReportResult,
   type SpoilageItem,
 } from "@/actions/reports";
+
+// Helper function for normal weight peso sign
+function formatPeso(amount: number): React.ReactNode {
+  return (
+    <>
+      <span className="font-normal">₱</span>
+      {amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+    </>
+  );
+}
+
+// Design system CompactCard with trend support
+interface CompactCardProps {
+  label: string;
+  value: string | React.ReactNode;
+  subtitle?: string;
+  icon: React.ElementType;
+  trend?: { value: number; label: string };
+  variant?: "default" | "success" | "warning" | "danger";
+}
+
+function CompactCard({ label, value, subtitle, icon: Icon, trend, variant = "default" }: CompactCardProps) {
+  const variantStyles = {
+    default: "text-foreground",
+    success: "text-[#2EAFC5]",
+    warning: "text-[#F1782F]",
+    danger: "text-[#AC0F16]",
+  };
+
+  return (
+    <Card className="bg-card">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={`h-4 w-4 ${variantStyles[variant]}`} />
+            <span className="text-sm text-muted-foreground">{label}</span>
+          </div>
+          {trend && (
+            <div className={`flex items-center gap-1 text-xs ${trend.value >= 0 ? "text-[#2EAFC5]" : "text-[#AC0F16]"}`}>
+              {trend.value >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              <span>{trend.value >= 0 ? "+" : ""}{trend.value}%</span>
+            </div>
+          )}
+        </div>
+        <p className={`text-2xl font-bold font-mono tabular-nums mt-2 ${variantStyles[variant]}`}>
+          {value}
+        </p>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+        )}
+        {trend && (
+          <p className="text-xs text-muted-foreground mt-1">{trend.label}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface SpoilageReportClientProps {
   initialData: SpoilageReportResult;
@@ -183,28 +241,28 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
 
       {/* Summary Cards - Larger with subtitles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <ReportSummaryCard
+        <CompactCard
           label="Total Incidents"
-          value={data.summary.total_items}
-          subtitle={data.summary.total_items > 0 ? `Avg ₱${avgLossPerIncident.toLocaleString(undefined, { maximumFractionDigits: 0 })}/incident` : "No incidents recorded"}
+          value={data.summary.total_items.toString()}
+          subtitle={data.summary.total_items > 0 ? `Avg ${formatPeso(avgLossPerIncident)}/incident` : "No incidents recorded"}
           icon={AlertTriangle}
           variant={data.summary.total_items > 0 ? "warning" : "default"}
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Units Lost"
           value={data.summary.total_units_lost.toLocaleString()}
           subtitle="Stock removed from inventory"
           icon={Package}
           variant={data.summary.total_units_lost > 0 ? "danger" : "default"}
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Estimated Loss"
-          value={`₱${data.summary.total_estimated_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+          value={formatPeso(data.summary.total_estimated_loss)}
           subtitle="Based on cost prices"
           icon={DollarSign}
           variant={data.summary.total_estimated_loss > 0 ? "danger" : "success"}
         />
-        <ReportSummaryCard
+        <CompactCard
           label="Report Period"
           value={dateRange?.from ? format(dateRange.from, "MMM d") + " - " + format(dateRange.to!, "MMM d") : "30 Days"}
           subtitle={`${data.items.length} records found`}
@@ -214,116 +272,127 @@ export function SpoilageReportClient({ initialData }: SpoilageReportClientProps)
 
       {/* Breakdown by Type */}
       {Object.keys(data.summary.by_type).length > 0 && (
-        <ReportSection title="Breakdown by Type">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {Object.entries(data.summary.by_type).map(([type, stats]) => (
-              <div
-                key={type}
-                className="bg-card rounded-lg p-3 border print:border-gray-300"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  {type === "DAMAGE" && <Trash2 className="h-4 w-4 text-red-600" />}
-                  {type === "SUPPLIER_RETURN" && <Undo2 className="h-4 w-4 text-orange-600" />}
-                  <span className="font-medium text-sm">
-                    {movementTypeLabels[type]?.label || type}
-                  </span>
-                </div>
-                <div className="space-y-1 text-sm">
-                  <p>
-                    <span className="text-muted-foreground">Incidents:</span>{" "}
-                    <span className="font-mono">{stats.count}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Units:</span>{" "}
-                    <span className="font-mono">{stats.units}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Loss:</span>{" "}
-                    <span className="font-mono text-red-600">
-                      ₱{stats.loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Breakdown by Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {Object.entries(data.summary.by_type).map(([type, stats]) => (
+                <div
+                  key={type}
+                  className="bg-card rounded-lg p-3 border print:border-gray-300"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {type === "DAMAGE" && <Trash2 className="h-4 w-4 text-red-600" />}
+                    {type === "SUPPLIER_RETURN" && <Undo2 className="h-4 w-4 text-orange-600" />}
+                    <span className="font-medium text-sm">
+                      {movementTypeLabels[type]?.label || type}
                     </span>
-                  </p>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <span className="text-muted-foreground">Incidents:</span>{" "}
+                      <span className="font-mono">{stats.count}</span>
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Units:</span>{" "}
+                      <span className="font-mono">{stats.units}</span>
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Loss:</span>{" "}
+                      <span className="font-mono text-red-600">
+                        {formatPeso(stats.loss)}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </ReportSection>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Detailed Table */}
-      <ReportSection title="Detailed Records" description={`${filteredItems.length} records found`}>
-        <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 print:bg-gray-100">
-                <TableHead className="w-[100px]">Date</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead className="w-[130px]">Type</TableHead>
-                <TableHead className="text-right w-[80px]">Qty</TableHead>
-                <TableHead className="text-right w-[100px]">Est. Loss</TableHead>
-                <TableHead className="print:hidden">Reason</TableHead>
-                <TableHead className="w-[100px] print:hidden">Logged By</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredItems.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    <div className="flex flex-col items-center gap-2">
-                      <Boxes className="h-8 w-8 text-muted-foreground/50" />
-                      <p>No spoilage or wastage records found for this period.</p>
-                      <p className="text-xs">This is a good sign!</p>
-                    </div>
-                  </TableCell>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Detailed Records</CardTitle>
+          <CardDescription>{filteredItems.length} records found</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border bg-card overflow-hidden print:border-gray-300">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50 print:bg-gray-100">
+                  <TableHead className="w-[100px]">Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="w-[130px]">Type</TableHead>
+                  <TableHead className="text-left w-[80px]">Qty</TableHead>
+                  <TableHead className="text-left w-[100px]">Est. Loss</TableHead>
+                  <TableHead className="print:hidden">Reason</TableHead>
+                  <TableHead className="w-[100px] print:hidden">Logged By</TableHead>
                 </TableRow>
-              ) : (
-                filteredItems.map((item, index) => (
-                  <TableRow key={index} className="print:text-sm">
-                    <TableCell className="font-mono text-sm">
-                      {format(item.logged_at, "MMM d")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="max-w-[200px]">
-                        <Link 
-                          href={`/admin/inventory/${item.product_id}`}
-                          className="font-medium text-foreground hover:text-primary hover:underline block truncate"
-                          title={item.product_name}
-                        >
-                          {item.product_name}
-                        </Link>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {item.category}
-                          {item.barcode && ` • ${item.barcode}`}
-                        </p>
+              </TableHeader>
+              <TableBody>
+                {filteredItems.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Boxes className="h-8 w-8 text-muted-foreground/50" />
+                        <p>No spoilage or wastage records found for this period.</p>
+                        <p className="text-xs">This is a good sign!</p>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={movementTypeLabels[item.movement_type]?.color || ""}
-                      >
-                        {movementTypeLabels[item.movement_type]?.label || item.movement_type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-medium text-red-600">
-                      -{item.quantity_lost}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      ₱{item.estimated_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate print:hidden">
-                      {item.reason || "—"}
-                    </TableCell>
-                    <TableCell className="text-sm print:hidden">
-                      {item.logged_by}
-                    </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </ReportSection>
+                ) : (
+                  filteredItems.map((item, index) => (
+                    <TableRow key={index} className="print:text-sm">
+                      <TableCell className="font-mono text-sm">
+                        {format(item.logged_at, "MMM d")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="max-w-[200px]">
+                          <Link 
+                            href={`/admin/inventory/${item.product_id}`}
+                            className="font-medium text-foreground hover:text-primary hover:underline block truncate"
+                            title={item.product_name}
+                          >
+                            {item.product_name}
+                          </Link>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {item.category}
+                            {item.barcode && ` • ${item.barcode}`}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="secondary"
+                          className={movementTypeLabels[item.movement_type]?.color || ""}
+                        >
+                          {movementTypeLabels[item.movement_type]?.label || item.movement_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-left font-mono font-medium text-red-600">
+                        -{item.quantity_lost}
+                      </TableCell>
+                      <TableCell className="text-left font-mono">
+                        {formatPeso(item.estimated_loss)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate print:hidden">
+                        {item.reason || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm print:hidden">
+                        {item.logged_by}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
     </ReportShell>
   );
 }
