@@ -19,6 +19,7 @@ import {
   Calendar,
   DollarSign,
   FileText,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +113,12 @@ export function SupplierDetailsClient({ supplier }: SupplierDetailsClientProps) 
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link href={`/admin/suppliers/${supplier.id}/analytics`}>
+            <Button variant="outline">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Analytics
+            </Button>
+          </Link>
           <Button variant="outline" onClick={handleToggleStatus}>
             {supplier.status === "ACTIVE" ? (
               <>

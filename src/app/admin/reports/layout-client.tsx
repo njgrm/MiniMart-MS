@@ -8,7 +8,7 @@ import {
   TrendingUp,
   BarChart3,
   Activity,
-  Trash2,
+  Building2,
   CalendarClock,
   ChevronLeft,
 } from "lucide-react";
@@ -20,7 +20,7 @@ const reportLinks = [
   { id: "profit-margin", title: "Profit Margin", href: "/admin/reports/profit-margin", icon: TrendingUp, category: "sales" },
   { id: "sales-category", title: "Sales by Category", href: "/admin/reports/sales-category", icon: BarChart3, category: "sales" },
   { id: "velocity", title: "Velocity", href: "/admin/reports/velocity", icon: Activity, category: "inventory" },
-  { id: "spoilage", title: "Spoilage", href: "/admin/reports/spoilage", icon: Trash2, category: "inventory" },
+  { id: "suppliers", title: "Suppliers", href: "/admin/reports/suppliers", icon: Building2, category: "inventory" },
   { id: "expiring", title: "Expiry", href: "/admin/reports/expiring", icon: CalendarClock, category: "inventory" },
 ];
 

@@ -30,6 +30,7 @@ export interface RestockInput {
   productId: number;
   quantity: number;
   supplierName?: string;
+  supplierId?: number; // Link to Supplier entity
   reference?: string;
   costPrice?: number;
   reason?: string;
@@ -75,6 +76,7 @@ export interface BatchInfo {
   received_date: Date;
   supplier_ref: string | null;
   supplier_name: string | null;
+  supplier_id: number | null;
   cost_price: number | null;
 }
 
@@ -232,6 +234,7 @@ export async function getProductBatches(productId: number, includeArchived: bool
     received_date: b.received_date,
     supplier_ref: b.supplier_ref,
     supplier_name: b.supplier_name,
+    supplier_id: b.supplier_id,
     cost_price: b.cost_price ? Number(b.cost_price) : null,
   }));
 }
@@ -898,7 +901,7 @@ export async function getBatchesMarkedForReturn(): Promise<ActionResult<{
  * - Inventory.current_stock is auto-computed as SUM(batch quantities)
  */
 export async function restockProduct(input: RestockInput): Promise<ActionResult> {
-  const { productId, quantity, supplierName, reference, costPrice, reason, receiptImageUrl, userId = 1, newExpiryDate } = input;
+  const { productId, quantity, supplierName, supplierId, reference, costPrice, reason, receiptImageUrl, userId = 1, newExpiryDate } = input;
 
   if (quantity <= 0) {
     return { success: false, error: "Quantity must be greater than 0" };
@@ -929,6 +932,7 @@ export async function restockProduct(input: RestockInput): Promise<ActionResult>
           received_date: new Date(),
           supplier_ref: reference || null,
           supplier_name: supplierName || null,
+          supplier_id: supplierId || null,
           cost_price: costPrice ? new Decimal(costPrice) : null,
         },
       });
@@ -962,6 +966,7 @@ export async function restockProduct(input: RestockInput): Promise<ActionResult>
           reason: reason || "Stock replenishment",
           reference: reference || null,
           supplier_name: supplierName || null,
+          supplier_id: supplierId || null,
           cost_price: costPrice ? new Decimal(costPrice) : null,
           receipt_image_url: receiptImageUrl || null,
         },
@@ -1536,6 +1541,7 @@ export interface BatchReturnInput {
   items: BatchReturnItem[];
   reason: string;
   supplierName?: string;
+  supplierId?: number;
   reference?: string;
   userId?: number;
 }
@@ -1569,7 +1575,7 @@ export interface BatchReturnResult {
  * - Updates nearest_expiry_date after batch removal
  */
 export async function batchReturnProducts(input: BatchReturnInput): Promise<ActionResult<BatchReturnResult>> {
-  const { items, reason, supplierName, reference, userId = 1 } = input;
+  const { items, reason, supplierName, supplierId, reference, userId = 1 } = input;
 
   if (!items || items.length === 0) {
     return { success: false, error: "No items provided for batch return" };
@@ -1620,6 +1626,7 @@ export async function batchReturnProducts(input: BatchReturnInput): Promise<Acti
 
           const quantityReturned = batch.quantity;
           const batchSupplier = supplierName || batch.supplier_name || "Unknown Supplier";
+          const batchSupplierId = supplierId || batch.supplier_id || null;
           const previousStock = inventory.current_stock;
           const costPrice = Number(batch.cost_price) || Number(batch.product.cost_price) || 0;
           
@@ -1645,6 +1652,7 @@ export async function batchReturnProducts(input: BatchReturnInput): Promise<Acti
               reason: `Batch return: ${reason}`,
               reference: reference || `BATCHRETURN-${Date.now()}`,
               supplier_name: batchSupplier,
+              supplier_id: batchSupplierId,
               cost_price: batch.cost_price,
             },
           });

@@ -160,4 +160,301 @@ Academic Validation (Added from Literature Review)
    - Yes. The use of WMA specifically for "avoiding excess inventory" is well-documented (Galaksi Journal).
    - Our method of prioritizing recent data points (Weights summing to 1, higher weights for t-1, t-2...) is the mathematical standard for short-term demand forecasting.
 
+---
+
+## Entity-Relationship Diagram (ERD) Explanation
+
+### Overview
+The Christian Minimart database schema implements a **relational model** optimized for retail operations, inventory tracking, and sales analytics. The schema follows **3rd Normal Form (3NF)** to eliminate data redundancy while maintaining query performance through strategic indexing.
+
+### Core Entity Groups
+
+#### 1. **User Management (Authentication & Authorization)**
+
+```
+┌─────────────┐
+│    User     │
+├─────────────┤
+│ user_id PK  │
+│ username    │
+│ password    │
+│ role        │──────┐
+│ status      │      │  Roles: ADMIN, CASHIER
+└─────────────┘      │
+       │             │
+       ▼             │
+┌─────────────┐      │
+│ Transaction │◄─────┘  "Who processed this sale?"
+└─────────────┘
+```
+
+**Defense:** "Every transaction records the cashier who processed it. This creates an audit trail for accountability. If cash is missing, we can trace which user was responsible."
+
+#### 2. **Product & Inventory (The Heart of Retail)**
+
+```
+┌──────────────┐       1:1        ┌─────────────┐
+│   Product    │─────────────────▶│  Inventory  │
+├──────────────┤                  ├─────────────┤
+│ product_id PK│                  │ current_stock│
+│ product_name │                  │ reorder_level│
+│ retail_price │                  │ lead_time    │
+│ cost_price   │                  └─────────────┘
+│ barcode      │                         │
+│ category     │                         │ 1:N
+└──────────────┘                         ▼
+       │                         ┌───────────────┐
+       │ 1:N                     │ StockMovement │
+       ▼                         ├───────────────┤
+┌────────────────┐               │ movement_type │ (RESTOCK, SALE, RETURN, etc.)
+│ InventoryBatch │               │ quantity_change│
+├────────────────┤               │ previous_stock │
+│ quantity       │               │ new_stock      │
+│ expiry_date    │               └───────────────┘
+│ cost_price     │
+│ supplier_id FK │───────▶ Supplier
+└────────────────┘
+```
+
+**Key Relationships:**
+- **Product → Inventory (1:1):** Each product has exactly ONE inventory record tracking aggregate stock.
+- **Product → InventoryBatch (1:N):** Each product can have MULTIPLE batches (different expiry dates, costs).
+- **Inventory → StockMovement (1:N):** Every stock change creates an immutable audit record.
+
+**Defense:** "We separated `Inventory` (aggregate totals) from `InventoryBatch` (granular tracking) to support **FEFO** (First-Expired, First-Out). When you sell a product, the system deducts from the batch expiring soonest, not just a single counter."
+
+#### 3. **Supplier Management (Vendor Relationships)**
+
+```
+┌─────────────┐
+│  Supplier   │
+├─────────────┤
+│ id PK       │
+│ name        │───────────┐
+│ contact     │           │
+│ email       │           │ 1:N
+│ status      │           ▼
+└─────────────┘    ┌────────────────┐
+       │           │ InventoryBatch │  "Who supplied this batch?"
+       │           └────────────────┘
+       │ 1:N              
+       ▼                  
+┌───────────────┐         
+│ StockMovement │         "Returns to this supplier"
+└───────────────┘         (movement_type = SUPPLIER_RETURN)
+```
+
+**Defense:** "By linking batches and returns to suppliers, the system can generate **Supplier Ledgers**—showing total purchases from and returns to each vendor. This is critical for negotiating better terms or identifying unreliable suppliers."
+
+#### 4. **Sales Transaction Flow**
+
+```
+┌──────────────┐      1:N      ┌─────────────────┐
+│ Transaction  │──────────────▶│ TransactionItem │
+├──────────────┤               ├─────────────────┤
+│ receipt_no   │               │ quantity        │
+│ total_amount │               │ price_at_sale   │
+│ user_id FK   │               │ cost_at_sale    │──▶ Enables profit calculation
+│ customer_id  │               │ product_id FK   │
+└──────────────┘               └─────────────────┘
+       │
+       │ 1:1
+       ▼
+┌─────────────┐
+│   Payment   │
+├─────────────┤
+│ method      │  (CASH, GCASH, CREDIT)
+│ amount_tendered │
+│ change      │
+│ gcash_ref   │
+└─────────────┘
+```
+
+**Defense:** "We store `cost_at_sale` at the moment of transaction. This freezes the profit margin calculation even if product costs change later. This is standard **point-in-time accounting**."
+
+#### 5. **Audit & Compliance**
+
+```
+┌─────────────┐
+│  AuditLog   │
+├─────────────┤
+│ action      │  (CREATE, UPDATE, DELETE, BATCH_RETURN, etc.)
+│ entity_type │  ("Product", "InventoryBatch", etc.)
+│ entity_id   │
+│ details     │
+│ metadata    │  JSON: { oldValue, newValue }
+│ username    │
+│ created_at  │
+└─────────────┘
+```
+
+**Defense:** "The `AuditLog` is **immutable**—there is no UPDATE or DELETE operation on this table. Every administrative action (price change, stock adjustment, batch return) is permanently recorded. This prevents fraud and enables forensic analysis."
+
+#### 6. **Forecasting Support Tables**
+
+```
+┌─────────────────────┐
+│ DailySalesAggregate │  Pre-computed daily totals
+├─────────────────────┤
+│ product_id          │
+│ date                │
+│ quantity_sold       │
+│ revenue             │
+│ is_event_day        │───────▶ Was this affected by a promotion?
+└─────────────────────┘
+           │
+           │ References
+           ▼
+┌─────────────┐       N:M       ┌─────────────────┐
+│  EventLog   │◄───────────────▶│ EventLogProduct │
+├─────────────┤                 └─────────────────┘
+│ name        │  "Summer Promo"
+│ multiplier  │  1.5 (50% boost expected)
+│ start_date  │
+│ end_date    │
+│ source      │  (STORE_DISCOUNT, HOLIDAY, MANUFACTURER)
+└─────────────┘
+```
+
+**Defense:** "The `EventLog` table allows the forecasting engine to **distinguish organic demand from artificial spikes**. If a TV ad caused 200% sales, we don't want to over-order next week expecting that to continue."
+
+---
+
+## Data Flow Diagram (DFD) Explanation
+
+### Context Diagram (Level 0)
+
+The attached diagram shows the **Level 0 DFD**—a high-level view of the entire system as a single process interacting with three external entities.
+
+```
+                                    ┌─────────────────────────────────────┐
+                                    │                                     │
+   ┌──────────┐                     │     MINIMART STOCK AND SALES       │
+   │ CUSTOMER │◄── Receipt/Invoice ─┤     OPTIMIZATION SYSTEM            │
+   │          │── Order Details ───▶│              (0)                   │
+   │          │── Payment ─────────▶│                                     │
+   └──────────┘                     │                                     │
+                                    │                                     │
+   ┌──────────┐◄─ Inventory Reports │                                     │
+   │ CASHIER  │◄─ Low Stock Alerts ─┤                                     │
+   │          │── POS Transaction ─▶│                                     │
+   └──────────┘                     │                                     │
+                                    │                                     │
+   ┌───────────┐                    │                                     │
+   │ ADMIN/    │◄─ Restock Decisions┤                                     │
+   │ OWNER     │◄─ Sales & Reports ─┤                                     │
+   │           │◄─ Demand Forecast ─┤                                     │
+   └───────────┘                    └─────────────────────────────────────┘
+```
+
+### External Entities
+
+| Entity | Role | Data Sent TO System | Data Received FROM System |
+|--------|------|---------------------|---------------------------|
+| **CUSTOMER** | End buyer | Order Details, Payment | Receipt/Invoice |
+| **CASHIER** | Store operator | POS Transaction data | Inventory Reports (Daily), Low Stock Alerts |
+| **ADMIN/OWNER** | Decision maker | (Configuration, Approvals) | Restock Decisions, Sales & Stock Reports, Demand Forecasts |
+
+### Data Flows Explained
+
+#### 1. **Customer → System: Order Details**
+- **What:** Product selections, quantities, customer info (if loyalty member)
+- **Where it goes:** Creates `Order` record, then `OrderItem` records
+- **System Response:** Validates stock availability, calculates totals
+
+#### 2. **Customer → System: Payment**
+- **What:** Payment method (Cash/GCash), amount tendered
+- **Where it goes:** Creates `Payment` record linked to `Transaction`
+- **Triggers:** 
+  - Stock deduction from `InventoryBatch` (FEFO)
+  - `StockMovement` audit record (type: SALE)
+  - `DailySalesAggregate` update for forecasting
+
+#### 3. **System → Customer: Receipt/Invoice**
+- **What:** Printed/digital receipt with itemized list, VAT breakdown, change
+- **Generated from:** `Transaction` + `TransactionItem` + `Payment` + `StoreSettings`
+
+#### 4. **Cashier → System: POS Transaction Data**
+- **What:** Barcode scans, manual entries, void requests
+- **Where it goes:** Real-time cart (Zustand store), then persisted as `Transaction`
+- **Validation:** System checks current stock before allowing sale
+
+#### 5. **System → Cashier: Inventory Reports (Daily)**
+- **What:** Product stock levels, items below reorder point
+- **Generated from:** `Inventory` + `Product` JOIN queries
+- **Purpose:** Cashier can alert owner about low stock during shift
+
+#### 6. **System → Cashier: Low Stock Alerts**
+- **What:** Real-time notifications when stock falls below ROP
+- **Generated from:** `Inventory.current_stock < Inventory.reorder_level`
+- **Delivery:** Dashboard badges, toast notifications
+
+#### 7. **System → Admin: Restock Decisions**
+- **What:** Recommended order quantities, priority rankings
+- **Formula:** `(Daily Velocity × Lead Time) + Safety Buffer - Current Stock`
+- **Generated from:** `DailySalesAggregate` → WMA calculation → Recommendation
+
+#### 8. **System → Admin: Sales & Stock Reports**
+- **What:** Revenue, profit margins, top sellers, slow movers, expiry warnings
+- **Generated from:** Aggregated queries on `Transaction`, `TransactionItem`, `InventoryBatch`
+- **Formats:** Dashboard cards, exportable CSV, printable Z-Read
+
+#### 9. **System → Admin: Demand Forecast**
+- **What:** Predicted sales for next 7/14/30 days per product
+- **Algorithm:** Outlier-Corrected Weighted Moving Average (see Forecasting Engine section)
+- **Uses:** `DailySalesAggregate` history + `EventLog` adjustments
+
+### Level 1 DFD (Process Decomposition)
+
+The central "Minimart Stock and Sales Optimization System" decomposes into these sub-processes:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         SYSTEM INTERNALS                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
+│  │ 1.0 POS      │───▶│ 2.0 Inventory│───▶│ 3.0 Reporting &     │  │
+│  │ Transaction  │    │ Management   │    │ Forecasting         │  │
+│  │ Processing   │    │              │    │                      │  │
+│  └──────────────┘    └──────────────┘    └──────────────────────┘  │
+│         │                   │                      │               │
+│         ▼                   ▼                      ▼               │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    D1: PostgreSQL Database                   │   │
+│  │  (Products, Inventory, Batches, Transactions, Forecasts)    │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│         │                   │                      │               │
+│         ▼                   ▼                      ▼               │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
+│  │ 4.0 Audit    │    │ 5.0 Supplier │    │ 6.0 User & Access    │  │
+│  │ Logging      │    │ Management   │    │ Control              │  │
+│  └──────────────┘    └──────────────┘    └──────────────────────┘  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Process Descriptions
+
+| Process | Input | Output | Data Store |
+|---------|-------|--------|------------|
+| **1.0 POS Transaction** | Cart items, Payment | Receipt, Stock updates | Transactions, TransactionItems, Payment |
+| **2.0 Inventory Management** | Restocks, Returns, Adjustments | Stock levels, Batch records | Inventory, InventoryBatch, StockMovement |
+| **3.0 Reporting & Forecasting** | Historical sales | Forecasts, Reports | DailySalesAggregate, SalesForecast |
+| **4.0 Audit Logging** | All system actions | Immutable log | AuditLog |
+| **5.0 Supplier Management** | Vendor info, Deliveries | Ledger, Returns | Supplier, InventoryBatch |
+| **6.0 User & Access Control** | Login credentials | Session, Permissions | User |
+
+### Defense Summary for DFD
+
+**"The DFD shows clear separation of concerns:**
+- **Customers** only interact with the POS (ordering, paying, receiving receipts)
+- **Cashiers** operate the system and receive operational alerts
+- **Admins** receive strategic insights (forecasts, reports) to make decisions
+
+**Data never flows 'backwards' inappropriately:**
+- Customers cannot access inventory data
+- Cashiers cannot modify forecasting parameters
+- All actions are logged immutably for audit compliance"
+
 

@@ -15,12 +15,19 @@ Output: sales_history_v3.csv with inflation-adjusted prices
 
 import csv
 import random
+import sys
+import io
 from datetime import datetime, timedelta
 from typing import NamedTuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
 import math
+
+# Fix Windows console encoding for emoji support
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # =============================================================================
 # Configuration

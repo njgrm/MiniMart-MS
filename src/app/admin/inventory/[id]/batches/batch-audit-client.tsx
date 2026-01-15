@@ -323,8 +323,8 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
         </div>
         <div className="bg-[#F9F6F0] border border-[#EDE5D8] rounded-lg p-4">
           <div className="flex items-center gap-2 text-[#F1782F] text-sm">
-            <AlertTriangle className="h-4 w-4" />
-            Expiring Soon
+            <Undo2 className="h-4 w-4" />
+            Return to Supplier
           </div>
           <p className="text-2xl font-bold text-[#F1782F] font-mono">{expiringSoonBatches.length}</p>
         </div>
@@ -391,7 +391,16 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
                       {batch.supplier_name ? (
                         <div className="flex items-center gap-1.5">
                           <Truck className="h-3.5 w-3.5 text-muted-foreground" />
-                          {batch.supplier_name}
+                          {batch.supplier_id ? (
+                            <Link 
+                              href={`/admin/suppliers/${batch.supplier_id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {batch.supplier_name}
+                            </Link>
+                          ) : (
+                            batch.supplier_name
+                          )}
                         </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>

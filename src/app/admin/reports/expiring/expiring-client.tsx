@@ -64,7 +64,6 @@ import { DataTablePagination } from "@/components/data-table-pagination";
 import { Progress } from "@/components/ui/progress";
 import { type ExpiringReportResult, type ExpiringItem } from "@/actions/reports";
 import { markBatchForReturn, confirmBatchesReturned } from "@/actions/inventory";
-import { BatchReturnDialog } from "./batch-return-dialog";
 import { PickupConfirmDialog } from "./pickup-confirm-dialog";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -174,10 +173,10 @@ const urgencyConfig: Record<
   },
   advise_return: {
     label: "Advise Return (≤45d)",
-    color: "text-stone-500",
+    color: "text-[#7c3aed]",
     icon: CalendarClock,
-    badgeClass: "bg-stone-100 text-stone-600 border-stone-300",
-    progressColor: "bg-stone-400",
+    badgeClass: "bg-violet-50 text-[#7c3aed] border-violet-200",
+    progressColor: "bg-[#7c3aed]",
     order: 4,
   },
 };
@@ -191,10 +190,6 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
   const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   
-  // Batch return dialog state
-  const [batchReturnOpen, setBatchReturnOpen] = useState(false);
-  // Pre-selected item for single-batch return
-  const [preSelectedBatchId, setPreSelectedBatchId] = useState<number | null>(null);
   // Pickup confirmation dialog state
   const [pickupDialogOpen, setPickupDialogOpen] = useState(false);
 
@@ -204,11 +199,10 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
     [data.items]
   );
 
-  // Handler for single batch return
+  // Handler for single batch return - navigates to return page
   const handleSingleBatchReturn = useCallback((item: ExpiringItem) => {
-    setPreSelectedBatchId(item.batch_id);
-    setBatchReturnOpen(true);
-  }, []);
+    router.push(`/admin/reports/expiring/return?batchId=${item.batch_id}`);
+  }, [router]);
 
   // Handler for marking a batch for return (2-stage workflow)
   const handleMarkForReturn = useCallback(async (item: ExpiringItem) => {
@@ -229,14 +223,6 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
       });
     }
   }, [router]);
-
-  // Reset pre-selection when dialog closes
-  const handleBatchReturnClose = (open: boolean) => {
-    setBatchReturnOpen(open);
-    if (!open) {
-      setPreSelectedBatchId(null);
-    }
-  };
 
   // Get unique categories
   const categories = useMemo(
@@ -355,7 +341,9 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
         cell: ({ row }) => {
           const days = row.original.days_until_expiry;
           const config = urgencyConfig[row.original.urgency];
-          const progressValue = days <= 0 ? 100 : Math.max(0, Math.min(100, ((30 - days) / 30) * 100));
+          // Progress logic: bigger days = bigger bar (more time left)
+          // 45 days = 100%, 0 days = 0%
+          const progressValue = days <= 0 ? 0 : Math.max(0, Math.min(100, (days / 45) * 100));
           
           return (
             <div className="flex items-center gap-2 min-w-[100px]">
@@ -627,12 +615,13 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setBatchReturnOpen(true)}
+            asChild
             className="h-9 gap-1.5 text-xs border-[#AC0F16]/30 text-[#AC0F16] hover:bg-[#AC0F16]/5"
-            disabled={data.items.length === 0}
           >
-            <Undo2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Batch Return</span>
+            <Link href="/admin/reports/expiring/return">
+              <Undo2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Batch Return</span>
+            </Link>
           </Button>
         </div>
       }
@@ -852,15 +841,6 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
         </Card>
       </div>
       
-      {/* Batch Return Dialog */}
-      <BatchReturnDialog
-        open={batchReturnOpen}
-        onOpenChange={handleBatchReturnClose}
-        expiringItems={data.items}
-        preSelectedBatchId={preSelectedBatchId}
-        onSuccess={() => router.refresh()}
-      />
-
       {/* Pickup Confirmation Dialog */}
       <PickupConfirmDialog
         open={pickupDialogOpen}

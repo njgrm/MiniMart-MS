@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
-import { PackagePlus, Truck, DollarSign, Hash, FileText, Upload, X, ImageIcon, CalendarIcon } from "lucide-react";
+import { PackagePlus, Truck, DollarSign, Hash, FileText, Upload, X, ImageIcon, CalendarIcon, Plus, Building2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,12 +17,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { restockProduct } from "@/actions/inventory";
 import { uploadReceiptImage } from "@/actions/upload";
+import { getSuppliersForSelect, createSupplier } from "@/actions/supplier";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +59,8 @@ export function RestockDialog({
 
   // Form state
   const [quantity, setQuantity] = useState("");
-  const [supplierName, setSupplierName] = useState("");
+  const [supplierId, setSupplierId] = useState<string>(""); // Store supplier ID or "new" for new supplier
+  const [newSupplierName, setNewSupplierName] = useState(""); // For creating new supplier inline
   const [reference, setReference] = useState("");
   const [costPrice, setCostPrice] = useState("");
   const [reason, setReason] = useState("");
@@ -59,11 +68,29 @@ export function RestockDialog({
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [newExpiryDate, setNewExpiryDate] = useState<Date | undefined>(undefined);
 
+  // Suppliers list
+  const [suppliers, setSuppliers] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+
+  // Fetch suppliers on dialog open
+  useEffect(() => {
+    if (open) {
+      setLoadingSuppliers(true);
+      getSuppliersForSelect().then((result) => {
+        if (result.success && result.data) {
+          setSuppliers(result.data);
+        }
+        setLoadingSuppliers(false);
+      });
+    }
+  }, [open]);
+
   // Reset form when dialog opens/closes
   useEffect(() => {
     if (open && product) {
       setQuantity("");
-      setSupplierName("");
+      setSupplierId("");
+      setNewSupplierName("");
       setReference("");
       setCostPrice(product.cost_price?.toString() || "");
       setReason("");
@@ -120,10 +147,35 @@ export function RestockDialog({
         }
       }
 
+      // Determine supplier name - either from selected supplier or new one
+      let finalSupplierName: string | undefined;
+      let finalSupplierId: number | undefined;
+
+      if (supplierId === "new" && newSupplierName.trim()) {
+        // Create new supplier first
+        const newSupplierResult = await createSupplier({ name: newSupplierName.trim() });
+        if (newSupplierResult.success && newSupplierResult.data) {
+          finalSupplierName = newSupplierResult.data.name;
+          finalSupplierId = newSupplierResult.data.id;
+          // Add to local list for future use
+          setSuppliers(prev => [...prev, { id: newSupplierResult.data!.id, name: newSupplierResult.data!.name }]);
+        } else {
+          // Still use the name even if creation failed
+          finalSupplierName = newSupplierName.trim();
+        }
+      } else if (supplierId && supplierId !== "new") {
+        const selected = suppliers.find(s => s.id === parseInt(supplierId));
+        if (selected) {
+          finalSupplierName = selected.name;
+          finalSupplierId = selected.id;
+        }
+      }
+
       const result = await restockProduct({
         productId: product.product_id,
         quantity: qty,
-        supplierName: supplierName.trim() || undefined,
+        supplierName: finalSupplierName,
+        supplierId: finalSupplierId,
         reference: reference.trim() || undefined,
         costPrice: costPrice ? parseFloat(costPrice) : undefined,
         reason: reason.trim() || undefined,
@@ -184,18 +236,42 @@ export function RestockDialog({
               />
             </div>
 
-            {/* Supplier Name - Optional */}
+            {/* Supplier - Dropdown with create option */}
             <div className="space-y-2">
               <Label htmlFor="supplier" className="flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5" />
-                Supplier Name
+                <Building2 className="h-3.5 w-3.5" />
+                Supplier
               </Label>
-              <Input
-                id="supplier"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                placeholder="e.g., ABC Distributors"
-              />
+              <Select
+                value={supplierId}
+                onValueChange={setSupplierId}
+                disabled={loadingSuppliers}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingSuppliers ? "Loading suppliers..." : "Select supplier"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id.toString()}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="new" className="text-primary">
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="h-3.5 w-3.5" />
+                      Add New Supplier
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {supplierId === "new" && (
+                <Input
+                  placeholder="Enter new supplier name"
+                  value={newSupplierName}
+                  onChange={(e) => setNewSupplierName(e.target.value)}
+                  className="mt-2"
+                />
+              )}
             </div>
 
             {/* Reference Number - Optional */}

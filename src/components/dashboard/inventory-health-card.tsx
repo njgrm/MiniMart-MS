@@ -399,7 +399,7 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
                       key={item.product_id} 
                       item={item} 
                       onAddToPO={() => handleAddToPO(item.product_id)}
-                      onClick={() => router.push(`/admin/inventory?edit=${item.product_id}`)}
+                      onClick={() => router.push(`/admin/inventory?search=${encodeURIComponent(item.product_name)}`)}
                     />
                   ))}
                 </div>
@@ -420,7 +420,7 @@ export function InventoryHealthCard({ data, className }: InventoryHealthCardProp
                       key={item.product_id} 
                       item={item} 
                       onDiscount={() => handleDiscount(item.product_id)}
-                      onClick={() => router.push(`/admin/inventory?edit=${item.product_id}`)}
+                      onClick={() => router.push(`/admin/reports/expiring?search=${encodeURIComponent(item.product_name)}`)}
                     />
                   ))}
                 </div>

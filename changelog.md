@@ -4,6 +4,435 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ---
 
+## [Unreleased] - 2026-01-16
+
+### Batch Return Filters & Documentation Update
+
+#### 1. Urgency Type Filter Added
+- New dropdown filter next to Supplier filter: "All Types", "Expired", "Critical", "Warning", "Caution", "Advise"
+- Color-coded options matching urgency badge colors
+- Works in combination with search and supplier filters
+- Icon: `AlertTriangle` for visual distinction
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/return/return-client.tsx`
+
+#### 2. ERD & DFD Documentation
+- Added comprehensive ERD explanation with ASCII diagrams
+- Added DFD Level 0 and Level 1 explanations
+- Included defense talking points for panel Q&A
+- Documented all entity relationships and data flows
+
+**Files Modified:**
+- `SYSTEM_NOTES.md` - Added ~300 lines of presentation-ready documentation
+
+---
+
+### Batch Return Responsive Redesign
+
+**Verdict:** Complete UI overhaul with responsive layout, table-based display, supplier filtering, and performance optimizations.
+
+#### Latest Changes
+
+**1. Responsive Layout**
+- Main content now uses `flex-col lg:flex-row` - stacks on mobile, side-by-side on desktop
+- Left panel: `lg:w-[280px] xl:w-[320px]` - responsive widths
+- All elements use responsive text sizes (`text-xs sm:text-sm`)
+- Header buttons/badges wrap gracefully on small screens
+
+**2. Table-Based Batch Display**
+- Replaced card-style `BatchItem` with proper `Table` + `TableRow` structure
+- Columns: Checkbox | Product | Supplier | Expiry | Qty | Value
+- Supplier and Expiry columns hidden on smaller screens (`hidden md:table-cell`, `hidden lg:table-cell`)
+- Fixed-width columns for Qty (w-16) and Value (w-24) for alignment
+- Sticky table header for scroll
+
+**3. Supplier Filter**
+- Added `supplierFilter` state and dropdown next to search input
+- Filter dropdown uses `Filter` icon with `w-[140px]` compact width
+- Dynamically populated from unique supplier names in items
+- Works in combination with text search
+
+**4. Quick Reasons Repositioning**
+- Moved Quick Reasons inside the form, immediately after Reason input
+- No longer floats at bottom - stays contextually with the field it affects
+- Smaller buttons: `h-6 text-[10px]` for compact layout
+
+**5. Further Performance Optimizations**
+- Removed CSS transitions from table rows (was causing hover/select lag)
+- Renamed `BatchItem` → `BatchRow` with simpler markup (no icons/divs)
+- Table renders faster than card list due to simpler DOM structure
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/return/return-client.tsx` - Complete UI overhaul
+
+---
+
+### Batch Return Performance & Layout Fixes (Earlier Today)
+
+**Verdict:** Fixed transaction timeout errors, improved batch return page layout and performance, added live supplier data to reports widget.
+
+#### 1. Transaction Timeout Fix
+
+**Problem:** Batch return of 13+ items failed with "Transaction already closed: timeout was 5000 ms, however 7197 ms passed."
+
+**Solution:** Increased Prisma transaction timeout from 5s to 30s.
+
+**Files Modified:**
+- `src/lib/db.ts`:
+  - Added `transactionOptions` to PrismaClient configuration
+  - `maxWait: 10000` (10s max wait to acquire connection)
+  - `timeout: 30000` (30s transaction timeout for batch operations)
+
+#### 2. Batch Return Layout Improvements
+
+**Problem:** Left panel (Return Details) was too cramped at `w-80` (320px).
+
+**Solution:** Widened to `w-[400px]` and reduced padding/gaps.
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/return/return-client.tsx`:
+  - Changed left panel from `w-80` to `w-[400px]`
+  - Reduced `CardHeader` padding: `pb-4` → `pb-3`
+  - Reduced `CardContent` gap: `gap-4` → `gap-3`
+  - Reduced description font size for tighter layout
+
+#### 3. Batch Return Performance Optimization
+
+**Problem:** Selection actions (clicking checkboxes, Select All) caused noticeable lag.
+
+**Root Cause:** 
+- Every click re-rendered all 50+ batch items
+- `toggleItem`, `selectAllExpired`, etc. were recreated on every render
+- No memoization of list items
+
+**Solution:** React performance patterns.
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/return/return-client.tsx`:
+  - Added `useCallback` and `memo` imports
+  - **Memoized callbacks:** `toggleItem`, `selectAllExpired`, `selectAllVisible`, `clearSelection`
+  - **Extracted `BatchItem` component:** Using `React.memo()` so only selected items re-render
+  - Changed `formatPeso()` to return string instead of JSX (faster)
+
+**Performance Result:** Selection actions are now instant even with 50+ items.
+
+#### 4. Supplier Analytics Widget - Live Data
+
+**Problem:** Supplier widget in Reports page showed static text, no urgent data.
+
+**Solution:** Added supplier summary to dashboard data and display in widget.
+
+**Files Modified:**
+- `src/actions/reports.ts`:
+  - Added `supplierSummary` to `EnhancedDashboardData` interface
+  - Added queries for: `activeSuppliers`, `pendingReturns` (marked for return), `recentDeliveries` (7 days)
+  - Uses parallel `Promise.all` for efficiency
+
+- `src/app/admin/reports/page.tsx`:
+  - Updated Supplier Analytics widget to show 3-column grid:
+    - Active suppliers count (teal)
+    - Recent deliveries count (orange)
+    - Pending returns count (red if > 0)
+  - Added alert text when pending returns exist
+
+---
+
+### Reports Menu Update & Route-Based Batch Return
+
+**Verdict:** Updated reports sidebar to show Suppliers instead of Spoilage, and completely redesigned the batch return feature using a route-based approach to permanently fix the infinite loop issue.
+
+#### 1. Reports Menu - Replaced Spoilage with Suppliers
+
+**Problem:** The reports sidebar and dashboard widget cards still showed "Spoilage" which was replaced by the Supplier Analytics feature.
+
+**Files Modified:**
+- `src/app/admin/reports/page.tsx`:
+  - Updated `reportLinks` array: Changed `spoilage` to `suppliers` with `Building2` icon
+  - Replaced `Trash2` icon import with `Building2`
+  - Replaced "Spoilage & Loss" widget card with "Supplier Analytics" widget card
+  - New widget links to `/admin/reports/suppliers` with supplier-focused messaging
+
+- `src/app/admin/reports/layout-client.tsx`:
+  - Already had correct Suppliers link (no changes needed)
+
+#### 2. Batch Return - Route-Based Approach (PERMANENT FIX)
+
+**Problem:** The BatchReturnDialog continued to cause "Maximum update depth exceeded" errors despite conditional rendering. The Dialog component's internal state management combined with complex form state was fundamentally incompatible.
+
+**Root Cause Analysis:**
+- Shadcn Dialog uses Radix primitives with internal open state
+- Passing `open` prop + conditional rendering created conflicting state sources
+- React's batched updates during form initialization triggered cascading re-renders
+
+**Solution:** Replaced the dialog with a dedicated route at `/admin/reports/expiring/return`.
+
+**Files Created:**
+- `src/app/admin/reports/expiring/return/page.tsx`:
+  - Server component that fetches expiring items and suppliers
+  - Accepts `?batchId=123` query param for pre-selection
+  - Clean data fetching without client-side effects
+
+- `src/app/admin/reports/expiring/return/return-client.tsx`:
+  - Full-page layout with two-panel design
+  - Left panel: Return details form (supplier, reference, reason)
+  - Right panel: Scrollable batch selection list
+  - Quick reason buttons for common return scenarios
+  - Same functionality as dialog but with stable component lifecycle
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/expiring-client.tsx`:
+  - **REMOVED:** `BatchReturnDialog` import and component
+  - **REMOVED:** `batchReturnOpen` and `preSelectedBatchId` state
+  - **REMOVED:** `handleBatchReturnClose` callback
+  - **CHANGED:** "Batch Return" button now uses `<Link href="/admin/reports/expiring/return">`
+  - **CHANGED:** `handleSingleBatchReturn` now navigates with query param
+
+**Why Route-Based Works:**
+- No dialog state management conflicts
+- Clean page lifecycle (mount → use → unmount)
+- URL-based pre-selection is stateless
+- Natural back navigation with browser history
+- Form state isolated to single page component
+
+**UX Improvements:**
+- Full-screen layout provides more space for batch selection
+- Header shows running totals (batches, units, value)
+- Quick reason buttons for faster form completion
+- Back button returns to expiry report
+
+---
+
+### Batch Return Dialog Fix & Enhanced Seeding (Previous Session)
+
+**Verdict:** Fixed persistent infinite loop bug in batch-return dialog using conditional rendering pattern, and enhanced the seed script with Python integration and progress reporting.
+
+#### 1. Batch Return Dialog - FINAL FIX (Conditional Rendering)
+
+**Problem:** The batch-return dialog caused "Maximum update depth exceeded" error due to complex useEffect chains with refs that still had timing issues.
+
+**Solution:** Changed from always-rendered with refs to conditionally-rendered component.
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/expiring-client.tsx`:
+  - Changed `<BatchReturnDialog ... />` to `{batchReturnOpen && <BatchReturnDialog ... />}`
+  - Component now unmounts completely when dialog closes
+  - State resets naturally on next mount (no need for resetForm)
+
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx`:
+  - **REMOVED:** All useRef tracking (`hasInitializedRef`, `hasFetchedSuppliersRef`, etc.)
+  - **REMOVED:** `useCallback` and `useRef` imports
+  - **REMOVED:** `resetForm` function and `handleDialogOpenChange` wrapper
+  - **SIMPLIFIED:** Initial state now computed directly from props (lazy initialization)
+  - **SIMPLIFIED:** Single useEffect for fetching suppliers on mount
+  - Component only exists when open, so no need to track open/close transitions
+
+**Why This Works:**
+- Component lifecycle = dialog lifecycle
+- No state carried over between opens
+- No complex effect dependencies to manage
+- Clean React pattern (render only what's needed)
+
+#### 2. Enhanced Seed Script with Python Integration & Bulk Inserts
+
+**Files Modified:**
+- `prisma/seed.ts` - Complete overhaul with:
+  - **Python Integration:** Runs `generate_history_v3.py` automatically before seeding
+  - **Progress Reporting:** Visual progress bar in terminal with percentage
+  - **Optimized Batching:** Processes 500 transactions per batch with bulk inserts
+  - **Bulk createMany:** Payments and TransactionItems use `createMany` for speed
+  - **Proper Transactions:** Creates Transaction + TransactionItem (not Orders)
+  - **V3 Support:** Uses Python-generated v3 CSV with fallback to v2
+  - **Fixed Schema Fields:** Corrected `name`, `price`, `change`, `price_at_sale` field names
+
+- `scripts/generate_history_v3.py` - Fixed Windows encoding:
+  - Added UTF-8 TextIOWrapper for stdout/stderr to handle emojis on Windows console
+
+**Performance Results:**
+- 107,244 transactions with 335,574 line items seeded successfully
+- Full database seed completes in ~15 minutes (vs hours with individual inserts)
+- Progress bar shows real-time progress
+
+**New Features:**
+```
+🐍 Running Python data generator...
+   [Python output here]
+✅ Python generator completed successfully
+
+💰 Seeding sales history...
+   📂 Using v3 (Python-generated) sales data
+   📊 Loaded 1,234,567 sales records
+   🔄 Creating 50,000 transactions...
+   █████████████░░░░░░░░░░░░░░░░░ 45% | Transactions: 22,500/50,000
+```
+
+**Technical Details:**
+- Uses `spawn` for non-blocking Python execution
+- Handles Windows/Linux Python path differences
+- Creates proper `Transaction` with `Payment` records
+- Parses `transaction_id`, `payment_method` from CSV
+- Groups sales items by transaction ID
+
+---
+
+### Supplier Analytics & Bulk Import
+
+**Verdict:** Replaced the Spoilage report with a comprehensive Supplier Analytics dashboard, added CSV bulk import functionality for suppliers, and fixed the batch-return dialog infinite loop bug.
+
+#### 1. Supplier Analytics Report (Replaces Spoilage)
+
+**Files Created:**
+- `src/app/admin/reports/suppliers/page.tsx` - Server component fetching supplier analytics
+- `src/app/admin/reports/suppliers/supplier-analytics-client.tsx` - Full analytics dashboard with:
+  - Summary cards (Active Suppliers, Total Deliveries, Delivery Value, Total Returns)
+  - Interactive trend charts (Deliveries over time, Returns, Avg Cost per unit)
+  - Sortable supplier performance table with return rate indicators
+  - Export to Excel and print functionality
+
+**Files Modified:**
+- `src/actions/reports.ts` - Added `getSupplierAnalytics` function and types:
+  - `SupplierAnalyticsItem`, `DeliveryTrendPoint`, `ReturnTrendPoint`, `SupplierAnalyticsResult`
+  - Aggregates delivery/return data by supplier with status classification
+
+- `src/app/admin/reports/layout-client.tsx` - Updated sidebar nav:
+  - Replaced "Spoilage" with "Suppliers" report link
+  - Changed icon from Trash2 to Building2
+
+**Files Deleted:**
+- `src/app/admin/reports/spoilage/` - Removed entire folder (replaced by suppliers)
+
+#### 2. Bulk Import for Suppliers
+
+**Files Created:**
+- `src/actions/bulk-import-suppliers.ts` - Server actions for CSV import:
+  - `importSuppliersFromCSV()` - Import supplier master data
+  - `importBatchesFromCSV()` - Import inventory batches with product/supplier linking
+  - `importReturnsFromCSV()` - Import supplier return stock movements
+  - `importAllSupplierData()` - Combined import for all three files
+
+- `src/app/admin/suppliers/import-supplier-dialog.tsx` - Import dialog with:
+  - Tabbed interface (Suppliers → Deliveries → Returns)
+  - Drag-and-drop file upload with CSV preview
+  - Row count display and import status feedback
+
+**Files Modified:**
+- `src/app/admin/suppliers/suppliers-client.tsx`:
+  - Added Import button to toolbar
+  - Integrated ImportSupplierDialog component
+
+#### 3. Batch Return Dialog Infinite Loop Fix (v2)
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx`:
+  - **NEW APPROACH:** Replaced useState flags with `useRef` to prevent re-renders
+  - Added `hasInitializedRef`, `hasFetchedSuppliersRef`, `hasMatchedSupplierRef` refs
+  - Added `prevOpenRef` to detect dialog close and reset refs
+  - Wrapped `resetForm` and `handleDialogOpenChange` in `useCallback`
+  - Pre-select batch effect now runs only once when dialog opens
+  - Supplier fetch effect runs only once with ref guard
+  - Supplier name-to-ID matching runs only when conditions are met
+
+- `src/app/admin/reports/expiring/expiring-client.tsx`:
+  - Wrapped `handleSingleBatchReturn`, `handleMarkForReturn`, `handleBatchReturnClose` in `useCallback`
+  - Prevents callback recreation on every render
+
+#### 4. Supplier Detail Analytics Page
+
+**Files Created:**
+- `src/app/admin/suppliers/[id]/analytics/page.tsx` - Server component for per-supplier analytics
+- `src/app/admin/suppliers/[id]/analytics/supplier-analytics-client.tsx` - Full analytics dashboard with:
+  - Summary stats (Deliveries, Returns, Return Rate, Avg Delivery Size)
+  - Interactive charts: Deliveries over time, Returns trend, Avg Cost per unit
+  - Recent Deliveries table (last 10)
+  - Recent Returns table (last 10)
+  - Top Products by delivery value
+
+**Files Modified:**
+- `src/actions/reports.ts` - Added `getSingleSupplierAnalytics` function and `SingleSupplierAnalyticsResult` type
+- `src/app/admin/suppliers/[id]/supplier-details-client.tsx` - Added "Analytics" button linking to analytics page
+
+#### 5. Prisma Seed Script for CSV Import
+
+**Files Created/Modified:**
+- `prisma/seed.ts` - Comprehensive seed script for database initialization:
+  - `seedUsers()` - Creates admin users (admin, admin1, admin2) with password: 12345
+  - `seedSuppliers()` - Imports from `scripts/suppliers.csv`
+  - `seedProducts()` - Imports from `scripts/products.csv` with inventory records
+  - `seedInventoryBatches()` - Imports from `scripts/inventory_batches.csv`
+  - `seedStockMovementsReturns()` - Imports from `scripts/stock_movements_returns.csv`
+  - `seedSalesHistory()` - Imports from `scripts/sales_history_v2.csv` as orders
+
+**Usage:**
+- Run `npx prisma migrate reset` to reset DB and run seed script
+- Or run `npm run db:seed` to run seed script independently
+
+**package.json already configured:**
+```json
+{
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  }
+}
+```
+
+---
+
+## [Previous] - 2026-01-16
+
+### Supplier Integration & UI Improvements
+
+**Verdict:** Integrated Supplier entity across all supplier-related dialogs with dropdown selection, added supplier links in batch tables, improved navigation from Inventory Health Card, and enforced "Return to Supplier" messaging.
+
+#### 1. Supplier Dropdown in Restock Dialog
+
+**Files Modified:**
+- `src/app/admin/inventory/restock-dialog.tsx` - Replaced text input with Select dropdown
+  - Fetches suppliers via `getSuppliersForSelect()`
+  - "Add New Supplier" option for inline creation via `createSupplier()`
+  - Stores `supplier_id` FK in database
+
+- `src/actions/inventory.ts` - Updated `RestockInput` interface and `restockProduct` function
+  - Added `supplierId?: number` to interface
+  - Passes `supplier_id` to `InventoryBatch.create()` and `StockMovement.create()`
+
+#### 2. Supplier Dropdown in Batch Return Dialog
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/batch-return-dialog.tsx`
+  - Replaced text input with Select dropdown for supplier selection
+  - Auto-detects supplier from batch record when pre-selecting
+  - Added inline "Add New Supplier" option
+  - Fixed infinite loop bug (checkbox using `pointer-events-none` instead of event handlers)
+
+- `src/actions/inventory.ts` - Updated `BatchReturnInput` and `batchReturnProducts`
+  - Added `supplierId?: number` to interface
+  - Passes `supplier_id` to `StockMovement.create()`
+
+#### 3. Supplier Links in Inventory Batch Table
+
+**Files Modified:**
+- `src/actions/inventory.ts` - Added `supplier_id` to `BatchInfo` interface and `getProductBatches` query
+- `src/app/admin/inventory/[id]/batches/batch-audit-client.tsx`
+  - Supplier name now links to `/admin/suppliers/[id]` when `supplier_id` exists
+  - Changed "Expiring Soon" card to "Return to Supplier" with `Undo2` icon
+
+#### 4. Suppliers Added to Motion Sidebar
+
+**Files Modified:**
+- `src/components/app-sidebar-motion.tsx`
+  - Added `IconBuildingStore` import
+  - Added "Suppliers" nav item under Inventory row
+
+#### 5. Inventory Health Card Navigation Improvements
+
+**Files Modified:**
+- `src/components/dashboard/inventory-health-card.tsx`
+  - **Return Window rows:** Now navigate to `/admin/reports/expiring?search=<product_name>`
+  - **Low Stock rows:** Now navigate to `/admin/inventory?search=<product_name>`
+  - Allows users to quickly find and act on specific products
+
+---
+
 ## [Unreleased] - 2026-01-15
 
 ### Suppliers Module & Audit Config Fixes

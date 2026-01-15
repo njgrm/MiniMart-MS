@@ -121,6 +121,54 @@ export interface MarginReportResult {
   };
 }
 
+// --- Supplier Analytics Report ---
+export interface SupplierAnalyticsItem {
+  supplier_id: number;
+  supplier_name: string;
+  total_deliveries: number;
+  total_units_delivered: number;
+  total_delivery_value: number;
+  total_returns: number;
+  total_units_returned: number;
+  total_return_value: number;
+  return_rate: number; // (returns / deliveries) * 100
+  avg_delivery_size: number;
+  last_delivery_date: Date | null;
+  last_return_date: Date | null;
+  status: "excellent" | "good" | "warning" | "critical"; // Based on return rate
+}
+
+export interface DeliveryTrendPoint {
+  date: string; // YYYY-MM format for monthly, YYYY-MM-DD for daily
+  deliveries: number;
+  units: number;
+  value: number;
+}
+
+export interface ReturnTrendPoint {
+  date: string;
+  returns: number;
+  units: number;
+  value: number;
+}
+
+export interface SupplierAnalyticsResult {
+  suppliers: SupplierAnalyticsItem[];
+  deliveryTrend: DeliveryTrendPoint[];
+  returnTrend: ReturnTrendPoint[];
+  costTrend: { date: string; avgCost: number }[];
+  summary: {
+    total_suppliers: number;
+    total_deliveries: number;
+    total_delivery_value: number;
+    total_returns: number;
+    total_return_value: number;
+    overall_return_rate: number;
+    avg_delivery_value: number;
+    suppliers_with_high_returns: number;
+  };
+}
+
 // ============================================================================
 // Report Functions
 // ============================================================================
@@ -875,6 +923,12 @@ export interface EnhancedDashboardData {
   topDeadStock: TopDeadStockItem[];
   spoilageLossThisMonth: number;
   expiringCriticalCount: number;
+  // Supplier summary for widget
+  supplierSummary: {
+    activeSuppliers: number;
+    pendingReturns: number; // batches marked for return
+    recentDeliveries: number; // last 7 days
+  };
 }
 
 /**
@@ -1079,6 +1133,18 @@ async function fetchEnhancedDashboardData(): Promise<EnhancedDashboardData> {
     },
   });
 
+  // ---- Supplier Summary for Widget ----
+  const [activeSuppliers, pendingReturns, recentDeliveries] = await Promise.all([
+    prisma.supplier.count({ where: { status: "ACTIVE" } }),
+    prisma.inventoryBatch.count({ where: { status: "MARKED_FOR_RETURN", deletedAt: null } }),
+    prisma.inventoryBatch.count({
+      where: {
+        received_date: { gte: sevenDaysAgo },
+        deletedAt: null,
+      },
+    }),
+  ]);
+
   return {
     todaySnapshot: {
       grossSales,
@@ -1100,6 +1166,11 @@ async function fetchEnhancedDashboardData(): Promise<EnhancedDashboardData> {
     topDeadStock,
     spoilageLossThisMonth,
     expiringCriticalCount: expiringBatches,
+    supplierSummary: {
+      activeSuppliers,
+      pendingReturns,
+      recentDeliveries,
+    },
   };
 }
 
@@ -1112,3 +1183,454 @@ export const getEnhancedDashboardData = unstable_cache(
   ["enhanced-dashboard-data"],
   { revalidate: 60, tags: ["dashboard", "reports"] }
 );
+
+/**
+ * Get Supplier Analytics Report
+ * Analyzes supplier performance: deliveries, returns, cost trends
+ * Replaces the Spoilage report with a more comprehensive supplier view
+ */
+export async function getSupplierAnalytics(
+  dateRange?: DateRangeInput
+): Promise<SupplierAnalyticsResult> {
+  const from = dateRange?.from ?? subDays(new Date(), 365); // Default to 1 year
+  const to = dateRange?.to ?? new Date();
+
+  // Get all suppliers with their batches and returns
+  const suppliers = await prisma.supplier.findMany({
+    where: { status: "ACTIVE" },
+    include: {
+      batches: {
+        where: {
+          received_date: {
+            gte: startOfDay(from),
+            lte: endOfDay(to),
+          },
+        },
+        select: {
+          id: true,
+          quantity: true,
+          cost_price: true,
+          received_date: true,
+        },
+      },
+      stockMovements: {
+        where: {
+          movement_type: "SUPPLIER_RETURN",
+          created_at: {
+            gte: startOfDay(from),
+            lte: endOfDay(to),
+          },
+        },
+        select: {
+          id: true,
+          quantity_change: true,
+          cost_price: true,
+          created_at: true,
+        },
+      },
+    },
+  });
+
+  // Process each supplier
+  const supplierItems: SupplierAnalyticsItem[] = suppliers.map((s) => {
+    const totalDeliveries = s.batches.length;
+    const totalUnitsDelivered = s.batches.reduce((sum, b) => sum + b.quantity, 0);
+    const totalDeliveryValue = s.batches.reduce(
+      (sum, b) => sum + b.quantity * (Number(b.cost_price) || 0),
+      0
+    );
+
+    const totalReturns = s.stockMovements.length;
+    const totalUnitsReturned = s.stockMovements.reduce(
+      (sum, m) => sum + Math.abs(m.quantity_change),
+      0
+    );
+    const totalReturnValue = s.stockMovements.reduce(
+      (sum, m) => sum + Math.abs(m.quantity_change) * (Number(m.cost_price) || 0),
+      0
+    );
+
+    const returnRate = totalDeliveries > 0 
+      ? (totalReturns / totalDeliveries) * 100 
+      : 0;
+
+    const avgDeliverySize = totalDeliveries > 0 
+      ? totalUnitsDelivered / totalDeliveries 
+      : 0;
+
+    const lastDelivery = s.batches.length > 0
+      ? s.batches.reduce((max, b) => 
+          b.received_date > max ? b.received_date : max,
+          s.batches[0].received_date
+        )
+      : null;
+
+    const lastReturn = s.stockMovements.length > 0
+      ? s.stockMovements.reduce((max, m) =>
+          m.created_at > max ? m.created_at : max,
+          s.stockMovements[0].created_at
+        )
+      : null;
+
+    // Determine status based on return rate
+    let status: SupplierAnalyticsItem["status"];
+    if (returnRate <= 2) status = "excellent";
+    else if (returnRate <= 5) status = "good";
+    else if (returnRate <= 10) status = "warning";
+    else status = "critical";
+
+    return {
+      supplier_id: s.id,
+      supplier_name: s.name,
+      total_deliveries: totalDeliveries,
+      total_units_delivered: totalUnitsDelivered,
+      total_delivery_value: totalDeliveryValue,
+      total_returns: totalReturns,
+      total_units_returned: totalUnitsReturned,
+      total_return_value: totalReturnValue,
+      return_rate: returnRate,
+      avg_delivery_size: avgDeliverySize,
+      last_delivery_date: lastDelivery,
+      last_return_date: lastReturn,
+      status,
+    };
+  });
+
+  // Sort by delivery value (top suppliers first)
+  supplierItems.sort((a, b) => b.total_delivery_value - a.total_delivery_value);
+
+  // Build monthly delivery trend
+  const deliveryTrendMap = new Map<string, { deliveries: number; units: number; value: number }>();
+  const returnTrendMap = new Map<string, { returns: number; units: number; value: number }>();
+  const costTrendMap = new Map<string, { totalCost: number; totalUnits: number }>();
+
+  for (const supplier of suppliers) {
+    for (const batch of supplier.batches) {
+      const monthKey = format(batch.received_date, "yyyy-MM");
+      const existing = deliveryTrendMap.get(monthKey) || { deliveries: 0, units: 0, value: 0 };
+      existing.deliveries += 1;
+      existing.units += batch.quantity;
+      existing.value += batch.quantity * (Number(batch.cost_price) || 0);
+      deliveryTrendMap.set(monthKey, existing);
+
+      // Cost trend
+      const costExisting = costTrendMap.get(monthKey) || { totalCost: 0, totalUnits: 0 };
+      costExisting.totalCost += batch.quantity * (Number(batch.cost_price) || 0);
+      costExisting.totalUnits += batch.quantity;
+      costTrendMap.set(monthKey, costExisting);
+    }
+
+    for (const movement of supplier.stockMovements) {
+      const monthKey = format(movement.created_at, "yyyy-MM");
+      const existing = returnTrendMap.get(monthKey) || { returns: 0, units: 0, value: 0 };
+      existing.returns += 1;
+      existing.units += Math.abs(movement.quantity_change);
+      existing.value += Math.abs(movement.quantity_change) * (Number(movement.cost_price) || 0);
+      returnTrendMap.set(monthKey, existing);
+    }
+  }
+
+  // Convert maps to sorted arrays
+  const deliveryTrend: DeliveryTrendPoint[] = Array.from(deliveryTrendMap.entries())
+    .map(([date, data]) => ({ date, ...data }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const returnTrend: ReturnTrendPoint[] = Array.from(returnTrendMap.entries())
+    .map(([date, data]) => ({ date, ...data }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const costTrend = Array.from(costTrendMap.entries())
+    .map(([date, data]) => ({
+      date,
+      avgCost: data.totalUnits > 0 ? data.totalCost / data.totalUnits : 0,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Calculate summary
+  const totalDeliveries = supplierItems.reduce((sum, s) => sum + s.total_deliveries, 0);
+  const totalDeliveryValue = supplierItems.reduce((sum, s) => sum + s.total_delivery_value, 0);
+  const totalReturns = supplierItems.reduce((sum, s) => sum + s.total_returns, 0);
+  const totalReturnValue = supplierItems.reduce((sum, s) => sum + s.total_return_value, 0);
+
+  return {
+    suppliers: supplierItems,
+    deliveryTrend,
+    returnTrend,
+    costTrend,
+    summary: {
+      total_suppliers: supplierItems.length,
+      total_deliveries: totalDeliveries,
+      total_delivery_value: totalDeliveryValue,
+      total_returns: totalReturns,
+      total_return_value: totalReturnValue,
+      overall_return_rate: totalDeliveries > 0 ? (totalReturns / totalDeliveries) * 100 : 0,
+      avg_delivery_value: totalDeliveries > 0 ? totalDeliveryValue / totalDeliveries : 0,
+      suppliers_with_high_returns: supplierItems.filter(s => s.return_rate > 5).length,
+    },
+  };
+}
+
+// --- Single Supplier Detail Analytics ---
+export interface SingleSupplierAnalyticsResult {
+  supplier: {
+    id: number;
+    name: string;
+    contact_person: string | null;
+    status: string;
+    created_at: Date;
+  };
+  stats: SupplierAnalyticsItem;
+  deliveryTrend: DeliveryTrendPoint[];
+  returnTrend: ReturnTrendPoint[];
+  costTrend: { date: string; avgCost: number }[];
+  recentDeliveries: {
+    id: number;
+    product_name: string;
+    quantity: number;
+    cost_price: number;
+    received_date: Date;
+    expiry_date: Date | null;
+    batch_number: string | null;
+  }[];
+  recentReturns: {
+    id: number;
+    product_name: string;
+    quantity: number;
+    reason: string | null;
+    created_at: Date;
+  }[];
+  topProducts: {
+    product_id: number;
+    product_name: string;
+    total_units: number;
+    total_value: number;
+    delivery_count: number;
+  }[];
+}
+
+/**
+ * Get detailed analytics for a single supplier
+ * Used for the supplier detail analytics page
+ */
+export async function getSingleSupplierAnalytics(
+  supplierId: number,
+  dateRange?: DateRangeInput
+): Promise<{ success: boolean; data?: SingleSupplierAnalyticsResult; error?: string }> {
+  const from = dateRange?.from ?? subDays(new Date(), 365);
+  const to = dateRange?.to ?? new Date();
+
+  try {
+    // Get supplier basic info
+    const supplierBase = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+    });
+
+    if (!supplierBase) {
+      return { success: false, error: "Supplier not found" };
+    }
+
+    // Get batches (deliveries) separately
+    const batches = await prisma.inventoryBatch.findMany({
+      where: {
+        supplier_id: supplierId,
+        received_date: {
+          gte: startOfDay(from),
+          lte: endOfDay(to),
+        },
+      },
+      include: {
+        product: true,
+      },
+      orderBy: { received_date: "desc" },
+    });
+
+    // Get stock movements (returns) separately with inventory->product
+    const stockMovements = await prisma.stockMovement.findMany({
+      where: {
+        supplier_id: supplierId,
+        movement_type: "SUPPLIER_RETURN",
+        created_at: {
+          gte: startOfDay(from),
+          lte: endOfDay(to),
+        },
+      },
+      include: {
+        inventory: {
+          include: {
+            product: true,
+          },
+        },
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    // Calculate stats
+    const totalDeliveries = batches.length;
+    const totalUnitsDelivered = batches.reduce((sum, b) => sum + b.quantity, 0);
+    const totalDeliveryValue = batches.reduce(
+      (sum, b) => sum + b.quantity * (Number(b.cost_price) || 0),
+      0
+    );
+
+    const totalReturns = stockMovements.length;
+    const totalUnitsReturned = stockMovements.reduce(
+      (sum, m) => sum + Math.abs(m.quantity_change),
+      0
+    );
+    const totalReturnValue = stockMovements.reduce(
+      (sum, m) => sum + Math.abs(m.quantity_change) * (Number(m.cost_price) || 0),
+      0
+    );
+
+    const returnRate = totalDeliveries > 0 
+      ? (totalReturns / totalDeliveries) * 100 
+      : 0;
+
+    const avgDeliverySize = totalDeliveries > 0 
+      ? totalUnitsDelivered / totalDeliveries 
+      : 0;
+
+    const lastDelivery = batches.length > 0
+      ? batches[0].received_date
+      : null;
+
+    const lastReturn = stockMovements.length > 0
+      ? stockMovements[0].created_at
+      : null;
+
+    let status: SupplierAnalyticsItem["status"];
+    if (returnRate <= 2) status = "excellent";
+    else if (returnRate <= 5) status = "good";
+    else if (returnRate <= 10) status = "warning";
+    else status = "critical";
+
+    const stats: SupplierAnalyticsItem = {
+      supplier_id: supplierBase.id,
+      supplier_name: supplierBase.name,
+      total_deliveries: totalDeliveries,
+      total_units_delivered: totalUnitsDelivered,
+      total_delivery_value: totalDeliveryValue,
+      total_returns: totalReturns,
+      total_units_returned: totalUnitsReturned,
+      total_return_value: totalReturnValue,
+      return_rate: returnRate,
+      avg_delivery_size: avgDeliverySize,
+      last_delivery_date: lastDelivery,
+      last_return_date: lastReturn,
+      status,
+    };
+
+    // Build monthly trends
+    const deliveryTrendMap = new Map<string, { deliveries: number; units: number; value: number }>();
+    const returnTrendMap = new Map<string, { returns: number; units: number; value: number }>();
+    const costTrendMap = new Map<string, { totalCost: number; totalUnits: number }>();
+
+    for (const batch of batches) {
+      const monthKey = format(batch.received_date, "yyyy-MM");
+      const existing = deliveryTrendMap.get(monthKey) || { deliveries: 0, units: 0, value: 0 };
+      existing.deliveries += 1;
+      existing.units += batch.quantity;
+      existing.value += batch.quantity * (Number(batch.cost_price) || 0);
+      deliveryTrendMap.set(monthKey, existing);
+
+      const costExisting = costTrendMap.get(monthKey) || { totalCost: 0, totalUnits: 0 };
+      costExisting.totalCost += batch.quantity * (Number(batch.cost_price) || 0);
+      costExisting.totalUnits += batch.quantity;
+      costTrendMap.set(monthKey, costExisting);
+    }
+
+    for (const movement of stockMovements) {
+      const monthKey = format(movement.created_at, "yyyy-MM");
+      const existing = returnTrendMap.get(monthKey) || { returns: 0, units: 0, value: 0 };
+      existing.returns += 1;
+      existing.units += Math.abs(movement.quantity_change);
+      existing.value += Math.abs(movement.quantity_change) * (Number(movement.cost_price) || 0);
+      returnTrendMap.set(monthKey, existing);
+    }
+
+    const deliveryTrend: DeliveryTrendPoint[] = Array.from(deliveryTrendMap.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const returnTrend: ReturnTrendPoint[] = Array.from(returnTrendMap.entries())
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const costTrend = Array.from(costTrendMap.entries())
+      .map(([date, data]) => ({
+        date,
+        avgCost: data.totalUnits > 0 ? data.totalCost / data.totalUnits : 0,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Recent deliveries (top 10)
+    const recentDeliveries = batches.slice(0, 10).map((b) => ({
+      id: b.id,
+      product_name: b.product.product_name,
+      quantity: b.quantity,
+      cost_price: Number(b.cost_price) || 0,
+      received_date: b.received_date,
+      expiry_date: b.expiry_date,
+      batch_number: b.supplier_ref, // Using supplier_ref as batch identifier
+    }));
+
+    // Recent returns (top 10)
+    const recentReturns = stockMovements.slice(0, 10).map((m) => ({
+      id: m.id,
+      product_name: m.inventory.product.product_name,
+      quantity: Math.abs(m.quantity_change),
+      reason: m.reason,
+      created_at: m.created_at,
+    }));
+
+    // Top products by delivery value
+    const productMap = new Map<number, { 
+      product_id: number; 
+      product_name: string; 
+      total_units: number; 
+      total_value: number; 
+      delivery_count: number;
+    }>();
+
+    for (const batch of batches) {
+      const existing = productMap.get(batch.product_id) || {
+        product_id: batch.product_id,
+        product_name: batch.product.product_name,
+        total_units: 0,
+        total_value: 0,
+        delivery_count: 0,
+      };
+      existing.total_units += batch.quantity;
+      existing.total_value += batch.quantity * (Number(batch.cost_price) || 0);
+      existing.delivery_count += 1;
+      productMap.set(batch.product_id, existing);
+    }
+
+    const topProducts = Array.from(productMap.values())
+      .sort((a, b) => b.total_value - a.total_value)
+      .slice(0, 10);
+
+    return {
+      success: true,
+      data: {
+        supplier: {
+          id: supplierBase.id,
+          name: supplierBase.name,
+          contact_person: supplierBase.contact_person,
+          status: supplierBase.status,
+          created_at: supplierBase.created_at,
+        },
+        stats,
+        deliveryTrend,
+        returnTrend,
+        costTrend,
+        recentDeliveries,
+        recentReturns,
+        topProducts,
+      },
+    };
+  } catch (error) {
+    console.error("getSingleSupplierAnalytics error:", error);
+    return { success: false, error: "Failed to fetch supplier analytics" };
+  }
+}

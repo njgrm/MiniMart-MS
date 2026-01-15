@@ -4,7 +4,7 @@ import {
   TrendingUp,
   TrendingDown,
   BarChart3,
-  Trash2,
+  Building2,
   Activity,
   Receipt,
   Users,
@@ -46,7 +46,7 @@ const reportLinks = [
   { id: "profit-margin", title: "Profit Margin", href: "/admin/reports/profit-margin", icon: TrendingUp, category: "sales" },
   { id: "sales-category", title: "Sales by Category", href: "/admin/reports/sales-category", icon: BarChart3, category: "sales" },
   { id: "velocity", title: "Velocity", href: "/admin/reports/velocity", icon: Activity, category: "inventory" },
-  { id: "spoilage", title: "Spoilage", href: "/admin/reports/spoilage", icon: Trash2, category: "inventory" },
+  { id: "suppliers", title: "Suppliers", href: "/admin/reports/suppliers", icon: Building2, category: "inventory" },
   { id: "expiring", title: "Expiry", href: "/admin/reports/expiring", icon: CalendarClock, category: "inventory" },
 ];
 
@@ -488,33 +488,36 @@ async function ReportsDashboard() {
               </WidgetCard>
 
               <WidgetCard
-                title="Spoilage & Loss"
-                href="/admin/reports/spoilage"
-                icon={Trash2}
-                iconColor="text-[#AC0F16]"
-                iconBg="bg-[#AC0F16]/10"
-                disableExport={data.spoilageLossThisMonth === 0}
+                title="Supplier Analytics"
+                href="/admin/reports/suppliers"
+                icon={Building2}
+                iconColor="text-[#F1782F]"
+                iconBg="bg-[#F1782F]/10"
+                disableExport
               >
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">This Month</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className={cn(
-                      "text-2xl font-bold font-mono tabular-nums",
-                      data.spoilageLossThisMonth > 0 ? "text-[#AC0F16]" : "text-[#2EAFC5]"
-                    )}>
-                      <span className="font-normal">₱</span>{data.spoilageLossThisMonth.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </span>
-                    {data.spoilageLossThisMonth === 0 && (
-                      <Badge className="bg-[#2EAFC5]/10 text-[#2EAFC5] text-[10px] gap-1">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Zero loss!
-                      </Badge>
-                    )}
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Supplier Overview</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center">
+                      <p className="text-lg font-bold font-mono text-[#2EAFC5]">{data.supplierSummary.activeSuppliers}</p>
+                      <p className="text-[10px] text-muted-foreground">Active</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold font-mono text-[#F1782F]">{data.supplierSummary.recentDeliveries}</p>
+                      <p className="text-[10px] text-muted-foreground">Deliveries</p>
+                    </div>
+                    <div className="text-center">
+                      <p className={cn(
+                        "text-lg font-bold font-mono",
+                        data.supplierSummary.pendingReturns > 0 ? "text-[#AC0F16]" : "text-muted-foreground"
+                      )}>{data.supplierSummary.pendingReturns}</p>
+                      <p className="text-[10px] text-muted-foreground">Pending</p>
+                    </div>
                   </div>
-                  {data.spoilageLossThisMonth > 0 && (
-                    <p className="text-xs text-[#AC0F16]">
-                      <AlertTriangle className="h-3 w-3 inline mr-1" />
-                      Review damage reports
+                  {data.supplierSummary.pendingReturns > 0 && (
+                    <p className="text-xs text-[#AC0F16] flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {data.supplierSummary.pendingReturns} batches awaiting pickup
                     </p>
                   )}
                 </div>
