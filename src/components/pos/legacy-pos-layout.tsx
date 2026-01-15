@@ -177,6 +177,23 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
     setProducts(products);
   }, [products, setProducts]);
 
+  // Real-time search filtering - filter products as user types in search mode
+  useEffect(() => {
+    if (isSearchMode && barcodeInput.trim()) {
+      const results = products.filter(
+        (p) =>
+          p.product_name.toLowerCase().includes(barcodeInput.toLowerCase()) ||
+          (p.barcode ?? "").toLowerCase().includes(barcodeInput.toLowerCase())
+      );
+      setSearchResults(results);
+    } else if (isSearchMode && !barcodeInput.trim()) {
+      // Show all products when search is empty but still in search mode
+      setSearchResults(products.slice(0, 20)); // Limit to 20 for performance
+    } else {
+      setSearchResults([]);
+    }
+  }, [barcodeInput, isSearchMode, products]);
+
   // Helper: Get available stock (accounts for reserved stock from pending orders)
   const getAvailableStock = useCallback((product: PosProduct | PosCartItem) => {
     // If available_stock is provided, use it; otherwise fall back to current_stock
@@ -641,26 +658,6 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
               />
             </div>
 
-            {/* Typing animation indicator */}
-            <AnimatePresence>
-              {typingAnimation.visible && (
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20"
-                >
-                  <Package className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium text-primary font-mono">
-                    {typingAnimation.text}
-                    <span className="animate-pulse">|</span>
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-
-
             {/* View Mode Toggle */}
             <div className="relative flex bg-card border border-border rounded-lg py-1.5 px-1">
               {viewModes.map((mode) => (
@@ -693,7 +690,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
 
           {/* Search results dropdown */}
           <AnimatePresence>
-            {isSearchMode && searchResults.length > 1 && (
+            {isSearchMode && searchResults.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -723,7 +720,7 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
                     </span>
                     <span className="flex-1 text-sm">{product.product_name}</span>
                     <span className="font-mono text-sm">
-                      ₱{product.retail_price.toFixed(2)}
+                      ₱{(product.retail_price > 0 ? product.retail_price : product.wholesale_price).toFixed(2)}
                     </span>
                   </button>
                 ))}
@@ -733,7 +730,30 @@ export function LegacyPOSLayout({ products, gcashQrUrl }: LegacyPOSLayoutProps) 
         </div>
 
         {/* Transaction Table */}
-        <div ref={tableRef} className="flex-1 overflow-y-auto">
+        <div ref={tableRef} className="flex-1 overflow-y-auto relative">
+          {/* Typing animation indicator - shows in content area when adding item */}
+          <AnimatePresence>
+            {typingAnimation.visible && (
+              <motion.div
+                initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 px-5 py-3 bg-card rounded-xl border-2 border-primary/30 shadow-lg"
+              >
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Package className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground font-medium">Adding item...</span>
+                  <span className="text-base font-semibold text-primary font-mono">
+                    {typingAnimation.text}
+                    <span className="animate-pulse">|</span>
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
           {cart.length === 0 ? (
             /* Empty State */
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground">

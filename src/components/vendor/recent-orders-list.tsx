@@ -106,7 +106,7 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
   // Empty state
   if (orders.length === 0) {
     return (
-      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-6">
+      <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-6">
         <div className="text-center py-8">
           <div className="size-12 mx-auto mb-3 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
             <IconHistory className="size-6 text-stone-400" />
@@ -129,7 +129,7 @@ export function RecentOrdersList({ orders, onViewOrder }: RecentOrdersListProps)
   }
 
   return (
-    <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-stone-100 dark:border-zinc-800">
         <div>

@@ -81,8 +81,8 @@ export function ProductCard({ product, displayPrice, priceType, onClick }: Props
   return (
     <div
       className={cn(
-        "group  relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all",
-        !isOutOfStock && "hover:border-primary hover:shadow-md cursor-pointer",
+        "group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-md transition-all",
+        !isOutOfStock && "hover:border-primary hover:shadow-lg cursor-pointer",
         isOutOfStock && "opacity-50 grayscale"
       )}
     >
@@ -153,16 +153,17 @@ export function ProductCard({ product, displayPrice, priceType, onClick }: Props
 
       {/* Content */}
       <div className="p-2.5 text-left border-t border-border/50">
-        <p className="text-sm font-medium text-muted-foreground line-clamp-2 leading-tight min-h-[2.5rem]">
+        <p className="text-sm font-medium text-foreground line-clamp-2 leading-tight min-h-[2.5rem]">
           {product.product_name}
         </p>
         
-        {/* Barcode Display */}
-        {product.barcode && (
-          <p className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted px-1.5 py-0.75 rounded">
-            {product.barcode}
-          </p>
-        )}
+        {/* Category Display */}
+        <p className="text-[10px] font-medium text-muted-foreground mt-1 uppercase tracking-wide">
+          {product.category
+            .toLowerCase()
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase())}
+        </p>
         
         {/* Price Row */}
         <div className="mt-1.5 flex items-center justify-between gap-2">

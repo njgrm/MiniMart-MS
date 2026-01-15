@@ -480,21 +480,13 @@ export function CameraScanner({ open, onClose, onDetected, getProductName }: Cam
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ScanBarcode className="h-5 w-5" />
-            Silent Observer Scanner - Canvas Mode (FIXED)
+            Barcode Scanner
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Browser & Device Info */}
-          <div className="bg-muted/50 p-3 rounded-lg text-xs font-mono">
-            <div className="grid grid-cols-1 gap-1">
-              <div>🌐 {browserInfo}</div>
-              <div className="text-muted-foreground whitespace-pre-line">{mediaDevices}</div>
-            </div>
-          </div>
-
           {/* Camera Feed */}
-          <div className="relative aspect-video overflow-hidden rounded-lg border border-border bg-black">
+          <div className="relative aspect-video overflow-hidden rounded-xl border border-border bg-black">
             <video 
               key={videoKey}
               ref={videoRef} 
@@ -509,41 +501,21 @@ export function CameraScanner({ open, onClose, onDetected, getProductName }: Cam
               onError={handleVideoError}
             />
             
-            {/* Enhanced Debug Status Overlay */}
-            <div className="absolute top-2 left-2 right-2 space-y-1 pointer-events-none">
-              <div className="bg-black/80 text-white px-2 py-1 rounded text-xs font-mono">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${streamActive ? 'bg-green-400' : 'bg-red-400'} animate-pulse`} />
-                  {debugStatus}
-                </div>
-                <div className="text-gray-300 text-xs mt-1">
-                  {videoDimensions} | {streamTracks}
-                </div>
-                <div className="text-gray-400 text-xs">
-                  {streamInfo} | {connectionQuality}
-                </div>
-              </div>
-            </div>
-            
-            {/* Connection Quality Indicator */}
-            <div className="absolute top-2 right-2 pointer-events-none">
-              <div className={`px-2 py-1 rounded text-xs font-mono ${
-                connectionQuality === 'Good' || connectionQuality === 'Active' ? 'bg-green-600/80 text-white' :
-                connectionQuality === 'Buffering' ? 'bg-yellow-600/80 text-white' :
-                connectionQuality === 'Poor' || connectionQuality === 'Failed' ? 'bg-red-600/80 text-white' :
-                'bg-gray-600/80 text-white'
-              }`}>
-                <Wifi className="h-3 w-3 inline mr-1" />
-                {connectionQuality}
-              </div>
-            </div>
-            
-            {/* Loading State */}
+            {/* Simple status indicator */}
             {!streamActive && !cameraError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                <div className="text-white text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                  <div className="text-sm">{debugStatus}</div>
+              <div className="absolute top-3 left-3">
+                <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  Starting camera...
+                </div>
+              </div>
+            )}
+            
+            {streamActive && (
+              <div className="absolute top-3 left-3">
+                <div className="bg-black/60 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  Ready to scan
                 </div>
               </div>
             )}
@@ -566,34 +538,19 @@ export function CameraScanner({ open, onClose, onDetected, getProductName }: Cam
             {cameraError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-4 text-center">
                 <AlertCircle className="h-12 w-12 text-red-400 mb-3" />
-                <p className="text-red-400 font-bold mb-2">Camera Failed</p>
-                <p className="text-sm text-gray-300 mb-2">{cameraError}</p>
-                <div className="text-xs text-gray-500 space-y-1 max-w-md">
-                  <p>Debug Info:</p>
-                  <p>• Status: {debugStatus}</p>
-                  <p>• Dimensions: {videoDimensions}</p>
-                  <p>• Stream: {streamInfo}</p>
-                  <p>• Tracks: {streamTracks}</p>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-white border-white/20"
-                    onClick={retryCamera}
-                  >
-                    <RefreshCcw className="h-4 w-4 mr-2" />
-                    Retry Camera
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-white border-white/20"
-                    onClick={enumerateDevices}
-                  >
-                    Refresh Devices
-                  </Button>
-                </div>
+                <p className="text-red-400 font-bold mb-2">Camera Access Failed</p>
+                <p className="text-sm text-gray-300 mb-4 max-w-sm">
+                  Please allow camera access in your browser settings, or use manual entry below.
+                </p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-white border-white/30 hover:bg-white/10"
+                  onClick={retryCamera}
+                >
+                  <RefreshCcw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
               </div>
             )}
             
@@ -615,13 +572,14 @@ export function CameraScanner({ open, onClose, onDetected, getProductName }: Cam
 
           {/* Manual Input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Manual code</label>
+            <label className="text-sm font-medium text-foreground">Manual Entry</label>
             <div className="flex items-center gap-2">
               <Input
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Enter or paste barcode"
+                placeholder="Type or paste barcode"
+                className="font-mono"
               />
               <Button type="button" onClick={handleManualSubmit}>
                 Add
@@ -629,44 +587,16 @@ export function CameraScanner({ open, onClose, onDetected, getProductName }: Cam
             </div>
           </div>
 
-          {/* Debug Canvas - only shown when debug mode is enabled */}
-          {showDebug && (
-            <div className="relative">
-              <canvas
-                ref={debugCanvasRef}
-                className="w-full border-2 border-red-500 rounded-lg"
-                style={{ maxHeight: '200px' }}
-              />
-              <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
-                DEBUG VIEW - What the scanner sees
-              </div>
-            </div>
-          )}
-
           {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Camera className="h-4 w-4" />
-              <span>Silent Observer: Canvas-based Scanning (FIXED - Uses decodeFromImageUrl)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant={showDebug ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowDebug(!showDebug)}
-              >
-                <ScanBarcode className="h-3 w-3 mr-1" />
-                {showDebug ? 'Debug ON' : 'Debug OFF'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={retryCamera}>
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Retry
-              </Button>
-              <Button variant="default" size="sm" onClick={onClose}>
-                <X className="h-4 w-4 mr-1" />
-                Done
-              </Button>
-            </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={retryCamera}>
+              <RotateCcw className="h-4 w-4 mr-1.5" />
+              Retry
+            </Button>
+            <Button size="sm" onClick={onClose}>
+              <X className="h-4 w-4 mr-1.5" />
+              Close
+            </Button>
           </div>
         </div>
       </DialogContent>

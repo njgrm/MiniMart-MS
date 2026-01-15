@@ -100,7 +100,7 @@ export function VendorDashboard({
            {/* Quick Stats - Compact Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Total Spent */}
-        <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
+        <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-lg bg-[#2EAFC5]/20 flex items-center justify-center">
               <IconCash className="size-4 text-[#2EAFC5]" />
@@ -113,7 +113,7 @@ export function VendorDashboard({
         </div>
 
         {/* Orders */}
-        <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
+        <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-lg bg-[#AC0F16]/20 flex items-center justify-center">
               <IconReceipt className="size-4 text-[#AC0F16]" />
@@ -126,7 +126,7 @@ export function VendorDashboard({
         </div>
 
         {/* Items */}
-        <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
+        <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="size-7 rounded-lg bg-[#F1782F]/20 flex items-center justify-center">
               <IconPackage className="size-4 text-[#F1782F]" />
@@ -140,7 +140,7 @@ export function VendorDashboard({
 
         {/* Active/Pending */}
         <div 
-          className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3 cursor-pointer hover:shadow-md transition-shadow"
+          className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-xl border border-stone-200 dark:border-zinc-700 p-3 cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => router.push("/vendor/history")}
         >
           <div className="flex items-center gap-2 mb-1">
@@ -162,7 +162,7 @@ export function VendorDashboard({
       </div>
 
       {/* Quick Actions Footer */}
-      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-700 p-4">
+      <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-700 p-4">
         <h3 className="font-medium text-sm text-[#2d1b1a] dark:text-white mb-3">
           Quick Actions
         </h3>

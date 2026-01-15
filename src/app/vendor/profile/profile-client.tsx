@@ -156,27 +156,27 @@ export function VendorProfileClient({ customer }: VendorProfileClientProps) {
 
   return (
     <div className="flex flex-col min-h-full bg-[#FAFAF9] dark:bg-zinc-950">
-      {/* Header Section - Dark background with avatar */}
-      <div className="bg-[#2d1b1a] dark:bg-zinc-900 pt-6 pb-10 px-0 text-center relative">
+      {/* Header Section - Gradient for light mode, solid dark for dark mode */}
+      <div className="bg-gradient-to-br from-[#AC0F16]/90 via-[#8a0c12] to-[#2d1b1a] dark:bg-none dark:bg-zinc-900 pt-6 pb-10 px-0 text-center relative">
         {/* Avatar with camera icon overlay */}
         <div className="relative inline-block mb-3">
-          <Avatar className="size-24 border-4 border-white/20">
-            <AvatarFallback className="bg-stone-300 dark:bg-zinc-700 text-[#2d1b1a] dark:text-white text-2xl font-bold">
+          <Avatar className="size-24 border-4 border-white/20 shadow-lg">
+            <AvatarFallback className="bg-stone-200 dark:bg-zinc-700 text-[#2d1b1a] dark:text-white text-2xl font-bold">
               {getInitials(customer.name)}
             </AvatarFallback>
           </Avatar>
-          <div className="absolute bottom-0 right-0 size-8 rounded-full bg-white dark:bg-zinc-800 border-2 border-[#2d1b1a] dark:border-zinc-700 flex items-center justify-center">
+          <div className="absolute bottom-0 right-0 size-8 rounded-full bg-white dark:bg-zinc-800 border-2 border-white/50 dark:border-zinc-700 flex items-center justify-center shadow-md">
             <IconCamera className="size-4 text-stone-500 dark:text-zinc-400" />
           </div>
         </div>
         
         {/* Name and email display */}
-        <h1 className="text-xl font-semibold text-white">{customer.name}</h1>
-        <p className="text-sm text-white/70 mt-0.5">{customer.email}</p>
+        <h1 className="text-xl font-semibold text-white drop-shadow-sm">{customer.name}</h1>
+        <p className="text-sm text-white/80 mt-0.5">{customer.email}</p>
       </div>
 
       {/* Content Area - overlaps header slightly */}
-      <div className="flex-1 -mt-4 rounded-t-3xl bg-[#FAFAF9] dark:bg-zinc-950 overflow-hidden">
+      <div className="flex-1 -mt-4 rounded-t-3xl bg-[#FAFAF9] dark:bg-zinc-950 overflow-hidden shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
         {/* Profile Section */}
         <div className="pt-4">
           <div className="mx-4 rounded-xl overflow-hidden border border-stone-200 dark:border-zinc-800 divide-y divide-stone-200 dark:divide-zinc-800">

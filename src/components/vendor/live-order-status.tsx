@@ -95,7 +95,7 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
   // Empty state - No active orders
   if (orders.length === 0) {
     return (
-      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-8 sm:p-10">
+      <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-8 sm:p-10">
         <div className="text-center max-w-md mx-auto">
           <div className="size-20 mx-auto mb-5 rounded-full bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
             <IconShoppingCart className="size-10 text-stone-400" />
@@ -122,7 +122,7 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
   // Single order - Premium centered view
   if (orders.length === 1) {
     return (
-      <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
+      <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 p-8 sm:p-10">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 dark:border-zinc-800">
           <div>
@@ -161,7 +161,7 @@ export function LiveOrderStatus({ initialOrders, customerId }: LiveOrderStatusPr
 
   // Multiple orders - Horizontal Carousel
   return (
-    <div className="bg-[#F8F6F1] dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
+    <div className="bg-[#F8F6F1] shadow-sm dark:bg-zinc-900 rounded-2xl border border-stone-200 dark:border-zinc-800 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 dark:border-zinc-800">
         <div>

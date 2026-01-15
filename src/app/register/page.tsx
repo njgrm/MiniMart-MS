@@ -59,7 +59,7 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center bg-background p-6 md:p-10">
+      <div className="flex min-h-svh flex-col items-center justify-center bg-card p-6 md:p-10">
         <div className="fixed top-4 right-4">
           <ThemeToggle />
         </div>
@@ -84,7 +84,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-background p-6 md:p-10">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-card p-6 md:p-10">
       {/* Theme Toggle - Top Right */}
       <div className="fixed top-4 right-4">
         <ThemeToggle />

@@ -161,7 +161,7 @@ function TodaySnapshotHero({ data }: { data: EnhancedDashboardData }) {
         {hasData ? (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {/* Gross Sales */}
-            <div className="bg-white rounded-lg p-3 border border-stone-200/50">
+            <div className="bg-card rounded-lg p-3 shadow-sm border border-stone-200/50">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 font-medium">Gross Sales</p>
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-2xl font-bold font-mono tabular-nums text-[#2d1b1a]">
@@ -183,7 +183,7 @@ function TodaySnapshotHero({ data }: { data: EnhancedDashboardData }) {
             </div>
 
             {/* Transactions */}
-            <div className="bg-white rounded-lg p-3 border border-stone-200/50">
+            <div className="bg-card rounded-lg p-3 shadow-sm border border-stone-200/50">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 font-medium">Transactions</p>
               <span className="text-2xl font-bold font-mono tabular-nums text-[#2d1b1a]">
                 {snapshot.transactionCount}
@@ -194,7 +194,7 @@ function TodaySnapshotHero({ data }: { data: EnhancedDashboardData }) {
             </div>
 
             {/* Cash */}
-            <div className="bg-white rounded-lg p-3 border border-stone-200/50">
+            <div className="bg-card rounded-lg p-3 shadow-sm border border-stone-200/50">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 font-medium flex items-center gap-1">
                 <Banknote className="h-3 w-3 text-green-600" /> Cash
               </p>
@@ -204,7 +204,7 @@ function TodaySnapshotHero({ data }: { data: EnhancedDashboardData }) {
             </div>
 
             {/* GCash */}
-            <div className="bg-white rounded-lg p-3 border border-stone-200/50">
+            <div className="bg-card rounded-lg p-3 shadow-sm border border-stone-200/50">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1 font-medium flex items-center gap-1">
                 <CreditCard className="h-3 w-3 text-blue-600" /> GCash
               </p>
