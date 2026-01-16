@@ -21,7 +21,7 @@ const SIDEBAR_WIDTH_EXPANDED = "180px";
 const SIDEBAR_WIDTH_COLLAPSED = "60px";
 
 interface Links {
-  label: string;
+  label: string | React.ReactNode;
   href: string;
   icon: React.JSX.Element | React.ReactNode;
 }

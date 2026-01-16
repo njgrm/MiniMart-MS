@@ -363,6 +363,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         prevRevenue: previous?.revenue ?? 0,
         prevProfit: previous?.profit ?? 0,
         prevCost: previous?.cost ?? 0,
+        prevFullDate: previous?.fullDate ?? previous?.date ?? null, // Track specific comparison date
       };
     });
   }, [chartData, previousChartData, showComparison]);
@@ -465,6 +466,11 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         const weekLabel = `Week ${getWeek(weekStart)}`;
         const weekFullDate = `${format(weekStart, "MMM d")} - ${format(weekEnd, "MMM d, yyyy")}`;
         
+        // Calculate previous week date range for comparison
+        const prevWeekStart = new Date(weekStart.getTime() - (dateRange.to!.getTime() - dateRange.from!.getTime()) - (24 * 60 * 60 * 1000));
+        const prevWeekEnd = new Date(prevWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000);
+        const prevWeekFullDate = `${format(prevWeekStart, "MMM d")} - ${format(prevWeekEnd, "MMM d, yyyy")}`;
+        
         weeklyData.push({
           date: weekLabel,
           fullDate: weekFullDate,
@@ -475,6 +481,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
             prevRevenue: weekPrevRevenue,
             prevProfit: weekPrevProfit,
             prevCost: weekPrevCost,
+            prevFullDate: prevWeekFullDate,
           }),
         } as DashboardChartDataPoint);
       });
@@ -491,6 +498,11 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
       const monthLabel = format(pointDate, "MMM");
       const monthFullDate = format(pointDate, "MMMM yyyy");
       
+      // Calculate previous month for comparison label
+      const prevMonthDate = new Date(pointDate);
+      prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+      const prevMonthFullDate = format(prevMonthDate, "MMMM yyyy");
+      
       const existing = monthlyData.get(monthKey);
       if (existing) {
         existing.revenue += point.revenue;
@@ -506,7 +518,10 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
           ...point,
           date: monthLabel,
           fullDate: monthFullDate,
-        });
+          ...(showComparison && {
+            prevFullDate: prevMonthFullDate,
+          }),
+        } as DashboardChartDataPoint);
       }
     });
     
@@ -532,9 +547,13 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         : null;
       const isPositive = currentValue >= previousValue;
       
+      // Get specific comparison date for this point
+      const dataPoint = payload[0]?.payload;
+      const specificComparisonDate = dataPoint?.prevFullDate;
+      
       return (
         <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
-          <p className="text-xs text-muted-foreground mb-1">{payload[0]?.payload?.fullDate || label}</p>
+          <p className="text-xs text-muted-foreground mb-1">{dataPoint?.fullDate || label}</p>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[activeMetric] }} />
@@ -545,11 +564,15 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                 <div className="flex items-center gap-2 opacity-70">
                   <div className="size-2 rounded-full" style={{ backgroundColor: COLORS[activeMetric] }} />
                   <span className="text-sm tabular-nums">Previous: {formatCurrency(previousValue)}</span>
-                  <span className="text-[10px] text-muted-foreground">({comparisonPeriodLabel})</span>
+                  {specificComparisonDate && (
+                    <span className="text-[10px] text-muted-foreground">(vs {specificComparisonDate})</span>
+                  )}
                 </div>
                 {percentChange && (
-                  <div className={`text-xs font-medium ${isPositive ? "text-emerald-500" : "text-rose-500"}`}>
-                    Delta: {isPositive ? "⬆️" : "⬇️"} {Math.abs(parseFloat(percentChange))}%
+                  <div className={`flex items-center gap-1 text-xs font-medium ${isPositive ? "text-emerald-500" : "text-rose-500"}`}>
+                    <span>Delta:</span>
+                    {isPositive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                    <span>{Math.abs(parseFloat(percentChange))}%</span>
                   </div>
                 )}
               </>
@@ -640,13 +663,13 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
 
   return (
     <TooltipProvider>
-      {/* Full-height container that breaks out of parent padding for sticky header */}
-      <div className="flex flex-col h-full -m-6 md:-mt-6 ">
+      {/* Full-height flex container - no negative margins */}
+      <div className="flex flex-col h-full overflow-hidden">
         {/* ============================================================= */}
-        {/* Sticky Control Bar - Flush to top, outside padding */}
+        {/* Sticky Control Bar - h-14 to match ReportShell toolbar */}
         {/* ============================================================= */}
-        <div className="sticky top-[-10%] z-20 bg-card border-b px-4 md:px-6 py-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="shrink-0 bg-card border-b border-stone-200/80 h-14 flex items-center px-4 md:px-6 shadow-sm z-20">
+          <div className="flex flex-wrap items-center justify-between gap-3 w-full">
             {/* Left: Date Range Picker & Presets */}
             <div className="flex items-center gap-2 flex-wrap">
               <DateRangePicker
@@ -687,16 +710,12 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   <span className="hidden sm:inline">Manage Events</span>
                 </Button>
               </Link>
-              <Button variant="outline" size="sm" className="gap-2 h-9">
-                <BarChart3 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Export</span>
-              </Button>
             </div>
           </div>
         </div>
 
         {/* ============================================================= */}
-        {/* Scrollable Content Area - Restored padding */}
+        {/* Scrollable Content Area */}
         {/* ============================================================= */}
         <div className="flex-1 overflow-auto p-4 md:p-6 space-y-4">
         
@@ -901,11 +920,38 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         </div>
 
         {/* ============================================================= */}
-        {/* Row 3: Product Insights (Tabbed) + Peak Traffic */}
+        {/* Row 3: Peak Traffic Heatmap (1 col) + Product Insights (3 cols) */}
         {/* ============================================================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Product Insights - Tabbed Card (Top Movers + Dead Stock + Category Share) */}
-          <Card className="shadow-sm">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          {/* Peak Traffic Heatmap (1 column) */}
+          <Card className="shadow-sm lg:col-span-1">
+            <CardHeader className="pb-0">
+              <div>
+                <CardTitle className="text-foreground flex items-center gap-2 text-base">
+                  <Clock className="h-4 w-4 text-[#2EAFC5]" />
+                  Peak Traffic
+                </CardTitle>
+                <CardDescription>Sales intensity by day & hour</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px]">
+                {peakTraffic.some(p => p.transactions > 0) ? (
+                  <PeakTrafficHeatmap data={peakTraffic} chartData={chartData} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <div className="text-center">
+                      <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No transactions for this period</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Product Insights - Tabbed Card (3 columns) */}
+          <Card className="shadow-sm lg:col-span-3">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
@@ -920,10 +966,10 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   </CardTitle>
                   <CardDescription>
                     {productInsightsTab === "movers" 
-                      ? "Top products by sales velocity" 
+                      ? `${topMovers.length} products ranked by sales velocity with profit` 
                       : productInsightsTab === "deadstock"
                       ? "Non-moving inventory tying up cash"
-                      : "Revenue distribution by category"}
+                      : "Revenue & profit distribution by category"}
                   </CardDescription>
                 </div>
                 {/* Tab Toggles */}
@@ -963,82 +1009,141 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
             </CardHeader>
             <CardContent>
               {productInsightsTab === "movers" ? (
-                /* Top Movers List */
-                <ScrollArea className="h-[280px]">
+                /* Top Movers Table - All products with profit */
+                <ScrollArea className="h-[320px]">
                   {topMovers.length > 0 ? (
-                    <div className="space-y-2 pr-2">
-                      {topMovers.slice(0, 8).map((product, index) => {
-                        const rankColors = ["#AC0F16", "#2EAFC5", "#F1782F", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899", "#6366F1"];
-                        const color = rankColors[index % rankColors.length];
-                        const maxVelocity = Math.max(...topMovers.map(p => p.velocity));
-                        const barWidth = (product.velocity / maxVelocity) * 100;
-                        
-                        return (
-                          <div 
-                            key={product.product_id}
-                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                          >
-                            {/* Rank Badge */}
-                            <div 
-                              className="size-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                              style={{ backgroundColor: color }}
-                            >
-                              {index + 1}
-                            </div>
+                    <div className="space-y-0">
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
+                          <p className="text-[10px] text-emerald-600 font-medium">Total Revenue</p>
+                          <p className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                            {formatCurrency(topMovers.reduce((sum, p) => sum + p.total_revenue, 0))}
+                          </p>
+                        </div>
+                        <div className="p-2 bg-cyan-50 dark:bg-cyan-950/30 rounded-lg">
+                          <p className="text-[10px] text-cyan-600 font-medium">Total Profit</p>
+                          <p className="text-sm font-bold tabular-nums text-cyan-700 dark:text-cyan-400">
+                            {formatCurrency(topMovers.reduce((sum, p) => sum + p.total_profit, 0))}
+                          </p>
+                        </div>
+                        <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+                          <p className="text-[10px] text-amber-600 font-medium">Items Sold</p>
+                          <p className="text-sm font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                            {topMovers.reduce((sum, p) => sum + p.total_sold, 0).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Products Table */}
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="text-[10px] w-10">#</TableHead>
+                            <TableHead className="text-[10px]">Product</TableHead>
+                            <TableHead className="text-[10px] w-[140px]">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help underline decoration-dotted">Velocity</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[200px]">
+                                  <p className="text-xs">Average units sold per day. Higher velocity = faster-moving product.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TableHead>
+                            <TableHead className="text-[10px] text-right">Sold</TableHead>
+                            <TableHead className="text-[10px] text-right">Revenue</TableHead>
+                            <TableHead className="text-[10px] text-right">Profit</TableHead>
+                            <TableHead className="text-[10px] text-right">Stock</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {topMovers.map((product, index) => {
+                            const rankColors = ["#AC0F16", "#2EAFC5", "#F1782F", "#8B5CF6", "#10B981"];
+                            const color = index < 5 ? rankColors[index] : "#6B7280";
+                            const maxVelocity = Math.max(...topMovers.map(p => p.velocity));
+                            const barWidth = maxVelocity > 0 ? (product.velocity / maxVelocity) * 100 : 0;
                             
-                            {/* Product Image - Using SafeImage for offline resilience */}
-                            <div className="size-10 rounded-lg overflow-hidden bg-muted shrink-0">
-                              {product.image_url ? (
-                                <img 
-                                  src={product.image_url} 
-                                  alt={product.product_name}
-                                  className="size-full object-cover"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    // Hide broken image and show fallback
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                                  }}
-                                />
-                              ) : null}
-                              <div className={`size-full flex items-center justify-center ${product.image_url ? 'hidden' : ''}`}>
-                                <Package className="size-5 text-muted-foreground/50" />
-                              </div>
-                            </div>
-                            
-                            {/* Product Info */}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium truncate text-foreground">{product.product_name}</p>
-                              <p className="text-[10px] text-muted-foreground capitalize">{product.category.toLowerCase().replace(/_/g, " ")}</p>
-                              {/* Velocity Bar */}
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                            return (
+                              <TableRow key={product.product_id} className="h-9">
+                                <TableCell className="py-1">
                                   <div 
-                                    className="h-full rounded-full transition-all" 
-                                    style={{ width: `${barWidth}%`, backgroundColor: color }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Stats */}
-                            <div className="text-right shrink-0">
-                              <p className="text-xs font-bold tabular-nums" style={{ color }}>{product.velocity}/day</p>
-                              <p className="text-[10px] text-muted-foreground tabular-nums">{product.total_sold} sold</p>
-                              {/* Stock Badge */}
-                              <span className={`text-[9px] px-1.5 py-0.5 rounded inline-block mt-0.5 ${
-                                product.current_stock === 0 
-                                  ? "bg-destructive/20 text-destructive" 
-                                  : product.current_stock <= 10 
-                                    ? "bg-amber-500/20 text-amber-600" 
-                                    : "bg-cyan-500/20 text-cyan-600"
-                              }`}>
-                                {product.current_stock} in stock
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                                    className="size-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
+                                    style={{ backgroundColor: color }}
+                                  >
+                                    {index + 1}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="py-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded overflow-hidden bg-muted shrink-0">
+                                      {product.image_url ? (
+                                        <img 
+                                          src={product.image_url} 
+                                          alt=""
+                                          className="size-full object-cover"
+                                          loading="lazy"
+                                        />
+                                      ) : (
+                                        <div className="size-full flex items-center justify-center">
+                                          <Package className="size-3 text-muted-foreground/50" />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[10px] font-medium truncate max-w-[120px]">{product.product_name}</p>
+                                      <p className="text-[9px] text-muted-foreground capitalize">{product.category.toLowerCase()}</p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="py-1">
+                                  {/* Velocity with visual bar */}
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center gap-2 cursor-help">
+                                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full rounded-full transition-all" 
+                                            style={{ width: `${barWidth}%`, backgroundColor: color }}
+                                          />
+                                        </div>
+                                        <span className="text-[10px] font-bold tabular-nums shrink-0 w-10 text-right" style={{ color }}>
+                                          {product.velocity}/d
+                                        </span>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">
+                                      <p className="text-xs">{product.velocity} units sold per day on average</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell className="py-1 text-right">
+                                  <span className="text-[10px] tabular-nums">{product.total_sold}</span>
+                                </TableCell>
+                                <TableCell className="py-1 text-right">
+                                  <span className="text-[10px] tabular-nums">{formatCurrency(product.total_revenue)}</span>
+                                </TableCell>
+                                <TableCell className="py-1 text-right">
+                                  <span className={`text-[10px] tabular-nums font-medium ${product.total_profit > 0 ? 'text-emerald-600' : 'text-destructive'}`}>
+                                    {formatCurrency(product.total_profit)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="py-1 text-right">
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                    product.current_stock === 0 
+                                      ? "bg-destructive/20 text-destructive" 
+                                      : product.current_stock <= 10 
+                                        ? "bg-amber-500/20 text-amber-600" 
+                                        : "bg-cyan-500/20 text-cyan-600"
+                                  }`}>
+                                    {product.current_stock}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -1125,40 +1230,27 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   })()}
                 </ScrollArea>
               ) : (
-                /* Category Share Donut Chart */
-                <div className="h-[280px]">
+                /* Category Share - Chart + Table with detailed metrics */
+                <ScrollArea className="h-[320px]">
                   {categoryData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%" debounce={100}>
-                      <RechartsPie>
-                        <Pie
-                          data={categoryData}
-                          dataKey="revenue"
-                          nameKey="label"
-                          cx="50%"
-                          cy="45%"
-                          innerRadius={55}
-                          outerRadius={90}
-                          paddingAngle={2}
-                          labelLine={false}
-                          label={({ label, percentage, cx, cy, midAngle, outerRadius }) => {
-                            const RADIAN = Math.PI / 180;
-                            const radius = outerRadius + 20;
-                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                            
-                            if (percentage < 5) return null; // Hide labels for small segments
-                            
-                            return (
-                              <text
-                                x={x}
-                                y={y}
-                                textAnchor={x > cx ? "start" : "end"}
-                                dominantBaseline="central"
-                                className="text-[10px] fill-muted-foreground"
-                              >
-                                {label} ({percentage}%)
-                              </text>
-                            );
+                    <div className="flex flex-col lg:flex-row gap-4">
+                      {/* Donut Chart */}
+                      <div className="h-[200px] lg:w-1/3 shrink-0">
+                        <ResponsiveContainer width="100%" height="100%" debounce={100}>
+                          <RechartsPie>
+                            <Pie
+                              data={categoryData}
+                              dataKey="revenue"
+                              nameKey="label"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={40}
+                              outerRadius={70}
+                              paddingAngle={2}
+                              labelLine={false}
+                          label={({ percentage }) => {
+                            if (percentage < 8) return null;
+                            return `${percentage}%`;
                           }}
                         >
                           {categoryData.map((entry, index) => (
@@ -1172,41 +1264,91 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                               return (
                                 <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-lg">
                                   <p className="text-xs font-medium text-foreground">{data.label}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatCurrency(data.revenue)} ({data.percentage}%)
-                                  </p>
+                                  <div className="text-[10px] text-muted-foreground space-y-0.5 mt-1">
+                                    <p>Revenue: {formatCurrency(data.revenue)}</p>
+                                    <p>Profit: {formatCurrency(data.profit)}</p>
+                                    <p>Items: {data.itemsSold.toLocaleString()}</p>
+                                  </div>
                                 </div>
                               );
                             }
                             return null;
                           }}
                         />
-                        <Legend
-                          verticalAlign="bottom"
-                          height={50}
-                          content={({ payload }) => (
-                            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2">
-                              {payload?.slice(0, 6).map((entry: any, index: number) => (
-                                <div key={index} className="flex items-center gap-1">
-                                  <div 
-                                    className="size-2 rounded-full" 
-                                    style={{ backgroundColor: entry.color }} 
-                                  />
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {entry.value}
-                                  </span>
-                                </div>
-                              ))}
-                              {payload && payload.length > 6 && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  +{payload.length - 6} more
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        />
                       </RechartsPie>
                     </ResponsiveContainer>
+                      </div>
+                      
+                      {/* Category Table with detailed metrics */}
+                      <div className="flex-1">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                              <TableHead className="text-[10px]">Category</TableHead>
+                              <TableHead className="text-[10px] text-right">Revenue</TableHead>
+                              <TableHead className="text-[10px] text-right">Profit</TableHead>
+                              <TableHead className="text-[10px] text-right">Margin</TableHead>
+                              <TableHead className="text-[10px] text-right">Items</TableHead>
+                              <TableHead className="text-[10px] text-right">Avg Price</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {categoryData.map((cat) => {
+                              const margin = cat.revenue > 0 ? (cat.profit / cat.revenue * 100) : 0;
+                              return (
+                                <TableRow key={cat.category} className="h-9">
+                                  <TableCell className="py-1">
+                                    <div className="flex items-center gap-2">
+                                      <div 
+                                        className="size-2.5 rounded-full shrink-0" 
+                                        style={{ backgroundColor: cat.color }}
+                                      />
+                                      <span className="text-[10px] font-medium">{cat.label}</span>
+                                      <span className="text-[9px] text-muted-foreground">({cat.percentage}%)</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right">
+                                    <span className="text-[10px] tabular-nums">{formatCurrency(cat.revenue)}</span>
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right">
+                                    <span className={`text-[10px] tabular-nums font-medium ${cat.profit > 0 ? 'text-emerald-600' : 'text-destructive'}`}>
+                                      {formatCurrency(cat.profit)}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right">
+                                    <span className={`text-[10px] tabular-nums ${margin >= 15 ? 'text-emerald-600' : margin >= 10 ? 'text-amber-600' : 'text-destructive'}`}>
+                                      {margin.toFixed(1)}%
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right">
+                                    <span className="text-[10px] tabular-nums">{cat.itemsSold.toLocaleString()}</span>
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right">
+                                    <span className="text-[10px] tabular-nums">₱{cat.avgItemPrice}</span>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                        
+                        {/* Summary Footer */}
+                        <div className="mt-3 pt-3 border-t grid grid-cols-3 gap-2">
+                          <div className="text-center">
+                            <p className="text-[9px] text-muted-foreground">Total Revenue</p>
+                            <p className="text-xs font-bold tabular-nums">{formatCurrency(categoryData.reduce((s, c) => s + c.revenue, 0))}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[9px] text-muted-foreground">Total Profit</p>
+                            <p className="text-xs font-bold tabular-nums text-emerald-600">{formatCurrency(categoryData.reduce((s, c) => s + c.profit, 0))}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-[9px] text-muted-foreground">Categories</p>
+                            <p className="text-xs font-bold tabular-nums">{categoryData.length}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground">
                       <div className="text-center">
@@ -1215,48 +1357,14 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                       </div>
                     </div>
                   )}
-                </div>
+                </ScrollArea>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Peak Traffic Heatmap */}
-          <Card className="shadow-sm">
-            <CardHeader className="pb-0">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div>
-                  <CardTitle className="text-foreground flex items-center gap-2 text-base">
-                    <Clock className="h-4 w-4 text-[#2EAFC5]" />
-                    Peak Traffic Heatmap
-                    {dateRange?.from && dateRange?.to && (
-                      <span className="text-xs font-normal text-muted-foreground ml-1">
-                        ({format(dateRange.from, "MMM d, yyyy")} - {format(dateRange.to, "MMM d, yyyy")})
-                      </span>
-                    )}
-                  </CardTitle>
-                  <CardDescription>Sales intensity by day of week and hour</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[130%]">
-                {peakTraffic.some(p => p.transactions > 0) ? (
-                  <PeakTrafficHeatmap data={peakTraffic} chartData={chartData} />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    <div className="text-center">
-                      <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No transactions for this period</p>
-                    </div>
-                  </div>
-                )}
-              </div>
             </CardContent>
           </Card>
         </div>
 
         {/* ============================================================= */}
-        {/* Row 3: Master-Detail Restock Section (Side-by-Side) */}
+        {/* Row 4: Master-Detail Restock Section (Side-by-Side) */}
         {/* ============================================================= */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
           {/* Left Column: Restock Recommendations Table */}
@@ -1270,22 +1378,10 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                       Restock Recommendations
                     </CardTitle>
                     <CardDescription className="text-muted-foreground text-xs">
-                      Click a row to view demand forecast
+                      Select items to export purchase order
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="gap-2 h-8"
-                      onClick={() => {
-                        // Export all restock recommendations (critical + low items)
-                        generatePurchaseOrderExcel(data.forecasts);
-                      }}
-                    >
-                      <FileDown className="h-3.5 w-3.5" />
-                      Export PO
-                    </Button>
                     <Link href="/admin/inventory">
                       <Button variant="outline" size="sm" className="gap-2 h-8">
                         View Inventory
@@ -1304,7 +1400,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                     setSelectedProductName(name);
                   }}
                   onExportPO={(selectedItems) => {
-                    console.log("Exporting PO for items:", selectedItems.map(i => i.productName));
+                    generatePurchaseOrderExcel(selectedItems);
                   }}
                   initialAddToPO={initialAddToPO}
                 />
@@ -1784,21 +1880,21 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
       </div>
       
       {/* Heatmap grid */}
-      <div className="flex-1 flex flex-col gap-1">
+      <div className="flex-1 flex flex-col gap-1.5 mt-2">
         {heatmapData.map((row, dayIdx) => (
-          <div key={dayIdx} className="flex gap-1 flex-1">
+          <div key={dayIdx} className="flex gap-1.5 flex-1">
             {/* Day label */}
             <div className="w-10 flex items-center justify-end pr-2">
               <span className="text-[10px] font-medium text-muted-foreground">
                 {DAYS_OF_WEEK[dayIdx]}
               </span>
             </div>
-            {/* Cells */}
+            {/* Cells - rounded squares with better spacing */}
             {row.map((cell, hourIdx) => (
               <Tooltip key={hourIdx}>
                 <TooltipTrigger asChild>
                   <div
-                    className={`flex-1 rounded-sm cursor-pointer transition-all hover:ring-2 hover:ring-cyan-400/50 ${getColor(cell.value)}`}
+                    className={`flex-1 aspect-square rounded-md cursor-pointer transition-all hover:ring-2 hover:ring-cyan-400 hover:scale-105 min-h-[16px] ${getColor(cell.value)}`}
                   />
                 </TooltipTrigger>
                 <TooltipContent 
@@ -1830,12 +1926,12 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
       {/* Legend */}
       <div className="flex items-center justify-center gap-2 mt-3 pt-2 border-t border-border/50">
         <span className="text-[10px] text-muted-foreground">Low</span>
-        <div className="flex gap-0.5">
-          <div className="size-3 rounded-sm bg-muted/30" />
-          <div className="size-3 rounded-sm bg-cyan-100 dark:bg-cyan-950/40" />
-          <div className="size-3 rounded-sm bg-cyan-300 dark:bg-cyan-800/60" />
-          <div className="size-3 rounded-sm bg-cyan-500 dark:bg-cyan-600" />
-          <div className="size-3 rounded-sm bg-cyan-600 dark:bg-cyan-500" />
+        <div className="flex gap-1">
+          <div className="size-4 rounded-md bg-muted/30" />
+          <div className="size-4 rounded-md bg-cyan-100 dark:bg-cyan-950/40" />
+          <div className="size-4 rounded-md bg-cyan-300 dark:bg-cyan-800/60" />
+          <div className="size-4 rounded-md bg-cyan-500 dark:bg-cyan-600" />
+          <div className="size-4 rounded-md bg-cyan-600 dark:bg-cyan-500" />
         </div>
         <span className="text-[10px] text-muted-foreground">High</span>
       </div>
@@ -2082,6 +2178,7 @@ function ForecastingTable({
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [sortField, setSortField] = useState<SortField>("urgency");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [forecastPeriod, setForecastPeriod] = useState<7 | 14 | 30>(7);
   
   // Ref for auto-scrolling to this section
   const tableContainerRef = React.useRef<HTMLDivElement>(null);
@@ -2110,6 +2207,29 @@ function ForecastingTable({
       }, 300); // Small delay to allow page to render
     }
   }, [initialAddToPO]);
+
+  // Helper to calculate scaled forecast values based on selected period
+  const getScaledForecast = (item: ForecastTableItem) => {
+    const dailyVelocity = item.velocity7Day / 7; // Daily velocity
+    const scaleFactor = forecastPeriod / 7; // Scale from 7-day base
+    
+    // Scaled forecast demand
+    const scaledDemand = Math.round(item.predictedDemand * scaleFactor);
+    
+    // Scaled recommended quantity (with safety buffer)
+    const safetyBuffer = Math.ceil(dailyVelocity * 2); // 2 days safety
+    const targetStock = Math.ceil(dailyVelocity * forecastPeriod) + safetyBuffer;
+    const scaledRecommendedQty = Math.max(0, targetStock - item.currentStock);
+    
+    // Estimated cost
+    const scaledCost = scaledRecommendedQty * item.costPrice;
+    
+    return {
+      demand: scaledDemand,
+      recommendedQty: scaledRecommendedQty,
+      cost: scaledCost,
+    };
+  };
 
   const hasActiveFilters = searchQuery || categoryFilter !== "all" || urgencyFilter !== "all";
 
@@ -2325,6 +2445,33 @@ function ForecastingTable({
           </Button>
         )}
 
+        {/* Forecast Period Selector */}
+        <div className="flex items-center gap-1 border rounded-lg p-2 bg-muted/30">
+          {([7, 14, 30] as const).map((days) => (
+            <Tooltip key={days}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setForecastPeriod(days)}
+                  className={`text-[10px] px-2.5 py-1 rounded-md transition-colors font-medium ${
+                    forecastPeriod === days
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  }`}
+                >
+                  {days}d
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs p-2 bg-popover text-popover-foreground border shadow-lg">
+                <p className="text-xs">
+                  {days === 7 && "7-day forecast - Standard reorder window"}
+                  {days === 14 && "14-day forecast - Extended planning horizon"}
+                  {days === 30 && "30-day forecast - Long-term projection (less accurate)"}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+
         {/* Export PO Button (shows selection count when items selected) */}
         {selectedItems.size > 0 && (
           <Button
@@ -2384,15 +2531,20 @@ function ForecastingTable({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div className="cursor-help">
-                            <SortButton field="demand"><span className="font-bold text-foreground">Forecasted</span></SortButton>
+                            <SortButton field="demand"><span className="font-bold text-foreground">Forecast ({forecastPeriod}d)</span></SortButton>
                           </div>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
-                          <p className="text-xs font-medium mb-1">7-Day Demand Forecast</p>
+                          <p className="text-xs font-medium mb-1">{forecastPeriod}-Day Demand Forecast</p>
                           <p className="text-xs text-muted-foreground">
-                            Predicted total units to be sold over the next 7 days based on 
+                            Predicted total units to be sold over the next {forecastPeriod} days based on 
                             Weighted Moving Average (WMA) of historical sales, adjusted for 
                             seasonality and active promotional events.
+                            {forecastPeriod === 30 && (
+                              <span className="flex items-center gap-1 mt-1 text-amber-600 font-medium">
+                                <AlertTriangle className="size-3" /> 30-day forecasts have lower accuracy. Use for long-term planning only.
+                              </span>
+                            )}
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -2400,17 +2552,21 @@ function ForecastingTable({
                     <TableHead className="h-10 bg-muted/30 w-[100px]">
                       <SortButton field="urgency">Action</SortButton>
                     </TableHead>
-                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[70px] text-right">
+                    <TableHead className="h-10 bg-muted/30 text-foreground font-bold uppercase text-[11px] tracking-wider w-[80px] text-right">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="cursor-help">Rec</span>
+                          <span className="cursor-help">Rec ({forecastPeriod}d)</span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
-                          <p className="text-xs font-medium mb-1">Recommended Order Quantity</p>
+                          <p className="text-xs font-medium mb-1">Recommended Order Quantity ({forecastPeriod} days)</p>
                           <p className="text-xs text-muted-foreground">
-                            Suggested units to order to maintain 7 days of stock plus safety buffer. 
-                            Calculated as: (Daily Velocity × 7 days) + Reorder Level − Current Stock. 
-                            Capped at 14 days supply to prevent over-ordering.
+                            Suggested units to order to maintain {forecastPeriod} days of stock plus safety buffer. 
+                            Calculated as: (Daily Velocity × {forecastPeriod} days) + Safety Buffer − Current Stock.
+                            {forecastPeriod === 30 && (
+                              <span className="flex items-center gap-1 mt-1 text-amber-600 font-medium">
+                                <AlertTriangle className="size-3" /> Large orders may impact cash flow. Consider splitting orders.
+                              </span>
+                            )}
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -2442,7 +2598,11 @@ function ForecastingTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAndSortedForecasts.map((item) => (
+                filteredAndSortedForecasts.map((item) => {
+                  const scaled = getScaledForecast(item);
+                  const dailyVelocity = item.velocity7Day / 7;
+                  
+                  return (
                   <TableRow 
                     key={item.productId}
                     onClick={() => onProductSelect?.(
@@ -2489,31 +2649,36 @@ function ForecastingTable({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="cursor-help">
-                            {isNaN(item.predictedDemand) ? "—" : item.predictedDemand}
+                            {isNaN(scaled.demand) ? "—" : scaled.demand}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
-                          <p className="text-xs font-medium mb-1">7-Day Demand Forecast: {item.predictedDemand} units</p>
+                          <p className="text-xs font-medium mb-1">{forecastPeriod}-Day Demand Forecast: {scaled.demand} units</p>
                           <p className="text-xs text-muted-foreground mb-2">
                             Based on Weighted Moving Average (WMA) of past sales:
                           </p>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Avg. Daily Sales:</span>
-                              <span className="font-mono">{(item.velocity7Day / 7).toFixed(1)} units/day</span>
+                              <span className="font-mono">{dailyVelocity.toFixed(1)} units/day</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">7-Day Projection:</span>
-                              <span className="font-mono">{item.predictedDemand} units</span>
+                              <span className="text-muted-foreground">{forecastPeriod}-Day Projection:</span>
+                              <span className="font-mono">{scaled.demand} units</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Confidence:</span>
                               <span className={`font-medium ${
                                 item.confidence === "HIGH" ? "text-emerald-600" :
                                 item.confidence === "MEDIUM" ? "text-amber-600" : "text-red-500"
-                              }`}>{item.confidence}</span>
+                              }`}>{item.confidence}{forecastPeriod === 30 && <AlertTriangle className="inline size-3 ml-1" />}</span>
                             </div>
                           </div>
+                          {forecastPeriod === 30 && (
+                            <p className="flex items-center gap-1 text-xs text-amber-600 mt-2 font-medium">
+                              <AlertTriangle className="size-3" /> 30-day forecasts are less accurate. Use for planning only.
+                            </p>
+                          )}
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
@@ -2580,13 +2745,13 @@ function ForecastingTable({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="font-mono font-bold text-sm text-foreground cursor-help">
-                            {isNaN(item.recommendedQty) ? "—" : item.recommendedQty}
+                            {isNaN(scaled.recommendedQty) ? "—" : scaled.recommendedQty}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-xs p-3 bg-popover text-popover-foreground border shadow-lg">
-                          <p className="text-xs font-medium mb-1">Recommended Order: {item.recommendedQty} units</p>
+                          <p className="text-xs font-medium mb-1">Recommended Order: {scaled.recommendedQty} units</p>
                           <p className="text-xs text-muted-foreground mb-2">
-                            Calculated to maintain 7 days of stock with safety buffer:
+                            Calculated to maintain {forecastPeriod} days of stock with safety buffer:
                           </p>
                           <div className="space-y-1 text-xs">
                             <div className="flex justify-between">
@@ -2595,20 +2760,20 @@ function ForecastingTable({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Daily Velocity:</span>
-                              <span className="font-mono">{(item.velocity7Day / 7).toFixed(1)} units/day</span>
+                              <span className="font-mono">{dailyVelocity.toFixed(1)} units/day</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">7-Day Demand:</span>
-                              <span className="font-mono">{item.predictedDemand} units</span>
+                              <span className="text-muted-foreground">{forecastPeriod}-Day Demand:</span>
+                              <span className="font-mono">{scaled.demand} units</span>
                             </div>
                             <div className="border-t border-border pt-1 mt-1 flex justify-between font-medium">
                               <span>Order Qty:</span>
-                              <span className="font-mono text-primary">{item.recommendedQty} units</span>
+                              <span className="font-mono text-primary">{scaled.recommendedQty} units</span>
                             </div>
                           </div>
                           {item.costPrice > 0 && (
                             <p className="text-[10px] text-muted-foreground mt-2 pt-1 border-t border-border/50">
-                              Est. cost: ₱{(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}
+                              Est. cost: ₱{scaled.cost.toLocaleString("en-PH", { maximumFractionDigits: 0 })}
                             </p>
                           )}
                         </TooltipContent>
@@ -2634,13 +2799,14 @@ function ForecastingTable({
                       </Button>
                     </TableCell>
                     <TableCell className="text-right py-2 font-mono text-xs text-muted-foreground">
-                      {isNaN(item.costPrice * item.recommendedQty) 
+                      {isNaN(scaled.cost) 
                         ? "—" 
-                        : `₱${(item.costPrice * item.recommendedQty).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`
+                        : `₱${scaled.cost.toLocaleString("en-PH", { maximumFractionDigits: 0 })}`
                       }
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
               </Table>
@@ -2652,7 +2818,7 @@ function ForecastingTable({
         {filteredAndSortedForecasts.length > 0 && selectedItems.size > 0 && (() => {
           const totalValue = filteredAndSortedForecasts
             .filter(item => selectedItems.has(item.productId))
-            .reduce((sum, item) => sum + (item.costPrice * item.recommendedQty), 0);
+            .reduce((sum, item) => sum + getScaledForecast(item).cost, 0);
           const isHighValue = totalValue > 50000;
           const itemCount = selectedItems.size;
           

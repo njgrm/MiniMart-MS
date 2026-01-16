@@ -580,8 +580,8 @@ export function ProductsTable({
                     <p className="text-xs font-medium text-destructive">Product Expired</p>
                     <p className="text-xs text-muted-foreground">Expired on {format(expiry, "MMM d, yyyy")}</p>
                     <div className="border-t border-border pt-1.5 mt-1.5">
-                      <p className="text-xs text-muted-foreground">
-                        <strong>⚠️ Do NOT display or sell.</strong>
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <AlertTriangle className="size-3 text-destructive" /><strong>Do NOT display or sell.</strong>
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Can still be returned to supplier if within their return policy window.

@@ -6,6 +6,115 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-16
 
+### Analytics Page UI Polish & Icon Consistency
+
+#### 1. Comparison Tooltip Date Fix
+- Fixed confusing tooltip that showed entire period range (e.g., "Nov 17 - Dec 17")
+- Now shows specific date being compared (e.g., "vs Mon, Dec 16, 2025")
+- Added `prevFullDate` field to comparison chart data for daily, weekly, and monthly views
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx`
+
+#### 2. Replaced All Warning Emojis with Lucide Icons
+- Replaced ⬆️⬇️ delta arrows with `TrendingUp`/`TrendingDown` icons
+- Replaced ⚠️ warning emojis with `AlertTriangle` icons across:
+  - Analytics dashboard (30-day forecast warnings)
+  - Products table (expired product warnings)
+  - Batch audit client (high-risk action warnings)
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx`
+- `src/app/admin/inventory/products-table.tsx`
+- `src/app/admin/inventory/[id]/batches/batch-audit-client.tsx`
+
+#### 3. Improved Heatmap Design
+- Changed cells from `rounded-sm` to `rounded-md` (softer appearance)
+- Increased gap from `gap-1` to `gap-1.5` for better breathing room
+- Added `aspect-square` for consistent cell proportions
+- Added `hover:scale-105` for interactive feedback
+- Updated legend to match new cell styling
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx`
+
+#### 4. Enhanced Velocity Visualization in Product Insights
+- Added visual velocity bar chart in Top Movers table
+- Bar shows relative velocity (max velocity = 100% width)
+- Added comprehensive velocity tooltips explaining "Average units sold per day"
+- Added underlined header with tooltip for Velocity column
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx`
+
+#### 5. Events Page Padding Fix
+- Changed `isAnalyticsPage` to `isAnalyticsMainPage` with exact path match
+- Events subpage (`/admin/analytics/events`) now gets normal padding
+- Main analytics page still has edge-to-edge layout
+
+**Files Modified:**
+- `src/app/admin/layout-client.tsx`
+
+#### 6. Documentation: Event Tracking Importance
+- Added comprehensive section to SYSTEM_NOTES.md explaining:
+  - Why event tracking matters for forecasting accuracy
+  - How events prevent over/under-ordering
+  - Event types and multiplier logic
+  - Practical scenarios (Holiday Season, Flash Sale)
+  - Best practices for event logging
+  - Business value metrics (48% MAD reduction)
+
+**Files Modified:**
+- `SYSTEM_NOTES.md`
+
+---
+
+### Analytics Page UI Improvements & Product Insights Enhancement
+
+#### 1. Sticky Header Fix
+- Analytics page now has edge-to-edge toolbar that touches top nav and sidebar
+- Added `isAnalyticsPage` check to layout-client for proper padding treatment
+- Uses same layout pattern as reports pages (no padding, own scroll management)
+
+**Files Modified:**
+- `src/app/admin/layout-client.tsx`
+
+#### 2. Motion Sidebar Events Navigation
+- Removed chevron from Analytics nav item
+- Events sub-link now shows directly when sidebar is open
+- When collapsed, hovering Analytics shows Events in a popup menu
+- Cleaner navigation UX without unnecessary animations
+
+**Files Modified:**
+- `src/components/app-sidebar-motion.tsx`
+
+#### 3. Category Share Color Fix
+- Fixed color mapping for donut chart - categories now show proper colors
+- Changed from UPPERCASE keys to case-insensitive lookup via `getCategoryColor()` helper
+- All categories (Soda, Beverages, Household, etc.) now display distinct colors
+
+**Files Modified:**
+- `src/app/admin/analytics/actions.ts`
+
+#### 4. Enhanced Product Insights Card
+- **Layout Swap**: Peak Traffic Heatmap now takes 1 column, Product Insights takes 3 columns
+- **Top Movers Improvements**:
+  - Now shows ALL products (not limited to 8) in a scrollable table
+  - Added Revenue and Profit columns
+  - Summary stats: Total Revenue, Total Profit, Items Sold
+  - Profit/margin data fetched from actual transaction costs
+- **Category Share Improvements**:
+  - Added side-by-side chart + table layout
+  - New columns: Revenue, Profit, Margin %, Items Sold, Avg Price
+  - Summary footer with totals
+  - Enhanced tooltip with profit info
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx`
+- `src/app/admin/analytics/actions.ts` (TopMoverResult, CategorySalesResult interfaces)
+
+---
+
 ### Batch Return Filters & Documentation Update
 
 #### 1. Urgency Type Filter Added

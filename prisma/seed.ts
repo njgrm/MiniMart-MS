@@ -562,6 +562,24 @@ async function main() {
   console.log("🌱 Starting comprehensive database seed...");
   console.log("================================================");
 
+  // Check for SKIP_CSV_SEED environment variable
+  const skipCsv = process.env.SKIP_CSV_SEED === "true" || process.env.SKIP_CSV_SEED === "1";
+  
+  if (skipCsv) {
+    console.log("⚠️  SKIP_CSV_SEED=true - Skipping CSV data, only seeding essential users");
+    console.log("");
+    await seedUsers();
+    console.log("================================================");
+    console.log("🎉 Database seeding completed (minimal mode)!");
+    console.log("");
+    console.log("📋 Summary:");
+    console.log("   - Admin accounts: admin, admin1, admin2 (password: 12345)");
+    console.log("");
+    console.log("💡 To seed with full CSV data, run without SKIP_CSV_SEED:");
+    console.log("   npx prisma db seed");
+    return;
+  }
+
   // 0. Run Python generator for sales history (optional)
   await runPythonGenerator();
   console.log(""); // Blank line separator

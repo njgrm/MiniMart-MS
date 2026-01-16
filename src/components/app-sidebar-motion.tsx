@@ -13,11 +13,10 @@ import {
   IconClipboardList,
   IconHistory,
   IconChartBar,
-  IconSun,
-  IconMoon,
   IconBrain,
   IconFileText,
   IconBuildingStore,
+  IconCalendarEvent,
 } from "@tabler/icons-react";
 import {
   MotionSidebar,
@@ -32,12 +31,19 @@ import logoFull from "../../assets/christian_minimart_logo_words.png";
 import logoFullDark from "../../assets/christian_minimart_logo_dark_words.png";
 import logoIcon from "../../assets/christian_minimart_logo_collapsed.png";
 
+interface SubNavItem {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+}
+
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
   badge?: number;
   highlight?: boolean;
+  subItems?: SubNavItem[];
 }
 
 const navItems: NavItem[] = [
@@ -76,6 +82,13 @@ const navItems: NavItem[] = [
     href: "/admin/analytics",
     label: "Analytics",
     icon: IconBrain,
+    subItems: [
+      {
+        href: "/admin/analytics/events",
+        label: "Events",
+        icon: IconCalendarEvent,
+      },
+    ],
   },
   {
     href: "/admin/reports",
@@ -162,49 +175,107 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
           {navItems.map((item) => {
             const isActive = pathname === item.href || 
               (item.href !== "/admin" && pathname.startsWith(item.href));
+            const hasSubItems = item.subItems && item.subItems.length > 0;
+            const isSubActive = hasSubItems && item.subItems?.some(sub => pathname === sub.href);
             // Show badge on "Orders" nav item when there are pending orders
             const showBadge = item.label === "Orders" && pendingOrdersCount > 0;
             const Icon = item.icon;
 
             return (
-              <div key={item.href} onClick={handleLinkClick} className="relative">
-                <MotionSidebarLink
-                  link={{
-                    label: item.label,
-                    href: item.href,
-                    icon: (
-                      <div className="relative">
-                        <Icon 
-                          className={cn(
-                            "size-5",
-                            isActive 
-                              ? "text-primary-foreground" 
-                              : item.highlight 
-                                ? "text-secondary" 
-                                : "text-sidebar-foreground"
-                          )} 
-                        />
-                        {/* Badge overlay on icon when collapsed - Red circular badge */}
-                        {showBadge && !open && (
-                          <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white ring-2 ring-sidebar">
-                            {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
-                          </span>
-                        )}
-                      </div>
-                    ),
-                  }}
-                  isActive={isActive}
-                  className={
-                    item.highlight && !isActive
-                      ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
-                      : ""
-                  }
-                />
+              <div key={item.href} className="relative group/nav">
+                <div onClick={hasSubItems ? undefined : handleLinkClick}>
+                  <MotionSidebarLink
+                    link={{
+                      label: item.label,
+                      href: item.href,
+                      icon: (
+                        <div className="relative">
+                          <Icon 
+                            className={cn(
+                              "size-5",
+                              isActive 
+                                ? "text-primary-foreground" 
+                                : item.highlight 
+                                  ? "text-secondary" 
+                                  : "text-sidebar-foreground"
+                            )} 
+                          />
+                          {/* Badge overlay on icon when collapsed - Red circular badge */}
+                          {showBadge && !open && (
+                            <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white ring-2 ring-sidebar">
+                              {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
+                            </span>
+                          )}
+                        </div>
+                      ),
+                    }}
+                    isActive={isActive}
+                    className={cn(
+                      item.highlight && !isActive
+                        ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
+                        : ""
+                    )}
+                  />
+                </div>
                 {/* Badge shown inline when sidebar is open */}
                 {showBadge && open && (
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs font-bold rounded-full bg-destructive text-white animate-pulse">
                     {pendingOrdersCount}
                   </span>
+                )}
+                
+                {/* Sub-items: Show directly when open, show on hover when collapsed */}
+                {hasSubItems && open && (
+                  <div className="ml-6 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
+                    {item.subItems?.map((subItem) => {
+                      const isSubItemActive = pathname === subItem.href;
+                      const SubIcon = subItem.icon;
+                      return (
+                        <Link
+                          key={subItem.href}
+                          href={subItem.href}
+                          onClick={handleLinkClick}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors",
+                            isSubItemActive
+                              ? "bg-primary text-primary-foreground font-medium"
+                              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          )}
+                        >
+                          <SubIcon className="size-4" />
+                          <span>{subItem.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {/* Sub-items popup on hover when collapsed */}
+                {hasSubItems && !open && (
+                  <div className="absolute left-full top-0 ml-2 opacity-0 pointer-events-none group-hover/nav:opacity-100 group-hover/nav:pointer-events-auto transition-opacity z-50">
+                    <div className="bg-sidebar border border-sidebar-border rounded-lg shadow-lg py-2 min-w-[140px]">
+                      {item.subItems?.map((subItem) => {
+                        const isSubItemActive = pathname === subItem.href;
+                        const SubIcon = subItem.icon;
+                        return (
+                          <Link
+                            key={subItem.href}
+                            href={subItem.href}
+                            onClick={handleLinkClick}
+                            className={cn(
+                              "flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+                              isSubItemActive
+                                ? "bg-primary text-primary-foreground font-medium"
+                                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            )}
+                          >
+                            <SubIcon className="size-4" />
+                            <span>{subItem.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             );

@@ -686,14 +686,21 @@ export async function createEvent(input: CreateEventInput) {
         products: {
           include: {
             product: {
-              select: { product_id: true, product_name: true },
+              select: { product_id: true, product_name: true, barcode: true },
             },
           },
         },
       },
     });
     
-    return { success: true, data: event };
+    // Convert Decimal to number for client component serialization
+    return { 
+      success: true, 
+      data: {
+        ...event,
+        multiplier: event.multiplier ? Number(event.multiplier) : 1.0,
+      }
+    };
   } catch (error) {
     console.error("[Analytics] Error creating event:", error);
     return { success: false, error: "Failed to create event" };
@@ -736,6 +743,85 @@ export async function deleteEvent(eventId: number) {
   } catch (error) {
     console.error("[Analytics] Error deleting event:", error);
     return { success: false, error: "Failed to delete event" };
+  }
+}
+
+export async function archiveEvent(eventId: number) {
+  try {
+    await prisma.eventLog.update({
+      where: { id: eventId },
+      data: { is_active: false },
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("[Analytics] Error archiving event:", error);
+    return { success: false, error: "Failed to archive event" };
+  }
+}
+
+export async function restoreEvent(eventId: number) {
+  try {
+    await prisma.eventLog.update({
+      where: { id: eventId },
+      data: { is_active: true },
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("[Analytics] Error restoring event:", error);
+    return { success: false, error: "Failed to restore event" };
+  }
+}
+
+export interface UpdateEventInput {
+  id: number;
+  name: string;
+  description?: string;
+  source: "STORE_DISCOUNT" | "MANUFACTURER_CAMPAIGN" | "HOLIDAY";
+  startDate: string;
+  endDate: string;
+  multiplier?: number;
+  affectedBrand?: string;
+  affectedCategory?: string;
+}
+
+export async function updateEvent(input: UpdateEventInput) {
+  try {
+    const event = await prisma.eventLog.update({
+      where: { id: input.id },
+      data: {
+        name: input.name,
+        description: input.description,
+        source: input.source,
+        start_date: new Date(input.startDate),
+        end_date: new Date(input.endDate),
+        multiplier: input.multiplier ?? 2.0,
+        affected_brand: input.affectedBrand,
+        affected_category: input.affectedCategory,
+      },
+      include: {
+        products: {
+          include: {
+            product: {
+              select: { product_id: true, product_name: true, barcode: true },
+            },
+          },
+        },
+      },
+    });
+    
+    // Convert Decimal to number for client component serialization
+    return { 
+      success: true, 
+      data: {
+        ...event,
+        multiplier: event.multiplier ? Number(event.multiplier) : 1.0,
+      }
+    };
+  } catch (error) {
+    console.error("[Analytics] Error updating event:", error);
+    return { success: false, error: "Failed to update event" };
   }
 }
 
@@ -877,6 +963,8 @@ export interface TopMoverResult {
   product_name: string;
   velocity: number;
   total_sold: number;
+  total_revenue: number;
+  total_profit: number;
   current_stock: number;
   category: string;
   image_url: string | null;
@@ -884,6 +972,7 @@ export interface TopMoverResult {
 
 /**
  * Get top products by sales velocity for a given date range
+ * Returns ALL products with sales (not limited) for full comparison
  */
 export async function getTopMovers(startDate: Date, endDate: Date): Promise<TopMoverResult[]> {
   try {
@@ -894,61 +983,86 @@ export async function getTopMovers(startDate: Date, endDate: Date): Promise<TopM
     const diffTime = rangeEnd.getTime() - rangeStart.getTime();
     const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     
-    // Get top products by quantity sold
-    const topProducts = await prisma.transactionItem.groupBy({
-      by: ["product_id"],
+    // Get product sales with revenue data (not limited)
+    const transactionItems = await prisma.transactionItem.findMany({
       where: {
         transaction: {
           created_at: { gte: rangeStart, lte: rangeEnd },
           status: "COMPLETED",
         },
       },
-      _sum: {
-        quantity: true,
-      },
-      orderBy: {
-        _sum: {
-          quantity: "desc",
-        },
-      },
-      take: 10,
-    });
-    
-    // Get product details with inventory for stock
-    const productIds = topProducts.map(p => p.product_id);
-    const products = await prisma.product.findMany({
-      where: { product_id: { in: productIds } },
       select: {
         product_id: true,
-        product_name: true,
-        category: true,
-        image_url: true,
-        inventory: {
+        quantity: true,
+        subtotal: true,
+        product: {
           select: {
-            current_stock: true,
+            product_id: true,
+            product_name: true,
+            category: true,
+            image_url: true,
+            cost_price: true,
+            inventory: {
+              select: {
+                current_stock: true,
+              },
+            },
           },
         },
       },
     });
     
-    const productMap = new Map(products.map(p => [p.product_id, p]));
+    // Aggregate by product
+    const productAgg = new Map<number, {
+      product_id: number;
+      product_name: string;
+      category: string;
+      image_url: string | null;
+      cost_price: number;
+      current_stock: number;
+      total_qty: number;
+      total_revenue: number;
+    }>();
     
-    return topProducts
+    for (const item of transactionItems) {
+      const existing = productAgg.get(item.product_id);
+      const qty = item.quantity;
+      const revenue = Number(item.subtotal);
+      
+      if (existing) {
+        existing.total_qty += qty;
+        existing.total_revenue += revenue;
+      } else {
+        productAgg.set(item.product_id, {
+          product_id: item.product.product_id,
+          product_name: item.product.product_name,
+          category: item.product.category,
+          image_url: item.product.image_url,
+          cost_price: Number(item.product.cost_price),
+          current_stock: item.product.inventory?.current_stock ?? 0,
+          total_qty: qty,
+          total_revenue: revenue,
+        });
+      }
+    }
+    
+    // Convert to results and sort by velocity (descending)
+    return Array.from(productAgg.values())
       .map(p => {
-        const product = productMap.get(p.product_id);
-        if (!product) return null;
-        
+        const totalCost = p.total_qty * p.cost_price;
         return {
-          product_id: product.product_id,
-          product_name: product.product_name,
-          velocity: Math.round((p._sum.quantity ?? 0) / diffDays * 10) / 10,
-          total_sold: p._sum.quantity ?? 0,
-          current_stock: product.inventory?.current_stock ?? 0,
-          category: product.category,
-          image_url: product.image_url,
+          product_id: p.product_id,
+          product_name: p.product_name,
+          velocity: Math.round(p.total_qty / diffDays * 10) / 10,
+          total_sold: p.total_qty,
+          total_revenue: Math.round(p.total_revenue),
+          total_profit: Math.round(p.total_revenue - totalCost),
+          current_stock: p.current_stock,
+          category: p.category,
+          image_url: p.image_url,
         };
       })
-      .filter((p): p is TopMoverResult => p !== null);
+      .sort((a, b) => b.velocity - a.velocity);
   } catch (error) {
     console.error("[Analytics] Error fetching top movers:", error);
     return [];
@@ -963,25 +1077,36 @@ export interface CategorySalesResult {
   category: string;
   label: string;
   revenue: number;
+  profit: number;
+  itemsSold: number;
+  productCount: number;
+  avgItemPrice: number;
   percentage: number;
   color: string;
 }
 
 // Category color palette matching design system
+// Uses case-insensitive lookup with normalizeCategory helper
 const CATEGORY_COLORS: Record<string, string> = {
-  BEVERAGES: "#2EAFC5",      // Teal
-  SODA: "#10B981",           // Emerald
-  SOFTDRINKS_CASE: "#6366F1", // Indigo
-  SNACK: "#F59E0B",          // Amber
-  CANNED_GOODS: "#EF4444",   // Red
-  DAIRY: "#EC4899",          // Pink
-  BREAD: "#F97316",          // Orange
-  INSTANT_NOODLES: "#8B5CF6", // Purple
-  CONDIMENTS: "#14B8A6",     // Teal
-  PERSONAL_CARE: "#06B6D4",  // Cyan
-  HOUSEHOLD: "#84CC16",      // Lime
-  OTHER: "#6B7280",          // Gray
+  beverages: "#2EAFC5",       // Teal
+  soda: "#10B981",            // Emerald
+  "softdrinks case": "#6366F1", // Indigo
+  snack: "#F59E0B",           // Amber
+  "canned goods": "#EF4444",  // Red
+  dairy: "#EC4899",           // Pink
+  bread: "#F97316",           // Orange
+  "instant noodles": "#8B5CF6", // Purple
+  condiments: "#14B8A6",      // Teal/Cyan
+  "personal care": "#06B6D4", // Cyan
+  household: "#84CC16",       // Lime
+  other: "#6B7280",           // Gray
 };
+
+// Normalize category for color lookup
+function getCategoryColor(category: string): string {
+  const normalized = category.toLowerCase().trim();
+  return CATEGORY_COLORS[normalized] ?? CATEGORY_COLORS.other;
+}
 
 /**
  * Get sales distribution by category for a given date range
@@ -991,7 +1116,7 @@ export async function getCategorySalesShare(startDate: Date, endDate: Date): Pro
     const rangeStart = startOfDay(startDate);
     const rangeEnd = endOfDay(endDate);
     
-    // Get transaction items with product category
+    // Get transaction items with product category and cost for profit calculation
     const items = await prisma.transactionItem.findMany({
       where: {
         transaction: {
@@ -1001,33 +1126,60 @@ export async function getCategorySalesShare(startDate: Date, endDate: Date): Pro
       },
       select: {
         subtotal: true,
+        quantity: true,
         product: {
           select: {
+            product_id: true,
             category: true,
+            cost_price: true,
           },
         },
       },
     });
     
-    // Aggregate by category
-    const categoryMap = new Map<string, number>();
+    // Aggregate by category with all metrics
+    const categoryMap = new Map<string, {
+      revenue: number;
+      cost: number;
+      itemsSold: number;
+      products: Set<number>;
+    }>();
     let totalRevenue = 0;
     
     for (const item of items) {
       const category = item.product.category;
       const revenue = Number(item.subtotal);
+      const cost = item.quantity * Number(item.product.cost_price);
       totalRevenue += revenue;
-      categoryMap.set(category, (categoryMap.get(category) ?? 0) + revenue);
+      
+      const existing = categoryMap.get(category);
+      if (existing) {
+        existing.revenue += revenue;
+        existing.cost += cost;
+        existing.itemsSold += item.quantity;
+        existing.products.add(item.product.product_id);
+      } else {
+        categoryMap.set(category, {
+          revenue,
+          cost,
+          itemsSold: item.quantity,
+          products: new Set([item.product.product_id]),
+        });
+      }
     }
     
     // Format and sort by revenue
     const results: CategorySalesResult[] = Array.from(categoryMap.entries())
-      .map(([category, revenue]) => ({
+      .map(([category, data]) => ({
         category,
         label: category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()),
-        revenue: Math.round(revenue),
-        percentage: totalRevenue > 0 ? Math.round((revenue / totalRevenue) * 1000) / 10 : 0,
-        color: CATEGORY_COLORS[category] ?? CATEGORY_COLORS.OTHER,
+        revenue: Math.round(data.revenue),
+        profit: Math.round(data.revenue - data.cost),
+        itemsSold: data.itemsSold,
+        productCount: data.products.size,
+        avgItemPrice: data.itemsSold > 0 ? Math.round(data.revenue / data.itemsSold) : 0,
+        percentage: totalRevenue > 0 ? Math.round((data.revenue / totalRevenue) * 1000) / 10 : 0,
+        color: getCategoryColor(category),
       }))
       .sort((a, b) => b.revenue - a.revenue);
     
@@ -1036,16 +1188,23 @@ export async function getCategorySalesShare(startDate: Date, endDate: Date): Pro
       const top7 = results.slice(0, 7);
       const others = results.slice(7);
       const otherRevenue = others.reduce((sum, c) => sum + c.revenue, 0);
+      const otherProfit = others.reduce((sum, c) => sum + c.profit, 0);
+      const otherItemsSold = others.reduce((sum, c) => sum + c.itemsSold, 0);
+      const otherProductCount = others.reduce((sum, c) => sum + c.productCount, 0);
       const otherPercentage = others.reduce((sum, c) => sum + c.percentage, 0);
       
       return [
         ...top7,
         {
-          category: "OTHER",
+          category: "other",
           label: "Other",
           revenue: Math.round(otherRevenue),
+          profit: Math.round(otherProfit),
+          itemsSold: otherItemsSold,
+          productCount: otherProductCount,
+          avgItemPrice: otherItemsSold > 0 ? Math.round(otherRevenue / otherItemsSold) : 0,
           percentage: Math.round(otherPercentage * 10) / 10,
-          color: CATEGORY_COLORS.OTHER,
+          color: getCategoryColor("other"),
         },
       ];
     }

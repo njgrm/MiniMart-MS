@@ -385,7 +385,7 @@ export function SuppliersClient({ initialSuppliers }: SuppliersClientProps) {
           <div className="hidden md:flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className="h-8 px-3 gap-1.5 cursor-default">
+                <Badge variant="outline" className="h-10.25 rounded-lg px-3 gap-1.5 cursor-default">
                   <Package className="h-3.5 w-3.5 text-[#2EAFC5]" />
                   <span className="font-mono">{totalDeliveries}</span>
                   <span className="text-muted-foreground">deliveries</span>
@@ -395,7 +395,7 @@ export function SuppliersClient({ initialSuppliers }: SuppliersClientProps) {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className="h-8 px-3 gap-1.5 cursor-default">
+                <Badge variant="outline" className="h-10.25 rounded-lg px-3 gap-1.5 cursor-default">
                   <Undo2 className="h-3.5 w-3.5 text-[#F1782F]" />
                   <span className="font-mono">{totalReturns}</span>
                   <span className="text-muted-foreground">returns</span>

@@ -35,8 +35,11 @@ export default function AdminLayoutClient({ children, user, pendingOrdersCount =
   const isPrintPreview = pathname?.includes("/print");
   // All report pages (including index) need special handling
   const isReportsPage = pathname?.startsWith("/admin/reports");
+  // Analytics main page manages its own scroll and needs edge-to-edge toolbar
+  // But events subpage should have normal padding
+  const isAnalyticsMainPage = pathname === "/admin/analytics";
   // Pages that manage their own scroll
-  const needsOverflowHidden = isPosPage || isReportsPage;
+  const needsOverflowHidden = isPosPage || isReportsPage || isAnalyticsMainPage;
 
   return (
     <SessionProvider 
@@ -64,8 +67,8 @@ export default function AdminLayoutClient({ children, user, pendingOrdersCount =
             <main
               className={cn(
                 "flex-1 relative",
-                // Padding: none for POS/reports, normal for other pages
-                (isPosPage || isReportsPage) ? "p-0" : "p-4 md:p-6",
+                // Padding: none for POS/reports/analytics main, normal for other pages
+                (isPosPage || isReportsPage || isAnalyticsMainPage) ? "p-0" : "p-4 md:p-6",
                 !needsOverflowHidden && "overflow-auto",
                 isPrintPreview ? "bg-white" : "bg-[#f5f3ef] dark:bg-muted/30"
               )}

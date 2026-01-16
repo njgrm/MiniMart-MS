@@ -545,9 +545,10 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-lg p-3 text-sm text-orange-800 dark:text-orange-300">
-              <strong>⚠️ High Risk Action:</strong> Changing expiry dates is a critical operation
-              and will be recorded in the audit log.
+            <div className="flex items-start gap-2 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/50 rounded-lg p-3 text-sm text-orange-800 dark:text-orange-300">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <span><strong>High Risk Action:</strong> Changing expiry dates is a critical operation
+              and will be recorded in the audit log.</span>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="new-expiry">New Expiry Date</Label>
@@ -648,8 +649,8 @@ export function BatchAuditClient({ product, initialBatches }: BatchAuditClientPr
                   Return Batch #{returningBatch.id} with{" "}
                   <strong>{returningBatch.quantity} units</strong> to supplier.
                   {getExpiryStatus(returningBatch.expiry_date).isExpired && (
-                    <span className="block mt-1 text-destructive font-medium">
-                      ⚠️ This batch has expired ({returningBatch.expiry_date ? new Date(returningBatch.expiry_date).toLocaleDateString() : "N/A"})
+                    <span className="flex items-center gap-1 mt-1 text-destructive font-medium">
+                      <AlertTriangle className="size-3" /> This batch has expired ({returningBatch.expiry_date ? new Date(returningBatch.expiry_date).toLocaleDateString() : "N/A"})
                     </span>
                   )}
                 </>
