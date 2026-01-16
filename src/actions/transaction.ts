@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { Decimal } from "@prisma/client/runtime/library";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { deductStockFEFO, syncProductFromBatches } from "./inventory";
 
 type PaymentMethod = "CASH" | "GCASH";
@@ -169,8 +169,12 @@ export async function createTransaction(input: CreateTransactionInput) {
       return transaction;
     });
 
+    // Revalidate vendor products cache so vendors see updated stock
+    revalidateTag("vendor-products");
+    
     revalidatePath("/admin/inventory");
     revalidatePath("/admin");
+    revalidatePath("/vendor/order");
 
     // Convert Decimal to plain number to avoid serialization issues with Client Components
     const serializedResult = {

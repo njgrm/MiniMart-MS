@@ -179,6 +179,19 @@ async function seedSuppliers() {
   return supplierMap;
 }
 
+/**
+ * Normalize category values from CSV format to database format.
+ * Converts: "Softdrinks case" -> "SOFTDRINKS_CASE"
+ *           "Personal care" -> "PERSONAL_CARE"
+ *           "Canned Goods" -> "CANNED_GOODS"
+ *           "Instant Noodles" -> "INSTANT_NOODLES"
+ */
+function normalizeCategory(category: string): string {
+  return category
+    .toUpperCase()
+    .replace(/\s+/g, "_"); // Replace spaces with underscores
+}
+
 async function seedProducts() {
   console.log("📦 Seeding products...");
   const csvPath = path.join(__dirname, "../scripts/products.csv");
@@ -193,11 +206,12 @@ async function seedProducts() {
   const productMap = new Map<string, number>(); // barcode -> product_id
 
   for (const row of rows) {
+    const normalizedCategory = normalizeCategory(row.category);
     const product = await prisma.product.upsert({
       where: { barcode: row.barcode },
       update: {
         product_name: row.name,
-        category: row.category,
+        category: normalizedCategory,
         retail_price: parseFloat(row.retail_price) || 0,
         wholesale_price: parseFloat(row.wholesale_price) || 0,
         cost_price: parseFloat(row.cost_price) || 0,
@@ -206,7 +220,7 @@ async function seedProducts() {
       },
       create: {
         product_name: row.name,
-        category: row.category,
+        category: normalizedCategory,
         retail_price: parseFloat(row.retail_price) || 0,
         wholesale_price: parseFloat(row.wholesale_price) || 0,
         cost_price: parseFloat(row.cost_price) || 0,
@@ -392,6 +406,102 @@ async function seedStockMovementsReturns(
   }
 
   console.log(`✅ Created ${created} stock movements (returns)`);
+}
+
+/**
+ * Seed delivery stock movements (RESTOCK type)
+ * Creates RESTOCK movements from inventory batches to represent supplier deliveries
+ * Links movements to suppliers and batches for complete audit trail
+ */
+async function seedDeliveries(
+  supplierMap: Map<number, number>,
+  productMap: Map<string, number>,
+  batchMap: Map<number, number>
+) {
+  console.log("🚚 Seeding delivery stock movements...");
+
+  // Get default admin user for logging
+  const adminUser = await prisma.user.findFirst({ where: { username: "admin" } });
+  if (!adminUser) {
+    console.log("⚠️  Admin user not found, skipping deliveries");
+    return;
+  }
+
+  // Get all batches with their product and supplier info
+  const batches = await prisma.inventoryBatch.findMany({
+    include: {
+      product: {
+        include: { inventory: true }
+      }
+    },
+    where: {
+      quantity: { gt: 0 } // Only batches with stock
+    }
+  });
+
+  if (batches.length === 0) {
+    console.log("⚠️  No inventory batches found, skipping deliveries");
+    return;
+  }
+
+  let created = 0;
+  const totalBatches = batches.length;
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    
+    if (!batch.product.inventory) {
+      continue;
+    }
+
+    // Check if a RESTOCK movement already exists for this batch (avoid duplicates)
+    const existingMovement = await prisma.stockMovement.findFirst({
+      where: {
+        inventory_id: batch.product.inventory.inventory_id,
+        movement_type: "RESTOCK",
+        quantity_change: batch.quantity,
+        created_at: batch.received_date,
+      }
+    });
+
+    if (existingMovement) {
+      continue; // Skip duplicate
+    }
+
+    // Calculate previous stock (current stock minus this batch quantity)
+    const previousStock = Math.max(0, batch.product.inventory.current_stock - batch.quantity);
+
+    // Create delivery reference based on batch info
+    const reference = batch.supplier_ref || `BATCH-${batch.id}`;
+    const reason = `Supplier delivery: ${batch.quantity} units received`;
+
+    await prisma.stockMovement.create({
+      data: {
+        inventory_id: batch.product.inventory.inventory_id,
+        user_id: adminUser.user_id,
+        movement_type: "RESTOCK",
+        quantity_change: batch.quantity,
+        previous_stock: previousStock,
+        new_stock: previousStock + batch.quantity,
+        reason: reason,
+        reference: reference,
+        supplier_name: batch.supplier_name || null,
+        supplier_id: batch.supplier_id || null,
+        cost_price: batch.cost_price || null,
+        created_at: batch.received_date || new Date(),
+      },
+    });
+
+    created++;
+
+    // Progress every 50 deliveries
+    if (created % 50 === 0 || i === totalBatches - 1) {
+      printProgress(i + 1, totalBatches, "Deliveries");
+    }
+  }
+
+  console.log(""); // New line after progress
+  console.log(`✅ Created ${created} delivery stock movements`);
 }
 
 async function seedSalesHistory(productMap: Map<string, number>) {
@@ -596,10 +706,13 @@ async function main() {
   // 4. Seed inventory batches
   const batchMap = await seedInventoryBatches(supplierMap, productMap);
 
-  // 5. Seed stock movements (returns)
+  // 5. Seed delivery stock movements (RESTOCK) - from batches
+  await seedDeliveries(supplierMap, productMap, batchMap);
+
+  // 6. Seed stock movements (returns/damages)
   await seedStockMovementsReturns(supplierMap, productMap);
 
-  // 6. Seed sales history (transactions)
+  // 7. Seed sales history (transactions)
   await seedSalesHistory(productMap);
 
   console.log("================================================");

@@ -105,8 +105,8 @@ export function ReportsLayoutClient({ children }: { children: React.ReactNode })
                   <Icon className={cn("h-4 w-4 shrink-0", isActive ? "" : categoryColors[link.category])} />
                   <span className="truncate">{link.title}</span>
                 </Link>
-                {/* Sub-links */}
-                {hasSubLinks && isActive && (
+                {/* Sub-links - Always visible */}
+                {hasSubLinks && (
                   <div className="ml-4 pl-3 border-l border-border mb-1">
                     {link.subLinks!.map((subLink) => {
                       const SubIcon = subLink.icon;

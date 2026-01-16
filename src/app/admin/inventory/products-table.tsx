@@ -561,12 +561,19 @@ export function ProductsTable({
           const today = startOfDay(new Date());
           const daysUntilExpiry = differenceInDays(expiry, today);
 
-          // SUPPLIER RETURN POLICY: 45-Day Return Window
-          // <= 0 days: EXPIRED (Red) - Cannot return
-          // 1-45 days: RETURN TO SUPPLIER (Orange) - Within return window
-          // > 45 days: GOOD (Normal display) - No action needed
+          // 45-DAY RETURN POLICY: Return deadline is 45 days before actual expiry
+          // daysUntilReturnDeadline = daysUntilExpiry - 45
+          // <= 0 (expiry): EXPIRED - Cannot sell
+          // 1-45 (past return deadline): RETURN ASAP - Within grace period but deadline passed
+          // 46-52 (≤7d to deadline): RETURN SOON - Urgent
+          // 53-59 (≤14d to deadline): PLAN RETURN - Warning
+          // 60-89 (15-44d to deadline): EARLY WARNING - Advise
+          // 90+ (45+ to deadline): GOOD - No immediate action
+          
+          const RETURN_POLICY_DAYS = 45;
+          const daysUntilReturnDeadline = daysUntilExpiry - RETURN_POLICY_DAYS;
 
-          // Already expired - Should not display/sell, but CAN be returned
+          // Already expired - Should not display/sell
           if (daysUntilExpiry <= 0) {
             return (
               <Tooltip>
@@ -583,9 +590,6 @@ export function ProductsTable({
                       <p className="flex items-center gap-1 text-xs text-muted-foreground">
                         <AlertTriangle className="size-3 text-destructive" /><strong>Do NOT display or sell.</strong>
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Can still be returned to supplier if within their return policy window.
-                      </p>
                     </div>
                   </div>
                 </TooltipContent>
@@ -593,39 +597,85 @@ export function ProductsTable({
             );
           }
 
-          // Within 45-day return window - ACTION REQUIRED
-          if (daysUntilExpiry <= 45) {
-            const urgencyLevel = daysUntilExpiry <= 7 ? "critical" : daysUntilExpiry <= 14 ? "urgent" : "warning";
+          // Past return deadline (0-45 days until expiry) - CRITICAL: Return ASAP
+          if (daysUntilReturnDeadline <= 0) {
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge 
                     variant="secondary" 
-                    className={`text-xs font-mono cursor-help gap-1 ${
-                      urgencyLevel === "critical" 
-                        ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
-                        : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                    }`}
+                    className="text-xs font-mono cursor-help gap-1 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                   >
                     <AlertTriangle className="h-3 w-3" />
-                    {daysUntilExpiry <= 7 
-                      ? "Pull Out" 
-                      : "Return"
-                    } ({daysUntilExpiry}d)
+                    Return ASAP ({daysUntilExpiry}d)
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent side="left" className="max-w-[220px]">
-                  <p className="text-xs font-medium text-secondary">Return to Supplier</p>
+                <TooltipContent side="left" className="max-w-[240px]">
+                  <p className="text-xs font-medium text-destructive">Return Deadline Passed!</p>
                   <p className="text-xs text-muted-foreground">Expires {format(expiry, "MMM d, yyyy")}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {daysUntilExpiry} days left in 45-day return window
+                    Only {daysUntilExpiry} days until expiry. Contact supplier immediately.
                   </p>
                 </TooltipContent>
               </Tooltip>
             );
           }
 
-          // > 45 days - Good status, show normal date
+          // Within 14 days of return deadline - ACTION REQUIRED
+          if (daysUntilReturnDeadline <= 14) {
+            const urgencyLevel = daysUntilReturnDeadline <= 7 ? "urgent" : "warning";
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="secondary" 
+                    className={`text-xs font-mono cursor-help gap-1 ${
+                      urgencyLevel === "urgent" 
+                        ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" 
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                    }`}
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {urgencyLevel === "urgent" ? "Return Soon" : "Plan Return"} ({daysUntilReturnDeadline}d)
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[240px]">
+                  <p className="text-xs font-medium text-secondary">
+                    {daysUntilReturnDeadline} days until return deadline
+                  </p>
+                  <p className="text-xs text-muted-foreground">Expires {format(expiry, "MMM d, yyyy")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Return to supplier before deadline to avoid loss.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          // 15-44 days until return deadline - Early warning
+          if (daysUntilReturnDeadline <= 44) {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="outline" 
+                    className="text-xs font-mono cursor-help gap-1 text-violet-600 border-violet-300"
+                  >
+                    {daysUntilReturnDeadline}d to deadline
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[220px]">
+                  <p className="text-xs font-medium">Early Warning</p>
+                  <p className="text-xs text-muted-foreground">Expires {format(expiry, "MMM d, yyyy")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Consider returning to supplier within {daysUntilReturnDeadline} days.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          // > 45 days until return deadline - Good status, show normal date
           return (
             <span className="text-xs text-muted-foreground font-mono">
               {format(expiry, "MMM d, yyyy")}
@@ -895,9 +945,9 @@ export function ProductsTable({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="SOFTDRINKS_CASE">Soft Drinks Case</SelectItem>
-            <SelectItem value="SODA">Soft Drinks</SelectItem>
-            <SelectItem value="SNACK">Snack</SelectItem>
+            <SelectItem value="SOFTDRINKS_CASE">Softdrinks Case</SelectItem>
+            <SelectItem value="SODA">Soda</SelectItem>
+            <SelectItem value="SNACK">Snacks</SelectItem>
             <SelectItem value="CANNED_GOODS">Canned Goods</SelectItem>
             <SelectItem value="BEVERAGES">Beverages</SelectItem>
             <SelectItem value="DAIRY">Dairy</SelectItem>

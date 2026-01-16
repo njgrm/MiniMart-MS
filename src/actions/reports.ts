@@ -801,18 +801,29 @@ export async function getExpiringReport(): Promise<ExpiringReportResult> {
     const costPrice = Number(batch.cost_price) || Number(product.cost_price) || 0;
     const valueAtRisk = batch.quantity * costPrice;
 
-    // Classify urgency
+    // 45-DAY RETURN POLICY: Return deadline is 45 days before actual expiry
+    // Urgency is based on days until return deadline, NOT days until expiry
+    // Days until return deadline = daysUntilExpiry - 45
+    const RETURN_POLICY_DAYS = 45;
+    const daysUntilReturnDeadline = daysUntilExpiry - RETURN_POLICY_DAYS;
+
+    // Classify urgency based on RETURN DEADLINE (45 days before expiry)
     let urgency: ExpiringItem["urgency"];
     if (daysUntilExpiry <= 0) {
+      // Actually expired - can no longer be sold or returned
       urgency = "expired";
-    } else if (daysUntilExpiry <= 7) {
+    } else if (daysUntilReturnDeadline <= 0) {
+      // Past return deadline (0-45 days until expiry) - CRITICAL: return ASAP or will lose value
       urgency = "critical";
-    } else if (daysUntilExpiry <= 14) {
+    } else if (daysUntilReturnDeadline <= 7) {
+      // 1-7 days until return deadline (46-52 days until expiry) - WARNING: return soon
       urgency = "warning";
-    } else if (daysUntilExpiry <= 30) {
+    } else if (daysUntilReturnDeadline <= 14) {
+      // 8-14 days until return deadline (53-59 days until expiry) - CAUTION: plan return
       urgency = "caution";
     } else {
-      urgency = "advise_return"; // 31-45 days: early warning to consider return
+      // 15+ days until return deadline (60+ days until expiry) - ADVISE: early warning
+      urgency = "advise_return";
     }
 
     return {

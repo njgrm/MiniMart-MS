@@ -1731,3 +1731,358 @@ export async function batchReturnProducts(input: BatchReturnInput): Promise<Acti
     return { success: false, error: message };
   }
 }
+
+// ============================================================================
+// Delivery History (RESTOCK movements)
+// ============================================================================
+
+export type DeliveryDateRange = "today" | "week" | "month" | "quarter" | "year" | "all";
+
+export interface DeliveryRecord {
+  id: number;
+  product_id: number;
+  product_name: string;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  quantity: number;
+  cost_price: number | null;
+  total_cost: number | null;
+  reference: string | null;
+  reason: string | null;
+  receipt_image_url: string | null;
+  created_at: Date;
+  user_name: string | null;
+}
+
+export interface DeliveryHistoryResult {
+  deliveries: DeliveryRecord[];
+  totalCount: number;
+  totalUnits: number;
+  totalCost: number;
+  supplierCount: number;
+}
+
+/**
+ * Get delivery history (RESTOCK movements) with pagination and filtering
+ */
+export async function getDeliveryHistory(
+  dateRange: DeliveryDateRange = "all",
+  page: number = 1,
+  pageSize: number = 20,
+  supplierId?: number
+): Promise<DeliveryHistoryResult> {
+  // Calculate date range
+  const now = new Date();
+  let startDate: Date | undefined;
+  
+  switch (dateRange) {
+    case "today":
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case "week":
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 7);
+      break;
+    case "month":
+      startDate = new Date(now);
+      startDate.setMonth(startDate.getMonth() - 1);
+      break;
+    case "quarter":
+      startDate = new Date(now);
+      startDate.setMonth(startDate.getMonth() - 3);
+      break;
+    case "year":
+      startDate = new Date(now);
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      break;
+    default:
+      startDate = undefined;
+  }
+
+  // Build where clause
+  const whereClause: {
+    movement_type: "RESTOCK";
+    created_at?: { gte: Date };
+    supplier_id?: number;
+  } = {
+    movement_type: "RESTOCK",
+  };
+
+  if (startDate) {
+    whereClause.created_at = { gte: startDate };
+  }
+  if (supplierId) {
+    whereClause.supplier_id = supplierId;
+  }
+
+  // Fetch data with pagination
+  const [movements, totalCount, aggregates] = await Promise.all([
+    prisma.stockMovement.findMany({
+      where: whereClause,
+      include: {
+        user: { select: { username: true } },
+        inventory: {
+          include: {
+            product: { select: { product_id: true, product_name: true } },
+          },
+        },
+      },
+      orderBy: { created_at: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.stockMovement.count({ where: whereClause }),
+    prisma.stockMovement.aggregate({
+      where: whereClause,
+      _sum: {
+        quantity_change: true,
+        cost_price: true,
+      },
+    }),
+  ]);
+
+  // Get unique supplier count
+  const uniqueSuppliers = await prisma.stockMovement.findMany({
+    where: { ...whereClause, supplier_id: { not: null } },
+    select: { supplier_id: true },
+    distinct: ["supplier_id"],
+  });
+
+  // Calculate total cost (sum of quantity * cost_price for each movement)
+  let totalCost = 0;
+  for (const m of movements) {
+    if (m.cost_price) {
+      totalCost += m.quantity_change * Number(m.cost_price);
+    }
+  }
+
+  // For accurate total, we need to calculate from all movements
+  const allMovementsForCost = await prisma.stockMovement.findMany({
+    where: whereClause,
+    select: { quantity_change: true, cost_price: true },
+  });
+  
+  totalCost = allMovementsForCost.reduce((sum, m) => {
+    if (m.cost_price) {
+      return sum + m.quantity_change * Number(m.cost_price);
+    }
+    return sum;
+  }, 0);
+
+  const deliveries: DeliveryRecord[] = movements.map((m) => ({
+    id: m.id,
+    product_id: m.inventory.product.product_id,
+    product_name: m.inventory.product.product_name,
+    supplier_id: m.supplier_id,
+    supplier_name: m.supplier_name,
+    quantity: m.quantity_change,
+    cost_price: m.cost_price ? Number(m.cost_price) : null,
+    total_cost: m.cost_price ? m.quantity_change * Number(m.cost_price) : null,
+    reference: m.reference,
+    reason: m.reason,
+    receipt_image_url: m.receipt_image_url,
+    created_at: m.created_at,
+    user_name: m.user?.username ?? null,
+  }));
+
+  return {
+    deliveries,
+    totalCount,
+    totalUnits: aggregates._sum.quantity_change ?? 0,
+    totalCost,
+    supplierCount: uniqueSuppliers.length,
+  };
+}
+
+// ============================================================================
+// Returns History (RETURN, SUPPLIER_RETURN, DAMAGE movements)
+// ============================================================================
+
+export type ReturnDateRange = "today" | "week" | "month" | "quarter" | "year" | "all";
+export type ReturnTypeFilter = "all" | "RETURN" | "SUPPLIER_RETURN" | "DAMAGE" | "ADJUSTMENT";
+
+export interface ReturnRecord {
+  id: number;
+  product_id: number;
+  product_name: string;
+  movement_type: string;
+  quantity: number;
+  cost_price: number | null;
+  estimated_loss: number | null;
+  reason: string | null;
+  reference: string | null;
+  supplier_name: string | null;
+  created_at: Date;
+  user_name: string | null;
+}
+
+export interface ReturnsHistoryResult {
+  returns: ReturnRecord[];
+  totalCount: number;
+  totalUnits: number;
+  estimatedLoss: number;
+  byType: {
+    returns: number;
+    supplierReturns: number;
+    damages: number;
+    adjustments: number;
+  };
+}
+
+/**
+ * Get returns and damage history with pagination and filtering
+ */
+export async function getReturnsHistory(
+  dateRange: ReturnDateRange = "all",
+  typeFilter: ReturnTypeFilter = "all",
+  page: number = 1,
+  pageSize: number = 20
+): Promise<ReturnsHistoryResult> {
+  // Calculate date range
+  const now = new Date();
+  let startDate: Date | undefined;
+  
+  switch (dateRange) {
+    case "today":
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case "week":
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 7);
+      break;
+    case "month":
+      startDate = new Date(now);
+      startDate.setMonth(startDate.getMonth() - 1);
+      break;
+    case "quarter":
+      startDate = new Date(now);
+      startDate.setMonth(startDate.getMonth() - 3);
+      break;
+    case "year":
+      startDate = new Date(now);
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      break;
+    default:
+      startDate = undefined;
+  }
+
+  // Define return-type movements (includes SUPPLIER_RETURN for batch returns)
+  const returnTypes: StockMovementType[] = ["RETURN", "SUPPLIER_RETURN", "DAMAGE", "ADJUSTMENT"];
+  const filteredTypes = typeFilter === "all" 
+    ? returnTypes 
+    : [typeFilter as StockMovementType];
+
+  // Build where clause - for returns we look at negative quantity changes
+  // OR any SUPPLIER_RETURN/RETURN type (these are always returns regardless of sign)
+  const whereClause: {
+    OR?: Array<{
+      movement_type: { in: StockMovementType[] };
+      quantity_change?: { lt: number };
+    }>;
+    movement_type?: { in: StockMovementType[] };
+    created_at?: { gte: Date };
+  } = {};
+
+  // SUPPLIER_RETURN and RETURN are always returns; DAMAGE and ADJUSTMENT need negative quantity
+  if (typeFilter === "all") {
+    whereClause.OR = [
+      { movement_type: { in: ["RETURN", "SUPPLIER_RETURN"] } },
+      { movement_type: { in: ["DAMAGE", "ADJUSTMENT"] }, quantity_change: { lt: 0 } },
+    ];
+  } else if (typeFilter === "RETURN" || typeFilter === "SUPPLIER_RETURN") {
+    whereClause.movement_type = { in: [typeFilter] };
+  } else {
+    // DAMAGE or ADJUSTMENT - only negative changes
+    whereClause.movement_type = { in: [typeFilter as StockMovementType] };
+    (whereClause as { quantity_change?: { lt: number } }).quantity_change = { lt: 0 };
+  }
+
+  if (startDate) {
+    whereClause.created_at = { gte: startDate };
+  }
+
+  // Fetch data with pagination
+  const [movements, totalCount, aggregates] = await Promise.all([
+    prisma.stockMovement.findMany({
+      where: whereClause,
+      include: {
+        user: { select: { username: true } },
+        inventory: {
+          include: {
+            product: { select: { product_id: true, product_name: true } },
+          },
+        },
+      },
+      orderBy: { created_at: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.stockMovement.count({ where: whereClause }),
+    prisma.stockMovement.aggregate({
+      where: whereClause,
+      _sum: { quantity_change: true },
+    }),
+  ]);
+
+  // Count by type (need separate queries for accurate counts)
+  const baseWhere = startDate ? { created_at: { gte: startDate } } : {};
+  
+  const [returnsCount, supplierReturnsCount, damagesCount, adjustmentsCount] = await Promise.all([
+    prisma.stockMovement.count({
+      where: { ...baseWhere, movement_type: "RETURN" },
+    }),
+    prisma.stockMovement.count({
+      where: { ...baseWhere, movement_type: "SUPPLIER_RETURN" },
+    }),
+    prisma.stockMovement.count({
+      where: { ...baseWhere, movement_type: "DAMAGE", quantity_change: { lt: 0 } },
+    }),
+    prisma.stockMovement.count({
+      where: { ...baseWhere, movement_type: "ADJUSTMENT", quantity_change: { lt: 0 } },
+    }),
+  ]);
+
+  // Calculate estimated loss from cost_price
+  const allMovementsForLoss = await prisma.stockMovement.findMany({
+    where: whereClause,
+    select: { quantity_change: true, cost_price: true },
+  });
+  
+  const estimatedLoss = allMovementsForLoss.reduce((sum, m) => {
+    if (m.cost_price) {
+      // quantity_change is negative, so multiply by -1 for positive loss
+      return sum + Math.abs(m.quantity_change) * Number(m.cost_price);
+    }
+    return sum;
+  }, 0);
+
+  const returns: ReturnRecord[] = movements.map((m) => ({
+    id: m.id,
+    product_id: m.inventory.product.product_id,
+    product_name: m.inventory.product.product_name,
+    movement_type: m.movement_type,
+    quantity: Math.abs(m.quantity_change), // Show as positive for display
+    cost_price: m.cost_price ? Number(m.cost_price) : null,
+    estimated_loss: m.cost_price 
+      ? Math.abs(m.quantity_change) * Number(m.cost_price) 
+      : null,
+    reason: m.reason,
+    reference: m.reference,
+    supplier_name: m.supplier_name,
+    created_at: m.created_at,
+    user_name: m.user?.username ?? null,
+  }));
+
+  return {
+    returns,
+    totalCount,
+    totalUnits: Math.abs(aggregates._sum.quantity_change ?? 0),
+    estimatedLoss,
+    byType: {
+      returns: returnsCount,
+      supplierReturns: supplierReturnsCount,
+      damages: damagesCount,
+      adjustments: adjustmentsCount,
+    },
+  };
+}

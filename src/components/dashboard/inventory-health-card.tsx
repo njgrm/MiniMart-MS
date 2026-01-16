@@ -156,15 +156,21 @@ function LowStockRow({ item, onAddToPO, onClick }: { item: LowStockItem; onAddTo
 }
 
 function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDiscount: () => void; onClick: () => void }) {
-  // 45-Day Supplier Return Policy:
-  // <= 0 days: EXPIRED (Red) - Cannot return
-  // 1-7 days: CRITICAL - Pull Out Now (Red-ish)
-  // 8-45 days: RETURN TO SUPPLIER (Orange)
-  // > 45 days: Should not appear in this list
+  // 45-DAY RETURN POLICY: Urgency based on days until RETURN DEADLINE (45 days before expiry)
+  // daysUntilReturnDeadline = days_until_expiry - 45
+  // <= 0 (expiry): EXPIRED - Cannot sell
+  // 1-45 (past deadline): RETURN ASAP - Deadline passed
+  // 46-52 (≤7d to deadline): RETURN SOON - Urgent
+  // 53-59 (≤14d to deadline): PLAN RETURN - Warning
+  // 60+ (15+ to deadline): EARLY WARNING
+  
+  const RETURN_POLICY_DAYS = 45;
+  const daysUntilReturnDeadline = item.days_until_expiry - RETURN_POLICY_DAYS;
   
   const isExpired = item.days_until_expiry <= 0;
-  const isCritical = item.days_until_expiry > 0 && item.days_until_expiry <= 7;
-  const isInReturnWindow = item.days_until_expiry > 0 && item.days_until_expiry <= 45;
+  const isPastDeadline = !isExpired && daysUntilReturnDeadline <= 0;
+  const isUrgent = !isExpired && !isPastDeadline && daysUntilReturnDeadline <= 7;
+  const isWarning = !isExpired && !isPastDeadline && !isUrgent && daysUntilReturnDeadline <= 14;
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-PH", {
@@ -176,8 +182,17 @@ function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDisc
   // Determine action label based on urgency
   const getActionLabel = () => {
     if (isExpired) return "Expired";
-    if (isCritical) return "Pull Out";
-    return "Return to Supplier";
+    if (isPastDeadline) return "Return ASAP";
+    if (isUrgent) return "Return Soon";
+    if (isWarning) return "Plan Return";
+    return "Early Warning";
+  };
+
+  // Get display days (return deadline for non-expired)
+  const getDisplayDays = () => {
+    if (isExpired) return null;
+    if (isPastDeadline) return `${item.days_until_expiry}d to expiry`;
+    return `${daysUntilReturnDeadline}d to deadline`;
   };
 
   return (
@@ -208,15 +223,17 @@ function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDisc
             "text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-1",
             isExpired 
               ? "bg-destructive/20 text-destructive" 
-              : isCritical
+              : isPastDeadline
                 ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                : "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                : isUrgent
+                  ? "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                  : isWarning
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                    : "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400"
           )}>
             <IconCalendarDue className="size-3" />
-            {isExpired 
-              ? "Expired" 
-              : `${getActionLabel()} (${item.days_until_expiry}d)`
-            }
+            {getActionLabel()}
+            {getDisplayDays() && <span className="opacity-75">({getDisplayDays()})</span>}
           </span>
           <span className="text-[10px] text-muted-foreground">
             {item.current_stock} units
@@ -234,7 +251,7 @@ function ExpiringRow({ item, onDiscount, onClick }: { item: ExpiringItem; onDisc
         className="h-7 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => { e.stopPropagation(); onDiscount(); }}
       >
-        {isInReturnWindow && !isExpired ? (
+        {!isExpired ? (
           <>
             <IconPackage className="size-3 mr-1" />
             Return

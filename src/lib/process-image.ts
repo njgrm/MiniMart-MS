@@ -83,7 +83,7 @@ async function blobToBuffer(blob: Blob): Promise<Buffer> {
  * to know the image format via the Blob's type property
  */
 function bufferToBlob(buffer: Buffer, mimeType: string): Blob {
-  return new Blob([buffer], { type: mimeType });
+  return new Blob([new Uint8Array(buffer)], { type: mimeType });
 }
 
 /**

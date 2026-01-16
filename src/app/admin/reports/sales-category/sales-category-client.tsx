@@ -21,6 +21,19 @@ import {
   Boxes,
 } from "lucide-react";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  Legend,
+} from "recharts";
+import {
   Table,
   TableBody,
   TableCell,
@@ -124,6 +137,35 @@ export function SalesCategoryClient({ data: initialData }: SalesCategoryClientPr
       });
     }
   };
+
+  // Color palette for charts
+  const CATEGORY_COLORS = [
+    "#2EAFC5", "#AC0F16", "#F1782F", "#7c3aed", "#22c55e",
+    "#3b82f6", "#f59e0b", "#ec4899", "#14b8a6", "#6366f1"
+  ];
+
+  // Pie chart data for revenue share
+  const pieChartData = useMemo(() => {
+    return data.items.map((item, index) => ({
+      name: formatCategoryName(item.category),
+      value: item.revenue_30d,
+      fill: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+    }));
+  }, [data.items]);
+
+  // Bar chart data - top categories by revenue
+  const barChartData = useMemo(() => {
+    return data.items
+      .slice(0, 8)
+      .map((item, index) => ({
+        name: formatCategoryName(item.category).length > 12 
+          ? formatCategoryName(item.category).slice(0, 12) + "..."
+          : formatCategoryName(item.category),
+        revenue: item.revenue_30d,
+        profit: item.profit_30d,
+        fill: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      }));
+  }, [data.items]);
 
   // Define columns for Tanstack Table
   const columns: ColumnDef<CategorySalesItem>[] = useMemo(
@@ -348,6 +390,95 @@ export function SalesCategoryClient({ data: initialData }: SalesCategoryClientPr
         />
         </div>
       </LoadingOverlay>
+
+      {/* Category Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Revenue Share Pie Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Revenue by Category</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                    labelLine={false}
+                  >
+                    {pieChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [`₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Revenue"]}
+                  />
+                  <Legend 
+                    layout="vertical" 
+                    align="right" 
+                    verticalAlign="middle"
+                    wrapperStyle={{ fontSize: "11px", paddingLeft: "10px" }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top Categories Bar Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Top Categories Performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barChartData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis 
+                    type="number" 
+                    tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} 
+                    tick={{ fontSize: 11 }} 
+                    stroke="#78716c" 
+                  />
+                  <YAxis 
+                    type="category" 
+                    dataKey="name" 
+                    width={80} 
+                    tick={{ fontSize: 10 }} 
+                    stroke="#78716c" 
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number, name: string) => [
+                      `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                      name === "revenue" ? "Revenue" : "Profit"
+                    ]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar dataKey="revenue" name="Revenue" fill="#2EAFC5" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="profit" name="Profit" fill="#22c55e" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Top Category Highlight */}
       <LoadingOverlay isLoading={isPending}>

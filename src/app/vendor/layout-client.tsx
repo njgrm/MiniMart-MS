@@ -174,9 +174,12 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
                 <IconMoon className="absolute size-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 <span className="sr-only">Toggle theme</span>
               </Button>
-              {user?.id && (
-                <NotificationBell userId={parseInt(user.id)} userType="vendor" />
-              )}
+              {/* NotificationBell is rendered in ONE place only - mobile header handles it on small screens */}
+              <div className="hidden md:block">
+                {user?.id && (
+                  <NotificationBell userId={parseInt(user.id)} userType="vendor" />
+                )}
+              </div>
             </div>
 
             <DropdownMenu>
@@ -247,9 +250,12 @@ function VendorLayoutContent({ children, user }: VendorLayoutClientProps) {
         </Link>
 
         <div className="flex items-center gap-1">
-          {user?.id && (
-            <NotificationBell userId={parseInt(user.id)} userType="vendor" />
-          )}
+          {/* NotificationBell for mobile - desktop uses the one in sidebar footer */}
+          <div className="md:hidden">
+            {user?.id && (
+              <NotificationBell userId={parseInt(user.id)} userType="vendor" />
+            )}
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">

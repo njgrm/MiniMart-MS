@@ -160,6 +160,82 @@ Academic Validation (Added from Literature Review)
    - Yes. The use of WMA specifically for "avoiding excess inventory" is well-documented (Galaksi Journal).
    - Our method of prioritizing recent data points (Weights summing to 1, higher weights for t-1, t-2...) is the mathematical standard for short-term demand forecasting.
 
+Technical Implementation & Formulas (For Defense)
+The following are the exact algorithms running in `src/lib/forecasting.ts`.
+
+### 1. The Core Algorithm: Outlier-Corrected Weighted Moving Average
+The system uses a 4-step process to generate a forecast:
+1. **Filtering:** Remove "Event Days" (Outliers) to get a clean baseline.
+2. **Weighting:** Apply exponential decay weights to the clean data.
+3. **Seasonality:** Apply Year-Over-Year (YoY) and Weekend corrections.
+4. **Re-Eventing:** If an event is active *today*, apply its multiplier.
+
+### 2. WMA Weight Formula (Exponential Decay)
+We use a formula that gives much higher importance to recent sales (like yesterday) than old sales (like last month).
+
+$$w_i = e^{-0.1 \times i}$$
+*Plain English: "The weight drops quickly as the data gets older."*
+
+> *Where:*
+> *   $i$ is the age of the data ($0$ = yesterday, $29$ = 30 days ago).
+> *   $w_i$ is the raw weight.
+
+**Normalization:**
+To make sure the result is a fair average (adding up to 100%), we divide each weight by the total sum.
+
+$$W_i = \frac{w_i}{\sum_{k=0}^{n} w_k}$$
+
+### 3. The "Clean Baseline" Forecast
+Before guessing the future, we remove "Event Days" (like Flash Sales or Typhoons) so they don't mess up the average.
+
+$$Baseline = \sum_{t=0}^{n} (Sales_t^{clean} \times W_t)$$
+*Plain English: "The Baseline is just the weighted average of normal days."*
+
+> *Defense Note:* "We do not use standard deviation to clip outliers effectively; instead, we use **Semantic Filtering**. We tag days as 'Events' (e.g., Fiesta, Sale) in the database. These are excluded from the baseline so the WMA reflects only 'Organic Demand'."
+
+### 4. Seasonality & Trend Logic
+We take the Baseline and multiply it by "factors" to adjust for real-world patterns.
+
+$$FinalForecast = Baseline \times M_{season} \times M_{YoY} \times M_{event}$$
+*Plain English: "The Final Predicton = (Normal Average) × (Season Boost) × (Growth Boost) × (Promo Boost)"*
+
+*   **$M_{season}$ (Seasonality):**
+    *   **December:** $1.5 \times$ (Sales go up 50%)
+    *   **November:** $1.2 \times$ (Sales go up 20%)
+    *   **Summer (Apr/May):** $1.4 \times$ (Beverages sell 40% more)
+    *   **Weekend:** $1.25 \times$ (Weekends are 25% busier)
+*   **$M_{YoY}$ (Year-Over-Year Growth):**
+    $$M_{YoY} = \frac{AvgSales_{ThisMonth}}{AvgSales_{LastYearMonth}}$$
+    *(We cap this at $1.5\times$ so the system doesn't get too aggressive)*
+
+### 5. Inventory Optimization Formulas
+We moved from "Static Reorder Points" (buying when stock hits 10) to "Dynamic Reorder Points" (buying based on speed).
+
+**A. Dynamic Reorder Level (When to Order)**
+We verify how many days the current stock will last.
+
+$$DaysOfSupply = \frac{CurrentStock}{Forecast_{daily}}$$
+*Plain English: "If I have 100 cokes and sell 10 a day, I have 10 Days of Supply."*
+
+**B. Suggested Reorder Quantity (How much to Order)**
+The goal is to always have enough stock for **7 Days (1 Week)**.
+
+$$TargetStock = (Forecast_{daily} \times 7) + ReorderLevel_{static}$$
+$$SuggestedQty = \max(0, TargetStock - CurrentStock)$$
+*Plain English: "Buy enough to last 7 days plus a small safety buffer, minus what we already have."*
+
+### 6. Risk Assessment (Stock Status)
+The color-coded badges in the UI are calculated like this:
+
+| Status | Formula | Plain English |
+| :--- | :--- | :--- |
+| **CRITICAL** (Red) | $DaysOfSupply \le 2$ | "You will run out in 2 days!" |
+| **LOW** (Orange) | $2 < DaysOfSupply \le 7$ | "You have less than a week left." |
+| **HEALTHY** (Green) | $DaysOfSupply > 7$ | "You are safe for now." |
+| **DEAD STOCK** (Grey) | $Velocity < 0.1$ | "This item isn't selling at all." |
+
+
+
 ---
 
 ## Entity-Relationship Diagram (ERD) Explanation
@@ -318,9 +394,55 @@ The Christian Minimart database schema implements a **relational model** optimiz
 
 **Defense:** "The `EventLog` table allows the forecasting engine to **distinguish organic demand from artificial spikes**. If a TV ad caused 200% sales, we don't want to over-order next week expecting that to continue."
 
+#### 7. **Notification & Store Settings**
+
+```
+┌──────────────┐          ┌────────────────┐
+│ Notification │          │ StoreSettings  │ (Singleton)
+├──────────────┤          ├────────────────┤
+│ user_id      │          │ store_name     │
+│ type         │          │ gcash_qr_url   │
+│ is_read      │          │ store_address  │
+└──────────────┘          └────────────────┘
+```
+
+**Defense:** "The `StoreSettings` table is a **Singleton** (only one row allowed). This allows the admin to change global variables (like the GCash QR code or Receipt Footer) instantly without redeploying the code. `Notification` enables the asynchronous communication between the Admin and Vendor portals."
+
 ---
 
-## Why Event Tracking Matters for Forecasting
+## Technology Stack Justification & Defense
+
+### 1. Frontend & Framework: Next.js 14 (App Router)
+**Why not React SPA (Vite) or PHP?**
+*   **The "Unified Monolith" Advantage:** Next.js allows us to build the **POS (Admin)**, **Inventory Dashboard**, and **Vendor Portal** in a single project.
+    *   *Defense:* "If we used a separate React frontend and Node backend, we would have to manage two deployments and duplicate Type definitions. Next.js gives us 'Full Stack Typesafety'—if I change a database column, the frontend breaks immediately during `build`, preventing runtime errors."
+*   **Server Actions (RSC):** We perform direct database mutations from the UI components without building a REST API layer.
+    *   *Defense:* "This reduces latency. When a cashier clicks 'Pay', the server processes the transaction and revalidates the cache in one round trip. No generic API overhead."
+
+### 2. Database: PostgreSQL on Vercel/Neon
+**Why not MySQL or MongoDB?**
+*   **Data Integrity (ACID):** Financial data requires strict consistency.
+    *   *Defense:* "Prisma + Postgres allows us to wrap complex operations (Create Transaction + Deduct Inventory + Log Audit) in a single **Interactive Transaction**. If the audit log fails, the inventory deduction rolls back. MongoDB (NoSQL) makes this much harder to guarantee."
+*   **Complex Analytics:** We use Postgres Window Functions and Aggregations for the Weighted Moving Average (WMA).
+    *   *Defense:* "SQL is superior for aggregations. The 'YoY Growth' calculation is a single query in Postgres. In NoSQL, we would have to fetch all JSON documents and process them in loops, which is slow."
+
+### 3. ORM: Prisma
+**Why not raw SQL or TypeORM?**
+*   **Type Safety:** Prisma auto-generates TypeScript types from the schema.
+    *   *Defense:* "This eliminates 'Class of Service' errors where a developer assumes a price is a `number` but the DB returns a `string`. The compiler catches 90% of bugs before we run the app."
+*   **Migration Management:** `prisma migrate` creates a history of SQL files.
+    *   *Defense:* "We have a version-controlled history of every database change (e.g., adding the 'Wholesale Price' column). This is critical for auditability."
+
+### 4. Forecasting: "In-App" Statistical Engine
+**Why not an external Python Microservice (Flask/FastAPI)?**
+*   **Simplicity & Maintenance:** Small businesses don't have DevOps teams.
+    *   *Defense:* "Adding a Python container just for forecasting doubles the infrastructure cost and complexity. Our WMA algorithm is efficient enough to run directly in the Node.js runtime, keeping the deployment to a single Vercel instance."
+
+### 5. Deployment: Vercel (Edge Network)
+**Why not a local XAMPP server?**
+*   **The "Remote Vendor" Requirement:** The system demands that Wholesale Customers can order from their phones.
+    *   *Defense:* "A local XAMPP server is trapped in the store's LAN. hosting on Vercel allows the 'Hybrid' model: The Cashier works on the LAN (fast), but the Owner and Vendors can access the system from anywhere securely."
+
 
 ### The Problem: "Noise" in Sales Data
 Without event tracking, forecasting systems treat all sales data equally. This creates critical issues:

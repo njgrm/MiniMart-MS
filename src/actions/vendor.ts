@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { Decimal } from "@prisma/client/runtime/library";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 
@@ -349,7 +349,11 @@ export async function createVendorOrder(
       return { orderId: order.order_id };
     });
 
+    // Revalidate the vendor products cache tag so stock updates immediately
+    revalidateTag("vendor-products");
+    
     revalidatePath("/vendor");
+    revalidatePath("/vendor/order");
     revalidatePath("/vendor/history");
     revalidatePath("/admin/orders");
     revalidatePath("/admin/inventory");
@@ -454,9 +458,13 @@ export async function cancelVendorOrder(
       }
     });
 
+    // Revalidate the vendor products cache tag so stock updates immediately
+    revalidateTag("vendor-products");
+    
     // Revalidate all relevant paths for both vendor and admin
     revalidatePath("/vendor/history");
     revalidatePath("/vendor");
+    revalidatePath("/vendor/order");
     revalidatePath("/admin/orders");
     revalidatePath("/admin");
     revalidatePath("/admin/inventory");

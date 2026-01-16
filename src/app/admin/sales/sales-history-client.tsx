@@ -166,20 +166,44 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     return `${year}-${month}-${day} ${hours}:${minutes}`;
   };
 
-  // Export to CSV
+  // Export to CSV with enhanced formatting
   const handleExportCSV = () => {
-    const headers = ["Date", "Receipt #", "Items", "Total Amount", "Cost", "Profit", "Payment", "Status"];
+    const headers = [
+      "Date",
+      "Time",
+      "Receipt No",
+      "Items Count",
+      "Item Details",
+      "Total Amount (PHP)",
+      "Cost (PHP)",
+      "Profit (PHP)",
+      "Profit Margin %",
+      "Payment Method",
+      "GCash Ref",
+      "Status",
+    ];
+    
     const rows = data.transactions.map((tx) => {
+      const d = new Date(tx.created_at);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const timeStr = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
       const cost = tx.items.reduce((sum, item) => sum + (item.cost_at_sale * item.quantity), 0);
       const profit = tx.total_amount - cost;
+      const margin = tx.total_amount > 0 ? ((profit / tx.total_amount) * 100).toFixed(1) : "0";
+      const itemDetails = tx.items.map(i => `${i.quantity}x ${i.product_name}`).join("; ");
+      
       return [
-        formatDateForExport(tx.created_at),
+        dateStr,
+        timeStr,
         tx.receipt_no.substring(0, 8),
         tx.itemsCount,
+        `"${itemDetails}"`,
         tx.total_amount.toFixed(2),
         cost.toFixed(2),
         profit.toFixed(2),
-        tx.payment_method || "N/A",
+        margin,
+        tx.payment_method || "",
+        tx.gcash_reference_no || "",
         tx.status,
       ];
     });
@@ -194,7 +218,7 @@ export function SalesHistoryClient({ initialData }: SalesHistoryClientProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sales-history-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `sales-transactions-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("CSV exported successfully");

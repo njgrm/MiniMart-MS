@@ -31,6 +31,19 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  Legend,
+} from "recharts";
+import {
   Table,
   TableBody,
   TableCell,
@@ -135,6 +148,7 @@ interface ExpiringReportClientProps {
 
 // Design system colors from AGENTS.md
 // Expired: #AC0F16 (Red), Critical: #AC0F16 (Red), Warning: #F1782F (Orange), Caution: #2EAFC5 (Teal)
+// 45-DAY RETURN POLICY: Urgency is based on days until RETURN DEADLINE (45 days before expiry)
 const urgencyConfig: Record<
   ExpiringItem["urgency"],
   { label: string; color: string; icon: React.ElementType; badgeClass: string; progressColor: string; order: number }
@@ -148,7 +162,7 @@ const urgencyConfig: Record<
     order: 0,
   },
   critical: {
-    label: "Critical (≤7d)",
+    label: "Return ASAP",
     color: "text-[#AC0F16]",
     icon: AlertCircle,
     badgeClass: "bg-red-50 text-[#AC0F16] border-red-200",
@@ -156,7 +170,7 @@ const urgencyConfig: Record<
     order: 1,
   },
   warning: {
-    label: "Warning (≤14d)",
+    label: "Return Soon (≤7d)",
     color: "text-[#F1782F]",
     icon: AlertTriangle,
     badgeClass: "bg-[#fef3eb] text-[#F1782F] border-[#F1782F]/30",
@@ -164,7 +178,7 @@ const urgencyConfig: Record<
     order: 2,
   },
   caution: {
-    label: "Caution (≤30d)",
+    label: "Plan Return (≤14d)",
     color: "text-[#2EAFC5]",
     icon: Timer,
     badgeClass: "bg-[#e6f7fa] text-[#2EAFC5] border-[#2EAFC5]/30",
@@ -172,7 +186,7 @@ const urgencyConfig: Record<
     order: 3,
   },
   advise_return: {
-    label: "Advise Return (≤45d)",
+    label: "Early Warning",
     color: "text-[#7c3aed]",
     icon: CalendarClock,
     badgeClass: "bg-violet-50 text-[#7c3aed] border-violet-200",
@@ -241,6 +255,61 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
       return matchesUrgency && matchesCategory;
     });
   }, [data.items, urgencyFilter, categoryFilter]);
+
+  // Chart data for urgency distribution
+  const urgencyChartData = useMemo(() => {
+    const counts: Record<string, { count: number; value: number }> = {
+      expired: { count: 0, value: 0 },
+      critical: { count: 0, value: 0 },
+      warning: { count: 0, value: 0 },
+      caution: { count: 0, value: 0 },
+      advise_return: { count: 0, value: 0 },
+    };
+    data.items.forEach((item) => {
+      if (counts[item.urgency]) {
+        counts[item.urgency].count++;
+        counts[item.urgency].value += item.value_at_risk;
+      }
+    });
+    return [
+      { name: "Expired", count: counts.expired.count, value: counts.expired.value, fill: "#AC0F16" },
+      { name: "Return ASAP", count: counts.critical.count, value: counts.critical.value, fill: "#ef4444" },
+      { name: "Return Soon", count: counts.warning.count, value: counts.warning.value, fill: "#F1782F" },
+      { name: "Plan Return", count: counts.caution.count, value: counts.caution.value, fill: "#2EAFC5" },
+      { name: "Early Warning", count: counts.advise_return.count, value: counts.advise_return.value, fill: "#7c3aed" },
+    ].filter(d => d.count > 0);
+  }, [data.items]);
+
+  // Timeline chart - items expiring in next weeks
+  const timelineChartData = useMemo(() => {
+    const now = new Date();
+    const buckets = [
+      { label: "Expired", min: -Infinity, max: 0, count: 0, value: 0 },
+      { label: "1-7 days", min: 1, max: 7, count: 0, value: 0 },
+      { label: "8-14 days", min: 8, max: 14, count: 0, value: 0 },
+      { label: "15-30 days", min: 15, max: 30, count: 0, value: 0 },
+      { label: "31-45 days", min: 31, max: 45, count: 0, value: 0 },
+      { label: "45+ days", min: 46, max: Infinity, count: 0, value: 0 },
+    ];
+    
+    data.items.forEach((item) => {
+      const days = item.days_until_expiry;
+      for (const bucket of buckets) {
+        if (days >= bucket.min && days <= bucket.max) {
+          bucket.count++;
+          bucket.value += item.value_at_risk;
+          break;
+        }
+      }
+    });
+    
+    return buckets.map((b, i) => ({
+      name: b.label,
+      count: b.count,
+      value: b.value,
+      fill: i === 0 ? "#AC0F16" : i === 1 ? "#ef4444" : i === 2 ? "#F1782F" : i === 3 ? "#f59e0b" : i === 4 ? "#2EAFC5" : "#22c55e",
+    }));
+  }, [data.items]);
 
   // Define columns for Tanstack Table
   const columns: ColumnDef<ExpiringItem>[] = useMemo(
@@ -573,10 +642,10 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="expired">Expired</SelectItem>
-              <SelectItem value="critical">Critical (≤7d)</SelectItem>
-              <SelectItem value="warning">Warning (≤14d)</SelectItem>
-              <SelectItem value="caution">Caution (≤30d)</SelectItem>
-              <SelectItem value="advise_return">Advise Return (≤45d)</SelectItem>
+              <SelectItem value="critical">Return ASAP (Past Deadline)</SelectItem>
+              <SelectItem value="warning">Return Soon (≤7d to deadline)</SelectItem>
+              <SelectItem value="caution">Plan Return (≤14d to deadline)</SelectItem>
+              <SelectItem value="advise_return">Early Warning</SelectItem>
               <SelectItem value="marked">Marked for Return</SelectItem>
             </SelectContent>
           </Select>
@@ -652,6 +721,84 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           icon={DollarSign}
           variant="danger"
         />
+      </div>
+
+      {/* Expiry Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Urgency Distribution Pie Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Urgency Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={urgencyChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="count"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {urgencyChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [value, "Batches"]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Expiry Timeline */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Expiry Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={timelineChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} stroke="#78716c" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#78716c" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number, name: string) => [
+                      name === "count" 
+                        ? `${value} batches` 
+                        : `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                      name === "count" ? "Batches" : "Value at Risk"
+                    ]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar dataKey="count" name="Batches" radius={[4, 4, 0, 0]}>
+                    {timelineChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Urgency Breakdown */}
@@ -815,31 +962,6 @@ export function ExpiringReportClient({ data }: ExpiringReportClientProps) {
           </div>
         </CardContent>
       </Card>
-
-      {/* FEFO Recommendations */}
-      <div className="print-hidden" data-print-hidden="true">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">FEFO Compliance Tips</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-[#2EAFC5]/5 border border-[#2EAFC5]/20 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <CalendarClock className="h-5 w-5 text-[#2EAFC5] mt-0.5" />
-                <div className="space-y-2">
-                  <p className="font-medium text-[#2EAFC5]">First Expired, First Out (FEFO)</p>
-                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-                    <li>Always sell items with nearest expiry date first</li>
-                    <li>Run promotions on items expiring within 14 days</li>
-                    <li>Consider return-to-supplier for items nearing expiry</li>
-                    <li>Monitor this report weekly to prevent wastage</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
       
       {/* Pickup Confirmation Dialog */}
       <PickupConfirmDialog

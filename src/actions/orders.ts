@@ -206,19 +206,58 @@ export async function getPendingOrdersCount(): Promise<number> {
 
 /**
  * Update order status
+ * When status changes to READY, creates a notification for the vendor
  */
 export async function updateOrderStatus(
   orderId: number,
   newStatus: OrderStatus
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Get the order to find the customer_id for notification
+    const order = await prisma.order.findUnique({
+      where: { order_id: orderId },
+      select: { customer_id: true },
+    });
+
+    if (!order) {
+      return { success: false, error: "Order not found" };
+    }
+
     await prisma.order.update({
       where: { order_id: orderId },
       data: { status: newStatus },
     });
 
+    // Create notification for vendor when order is ready for pickup
+    if (newStatus === "READY" && order.customer_id) {
+      // Check if notification already exists for this order being ready
+      const existingNotification = await prisma.notification.findFirst({
+        where: {
+          user_id: order.customer_id,
+          user_type: "vendor",
+          title: "Order Ready for Pickup!",
+          message: { contains: `Order #${orderId}` },
+        },
+      });
+
+      if (!existingNotification) {
+        await prisma.notification.create({
+          data: {
+            user_id: order.customer_id,
+            user_type: "vendor",
+            title: "Order Ready for Pickup!",
+            message: `Your order #${orderId} is ready for pickup. Please visit the store to collect it.`,
+            type: "success",
+            href: "/vendor/history",
+          },
+        });
+      }
+    }
+
     revalidatePath("/admin/orders");
     revalidatePath("/admin");
+    revalidatePath("/vendor/history");
+    revalidatePath("/vendor");
     
     return { success: true };
   } catch (error) {
@@ -878,6 +917,192 @@ export async function autoCancelExpiredOrders(hoursThreshold: number = 48): Prom
   } catch (error) {
     console.error("Failed to auto-cancel expired orders:", error);
     return { success: false, cancelledCount: 0, cancelledOrderIds: [] };
+  }
+}
+
+// ============================================================================
+// ORDER HISTORY (For Admin Order History Page)
+// ============================================================================
+
+export type OrderHistoryDateRange = "today" | "week" | "month" | "year" | "all";
+export type OrderHistoryStatusFilter = "all" | "COMPLETED" | "CANCELLED";
+
+export interface HistoricalOrder {
+  order_id: number;
+  order_date: Date;
+  status: OrderStatus;
+  total_amount: number;
+  customer: {
+    customer_id: number;
+    name: string;
+    contact_details: string | null;
+    email: string | null;
+  };
+  items: Array<{
+    product_id: number;
+    product_name: string;
+    quantity: number;
+    price: number;
+  }>;
+  itemsCount: number;
+  transaction_id?: number;
+  receipt_no?: string;
+}
+
+export interface OrderHistoryResult {
+  orders: HistoricalOrder[];
+  totalCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  totalRevenue: number;
+}
+
+/**
+ * Get order history (completed and cancelled orders)
+ * For admin order history page
+ */
+export async function getOrderHistory(
+  dateRange: OrderHistoryDateRange = "all",
+  statusFilter: OrderHistoryStatusFilter = "all",
+  page: number = 1,
+  pageSize: number = 20,
+  searchQuery?: string
+): Promise<OrderHistoryResult> {
+  try {
+    // Build date filter
+    let dateFilter: Date | undefined;
+    const now = new Date();
+    
+    switch (dateRange) {
+      case "today":
+        dateFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case "week":
+        dateFilter = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case "month":
+        dateFilter = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case "year":
+        dateFilter = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        dateFilter = undefined;
+    }
+
+    // Build status filter
+    const statusCondition = statusFilter === "all" 
+      ? { in: ["COMPLETED", "CANCELLED"] as string[] }
+      : statusFilter;
+
+    // Build where clause
+    const whereClause = {
+      status: statusCondition,
+      ...(dateFilter && { order_date: { gte: dateFilter } }),
+      ...(searchQuery && {
+        OR: [
+          { customer: { name: { contains: searchQuery, mode: "insensitive" as const } } },
+          { order_id: !isNaN(parseInt(searchQuery)) ? parseInt(searchQuery) : undefined },
+        ].filter(Boolean),
+      }),
+    };
+
+    // Get total counts for stats
+    const [totalCount, completedCount, cancelledCount, totalRevenueResult] = await Promise.all([
+      prisma.order.count({ 
+        where: { 
+          status: { in: ["COMPLETED", "CANCELLED"] },
+          ...(dateFilter && { order_date: { gte: dateFilter } }),
+        } 
+      }),
+      prisma.order.count({ 
+        where: { 
+          status: "COMPLETED",
+          ...(dateFilter && { order_date: { gte: dateFilter } }),
+        } 
+      }),
+      prisma.order.count({ 
+        where: { 
+          status: "CANCELLED",
+          ...(dateFilter && { order_date: { gte: dateFilter } }),
+        } 
+      }),
+      prisma.order.aggregate({
+        where: { 
+          status: "COMPLETED",
+          ...(dateFilter && { order_date: { gte: dateFilter } }),
+        },
+        _sum: { total_amount: true },
+      }),
+    ]);
+
+    // Fetch paginated orders
+    const orders = await prisma.order.findMany({
+      where: whereClause,
+      include: {
+        customer: {
+          select: {
+            customer_id: true,
+            name: true,
+            contact_details: true,
+            email: true,
+          },
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                product_name: true,
+              },
+            },
+          },
+        },
+        transaction: {
+          select: {
+            transaction_id: true,
+            receipt_no: true,
+          },
+        },
+      },
+      orderBy: { order_date: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+
+    const transformedOrders: HistoricalOrder[] = orders.map((order) => ({
+      order_id: order.order_id,
+      order_date: order.order_date,
+      status: order.status as OrderStatus,
+      total_amount: Number(order.total_amount),
+      customer: order.customer,
+      items: order.items.map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product.product_name,
+        quantity: item.quantity,
+        price: Number(item.price),
+      })),
+      itemsCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+      transaction_id: order.transaction?.transaction_id,
+      receipt_no: order.transaction?.receipt_no,
+    }));
+
+    return {
+      orders: transformedOrders,
+      totalCount: statusFilter === "all" ? totalCount : 
+        (statusFilter === "COMPLETED" ? completedCount : cancelledCount),
+      completedCount,
+      cancelledCount,
+      totalRevenue: Number(totalRevenueResult._sum.total_amount || 0),
+    };
+  } catch (error) {
+    console.error("Failed to get order history:", error);
+    return {
+      orders: [],
+      totalCount: 0,
+      completedCount: 0,
+      cancelledCount: 0,
+      totalRevenue: 0,
+    };
   }
 }
 

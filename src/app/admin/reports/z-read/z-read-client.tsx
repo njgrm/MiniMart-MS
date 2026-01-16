@@ -22,7 +22,21 @@ import {
   XCircle,
   FileText,
   Loader2,
+  Banknote,
+  Smartphone,
 } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import {
   Table,
   TableBody,
@@ -42,6 +56,9 @@ import { DateRangePickerWithPresets } from "@/components/ui/date-range-picker-wi
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { getZReadHistory, type ZReadHistoryResult, type ZReadRecord } from "@/actions/reports";
 import { cn } from "@/lib/utils";
+
+// Chart type toggle state
+type ChartType = "sales" | "profit" | "payment";
 
 interface ZReadReportClientProps {
   initialData: ZReadHistoryResult;
@@ -210,6 +227,7 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
   
   const [data, setData] = useState<ZReadHistoryResult>(initialData);
   const [isPending, startTransition] = useTransition();
+  const [activeChart, setActiveChart] = useState<ChartType>("sales");
   
   const [sorting, setSorting] = useState<SortingState>([
     { id: "date", desc: true },
@@ -296,6 +314,19 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
       periodDays,
     };
   }, [sortedRecords, data.summary]);
+
+  // Chart data - transform records for visualization (ascending date order for charts)
+  const chartData = useMemo(() => {
+    return [...sortedRecords]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((r) => ({
+        date: format(new Date(r.date), "MMM d"),
+        sales: r.gross_sales,
+        profit: r.gross_profit,
+        cash: r.cash_sales,
+        gcash: r.gcash_sales,
+      }));
+  }, [sortedRecords]);
 
   const printSummary = [
     { label: "Days Tracked", value: data.summary.total_days.toLocaleString() },
@@ -581,6 +612,145 @@ export function ZReadReportClient({ initialData }: ZReadReportClientProps) {
           </div>
         </div>
       </LoadingOverlay>
+
+      {/* Sales Trends Chart */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold">Sales Trends</CardTitle>
+            <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
+              <button
+                onClick={() => setActiveChart("sales")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  activeChart === "sales"
+                    ? "bg-white shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <DollarSign className="h-3.5 w-3.5 inline mr-1" />
+                Sales
+              </button>
+              <button
+                onClick={() => setActiveChart("profit")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  activeChart === "profit"
+                    ? "bg-white shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <TrendingUp className="h-3.5 w-3.5 inline mr-1" />
+                Profit
+              </button>
+              <button
+                onClick={() => setActiveChart("payment")}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  activeChart === "payment"
+                    ? "bg-white shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Banknote className="h-3.5 w-3.5 inline mr-1" />
+                Payment Methods
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[280px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              {activeChart === "sales" ? (
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2EAFC5" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#2EAFC5" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#78716c" />
+                  <YAxis 
+                    tick={{ fontSize: 11 }} 
+                    stroke="#78716c"
+                    tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [`₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Sales"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="sales"
+                    name="Gross Sales"
+                    stroke="#2EAFC5"
+                    fill="url(#salesGradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              ) : activeChart === "profit" ? (
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#78716c" />
+                  <YAxis 
+                    tick={{ fontSize: 11 }} 
+                    stroke="#78716c"
+                    tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [`₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "Profit"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="profit"
+                    name="Gross Profit"
+                    stroke="#22c55e"
+                    fill="url(#profitGradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              ) : (
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#78716c" />
+                  <YAxis 
+                    tick={{ fontSize: 11 }} 
+                    stroke="#78716c"
+                    tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [`₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar dataKey="cash" name="Cash" fill="#2EAFC5" radius={[2, 2, 0, 0]} stackId="payment" />
+                  <Bar dataKey="gcash" name="GCash" fill="#AC0F16" radius={[2, 2, 0, 0]} stackId="payment" />
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Daily Records Table - Separate Card */}
       <LoadingOverlay isLoading={isPending}>

@@ -50,13 +50,13 @@ import { useNotificationStore } from "@/stores/use-notification-store";
 
 // Category display name mapping (database value -> UI-friendly name)
 const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
-  "SOFTDRINKS_CASE": "Soft Drinks Case",
+  "SOFTDRINKS_CASE": "Softdrinks Case",
   "BEVERAGES": "Beverages",
   "CANNED_GOODS": "Canned Goods",
   "CONDIMENTS": "Condiments",
   "DAIRY": "Dairy",
   "SNACK": "Snacks",
-  "SODA": "Soft Drinks",
+  "SODA": "Soda",
   "BREAD": "Bread & Bakery",
   "FROZEN": "Frozen Foods",
   "HOUSEHOLD": "Household Items",
@@ -102,6 +102,57 @@ export function VendorOrderClient({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const { addNotification } = useNotificationStore();
 
+  // Periodic refresh to sync stock changes from admin POS
+  // Refresh every 30 seconds when page is visible and cart is not open
+  useEffect(() => {
+    // Only refresh when page is visible and cart is not open
+    // to avoid disrupting user interactions
+    const REFRESH_INTERVAL = 30 * 1000; // 30 seconds
+    
+    let intervalId: NodeJS.Timeout | null = null;
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Refresh immediately when tab becomes visible
+        router.refresh();
+        
+        // Start periodic refresh
+        if (!intervalId) {
+          intervalId = setInterval(() => {
+            // Only refresh if cart is not open (don't disrupt user actions)
+            if (!isCartOpen && !isConfirmOpen) {
+              router.refresh();
+            }
+          }, REFRESH_INTERVAL);
+        }
+      } else {
+        // Stop refreshing when tab is hidden
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      }
+    };
+    
+    // Initial setup
+    if (document.visibilityState === "visible") {
+      intervalId = setInterval(() => {
+        if (!isCartOpen && !isConfirmOpen) {
+          router.refresh();
+        }
+      }, REFRESH_INTERVAL);
+    }
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [router, isCartOpen, isConfirmOpen]);
+
   // Auto-add product from URL param (from dashboard quick add)
   useEffect(() => {
     if (preAddProductId && !hasAddedPreSelectRef.current) {
@@ -134,6 +185,50 @@ export function VendorOrderClient({
       }
     }
   }, [preAddProductId, products]);
+
+  // Sync cart items with updated product stock when products refresh
+  useEffect(() => {
+    setCart((prevCart) => {
+      let hasStockChanges = false;
+      
+      const updatedCart = prevCart.map((cartItem) => {
+        const currentProduct = products.find(p => p.product_id === cartItem.product_id);
+        if (!currentProduct) {
+          // Product no longer exists - will be filtered out
+          hasStockChanges = true;
+          return null;
+        }
+        
+        // Update stock info in cart
+        if (cartItem.current_stock !== currentProduct.current_stock) {
+          hasStockChanges = true;
+          
+          // If cart quantity exceeds new stock, adjust
+          if (cartItem.quantity > currentProduct.current_stock) {
+            if (currentProduct.current_stock === 0) {
+              toast.warning(`${cartItem.product_name} is now out of stock and was removed`);
+              return null;
+            }
+            toast.warning(`${cartItem.product_name} stock reduced. Quantity adjusted.`);
+            return {
+              ...cartItem,
+              current_stock: currentProduct.current_stock,
+              quantity: currentProduct.current_stock,
+            };
+          }
+          
+          return {
+            ...cartItem,
+            current_stock: currentProduct.current_stock,
+          };
+        }
+        
+        return cartItem;
+      }).filter((item): item is LocalCartItem => item !== null);
+      
+      return updatedCart;
+    });
+  }, [products]); // Re-run when products data refreshes
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PH", {

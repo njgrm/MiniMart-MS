@@ -6,6 +6,249 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ## [Unreleased] - 2026-01-16
 
+### Admin UI & History Pages Improvements
+
+#### 1. Sidebar Navigation Fix
+- **Fixed:** Clicking nav items with sub-items now navigates to the main page (Orders, Inventory, Analytics)
+- **Chevron-only toggle:** Only clicking the chevron icon expands/collapses sub-items
+- Previously clicking anywhere on the nav item would toggle dropdown instead of navigating
+
+**Files Modified:**
+- `src/components/app-sidebar-motion.tsx`
+
+#### 2. Seed Script: Deliveries & Returns Data
+- Added `seedDeliveries()` function to create RESTOCK stock movements from inventory batches
+- Deliveries are properly linked to suppliers and batches for complete audit trail
+- Each batch creates a corresponding delivery movement with supplier info, cost price, and reference
+- Returns seeding already existed via `stock_movements_returns.csv`
+
+**Files Modified:**
+- `prisma/seed.ts`
+
+---
+
+#### 3. Sidebar Collapsible Sub-Menus (Earlier Today)
+- Added chevron toggle for nav items with sub-items (Orders, Inventory)
+- Collapsible sub-menus with smooth AnimatePresence animations
+- Chevron color adapts: white on primary highlight, black/secondary otherwise
+- Auto-expands parent menu when navigating to a sub-item
+
+**Files Modified:**
+- `src/components/app-sidebar-motion.tsx`
+
+#### 4. Order History Layout Improvement
+- Removed separate page header section to maximize table space
+- Consolidated KPI chips (completed/cancelled counts) into toolbar row
+- Matches sales-history design pattern exactly (single toolbar row)
+- Enhanced CSV export with separate Date/Time columns, item details, contact info
+
+**Files Modified:**
+- `src/app/admin/order-history/order-history-client.tsx`
+
+#### 5. Supplier Deliveries History Page (New Feature)
+- Created `/admin/deliveries` page for viewing all RESTOCK stock movements
+- Shows product, supplier, quantity, unit cost, total cost, reference
+- KPI chips: total deliveries, units received, supplier count, total cost
+- Full pagination, search, date range filtering
+- CSV export with proper formatting
+- Detail dialog with receipt image support
+
+**Files Created:**
+- `src/app/admin/deliveries/page.tsx`
+- `src/app/admin/deliveries/deliveries-client.tsx`
+
+**Actions Added:**
+- `getDeliveryHistory()` - fetches RESTOCK movements with pagination
+
+#### 4. Returns & Damages History Page (New Feature)
+- Created `/admin/returns` page for viewing RETURN, DAMAGE, ADJUSTMENT movements
+- Shows product, type (color-coded badge), quantity removed, estimated loss
+- Type filter: All, Returns, Damages, Adjustments
+- KPI chips: record counts by type, estimated total loss
+- Full pagination, search, date range filtering
+- CSV export with loss calculations
+
+**Files Created:**
+- `src/app/admin/returns/page.tsx`
+- `src/app/admin/returns/returns-client.tsx`
+
+**Actions Added:**
+- `getReturnsHistory()` - fetches negative stock movements with type filtering
+
+#### 5. CSV Export Formatting Improvements
+- All history pages now have enhanced CSV exports:
+  - Separate Date and Time columns (ISO format)
+  - Quoted strings for proper CSV escaping
+  - Item details with quantities
+  - Currency values with proper decimal formatting
+  - Sales history now includes profit margin % and GCash reference
+
+**Files Modified:**
+- `src/app/admin/order-history/order-history-client.tsx`
+- `src/app/admin/sales/sales-history-client.tsx`
+- New pages include proper formatting by default
+
+---
+
+### Vendor Portal & Notification Fixes
+
+#### 1. Category Label Fix
+- Changed "Wholesale Cases" back to "Softdrinks Case" per user preference
+- Updated in products-table.tsx, analytics-dashboard.tsx, and order-client.tsx
+
+#### 2. Vendor Stock Real-Time Updates
+- Added 30-second periodic refresh via `router.refresh()` when page is visible and cart is not open
+- Added cart stock sync effect to automatically update quantities when products refresh
+- Stock changes from admin POS now reflected in vendor portal within 30 seconds
+- Cart items automatically adjust when stock becomes insufficient
+
+**Files Modified:**
+- `src/app/vendor/order/order-client.tsx`
+
+#### 3. Notification Bell Spam Fix
+- **Root Cause:** NotificationBell component was rendered twice in vendor layout (sidebar footer + mobile header)
+- **Fix:** Added conditional rendering - desktop shows bell in sidebar footer only, mobile shows in header only
+- Removed incorrect `"use server"` directive from SSE notification stream route
+
+**Files Modified:**
+- `src/app/vendor/layout-client.tsx`
+- `src/app/api/notifications/stream/route.ts`
+
+#### 4. Pickup Ready Notification
+- Enhanced `updateOrderStatus()` to create a proactive notification when order status changes to "READY"
+- Vendors now receive immediate "Order Ready for Pickup!" notification with toast and bell indicator
+- Also revalidates vendor paths for immediate UI updates
+
+**Files Modified:**
+- `src/actions/orders.ts`
+
+#### 5. Order History Page (New Feature)
+- Created new admin page `/admin/order-history` for viewing completed and cancelled vendor orders
+- **Features:**
+  - Table-based layout matching Sales History design pattern
+  - Search by order ID or customer name
+  - Date range filter (Today, Week, Month, Year, All)
+  - Status filter (Completed, Cancelled, All)
+  - Pagination with configurable page size
+  - Export to CSV functionality
+  - Order detail dialog with full item breakdown
+  - KPI chips showing completed/cancelled counts and total revenue
+- Added `getOrderHistory()` server action with full pagination and filtering support
+- Added to sidebar navigation as sub-item under "Orders"
+
+**Files Created:**
+- `src/app/admin/order-history/page.tsx`
+- `src/app/admin/order-history/loading.tsx`
+- `src/app/admin/order-history/order-history-client.tsx`
+
+**Files Modified:**
+- `src/actions/orders.ts` (added getOrderHistory action)
+- `src/components/app-sidebar-motion.tsx` (added nav item)
+
+---
+
+### System-Wide UI Improvements
+
+#### 1. Sticky Table Headers
+- Enforced sticky table headers globally across all tables in the system
+- Users now maintain column context when scrolling through long data tables
+- Added `sticky top-0 z-10 bg-card` classes to base `TableHeader` component
+
+**Files Modified:**
+- `src/components/ui/table.tsx`
+
+#### 2. Analytics Dashboard Layout Improvements
+- **Peak Traffic Heatmap:** Expanded from 1 column to 2 columns for better visibility
+- **Donut Chart (Category Share):** Increased size (200px → 280px height) with larger radii
+- **Chart Labels:** Now show full category names with percentages (e.g., "Beverages (25%)") instead of just floating percentages
+- Enabled label lines for clearer category identification
+
+**Files Modified:**
+- `src/app/admin/analytics/analytics-dashboard.tsx`
+
+#### 3. Vendor Cache Bug Fix
+- Fixed critical bug where vendor portal showed "No products found" after admin POS transactions
+- Root cause: `unstable_cache` with `vendor-products` tag not being invalidated on stock changes
+- Added `revalidateTag("vendor-products")` to:
+  - `createTransaction()` in transaction.ts (after POS sales)
+  - `createVendorOrder()` and `cancelVendorOrder()` in vendor.ts
+
+**Files Modified:**
+- `src/actions/transaction.ts`
+- `src/actions/vendor.ts`
+
+#### 4. Category Filtering Bug Fix (Critical)
+- **Root Cause:** CSV seed data used title case categories (`Soda`, `Softdrinks case`) while filters expected uppercase (`SODA`, `SOFTDRINKS_CASE`)
+- **Fix 1:** Added `normalizeCategory()` function in seed.ts to convert CSV categories to uppercase with underscores
+- **Fix 2:** Ran SQL update to normalize existing product categories: `UPPER(REPLACE(category, ' ', '_'))`
+- **Fix 3:** Updated category dropdown labels for consistency:
+  - "Soft Drinks Case" → "Wholesale Cases" 
+  - "Soft Drinks" → "Soda" (to match database value `SODA`)
+  - "Snack" → "Snacks"
+
+**Impact:** Category filtering now works correctly in Inventory, Analytics, and Vendor pages. Vendor portal now shows SOFTDRINKS_CASE products.
+
+**Files Modified:**
+- `prisma/seed.ts` - Added normalizeCategory() function
+- `src/app/admin/inventory/products-table.tsx` - Updated category labels
+- `src/app/admin/analytics/analytics-dashboard.tsx` - Updated category labels
+- `src/app/vendor/order/order-client.tsx` - Updated category labels
+
+---
+
+### Reports Pages - Charts & Visualizations
+
+Added interactive Recharts visualizations to all major report pages for better data insights.
+
+#### 1. Z-Read (Daily Sales Log) Charts
+- Added tabbed chart section with three views: Sales, Profit, Payment Methods
+- Sales & Profit views use AreaChart with gradient fills
+- Payment Methods view uses stacked BarChart showing Cash vs GCash breakdown
+- Charts show data chronologically (ascending date order)
+
+**Files Modified:**
+- `src/app/admin/reports/z-read/z-read-client.tsx`
+
+#### 2. Profit Margin Analysis Charts
+- Added side-by-side layout with Pie Chart + Bar Chart
+- Pie chart shows margin status distribution (Negative, Low, Moderate, Healthy)
+- Horizontal bar chart displays top & bottom 5 products by margin percentage
+- Color-coded by margin health status
+
+**Files Modified:**
+- `src/app/admin/reports/profit-margin/profit-margin-client.tsx`
+
+#### 3. Sales by Category Charts
+- Added Revenue by Category pie chart with legend
+- Added Top Categories Performance horizontal bar chart
+- Bar chart compares Revenue vs Profit for top 8 categories
+- Color palette of 10 distinct colors for category differentiation
+
+**Files Modified:**
+- `src/app/admin/reports/sales-category/sales-category-client.tsx`
+
+#### 4. Velocity Report Charts
+- Added Status Distribution pie chart (Dead Stock, Slow Mover, Moderate, Fast Mover)
+- Added Capital by Category horizontal bar chart
+- Bar chart shows Total Capital vs Dead Stock Capital by category
+- Helps identify categories with most tied-up inventory
+
+**Files Modified:**
+- `src/app/admin/reports/velocity/velocity-client.tsx`
+
+#### 5. Expiry Tracker Charts
+- Added Urgency Distribution pie chart showing batch counts by status
+- Added Expiry Timeline bar chart with time buckets (Expired, 1-7d, 8-14d, etc.)
+- Color-coded urgency levels matching the design system
+- Helps visualize upcoming expiry pressure
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/expiring-client.tsx`
+
+---
+
+## [Previous] - 2026-01-16
+
 ### Analytics Page UI Polish & Icon Consistency
 
 #### 1. Comparison Tooltip Date Fix

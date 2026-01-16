@@ -28,6 +28,19 @@ import {
   Boxes,
 } from "lucide-react";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  Legend,
+} from "recharts";
+import {
   Table,
   TableBody,
   TableCell,
@@ -208,6 +221,47 @@ export function VelocityReportClient({ data: initialData }: VelocityReportClient
       return matchesStatus && matchesCategory;
     });
   }, [data.items, statusFilter, categoryFilter]);
+
+  // Chart data for status distribution
+  const statusChartData = useMemo(() => {
+    const counts: Record<string, { count: number; capital: number }> = {
+      dead_stock: { count: 0, capital: 0 },
+      slow_mover: { count: 0, capital: 0 },
+      moderate: { count: 0, capital: 0 },
+      fast_mover: { count: 0, capital: 0 },
+    };
+    data.items.forEach((item) => {
+      counts[item.status].count++;
+      counts[item.status].capital += item.capital_tied;
+    });
+    return [
+      { name: "Dead Stock", count: counts.dead_stock.count, capital: counts.dead_stock.capital, fill: "#AC0F16" },
+      { name: "Slow Mover", count: counts.slow_mover.count, capital: counts.slow_mover.capital, fill: "#F1782F" },
+      { name: "Moderate", count: counts.moderate.count, capital: counts.moderate.capital, fill: "#3b82f6" },
+      { name: "Fast Mover", count: counts.fast_mover.count, capital: counts.fast_mover.capital, fill: "#2EAFC5" },
+    ].filter(d => d.count > 0);
+  }, [data.items]);
+
+  // Capital by category chart data
+  const categoryCapitalData = useMemo(() => {
+    const categoryMap = new Map<string, { capital: number; deadStock: number }>();
+    data.items.forEach((item) => {
+      const current = categoryMap.get(item.category) || { capital: 0, deadStock: 0 };
+      current.capital += item.capital_tied;
+      if (item.status === "dead_stock") {
+        current.deadStock += item.capital_tied;
+      }
+      categoryMap.set(item.category, current);
+    });
+    return Array.from(categoryMap.entries())
+      .map(([cat, values]) => ({
+        name: formatCategoryName(cat).length > 10 ? formatCategoryName(cat).slice(0, 10) + "..." : formatCategoryName(cat),
+        capital: values.capital,
+        deadStock: values.deadStock,
+      }))
+      .sort((a, b) => b.capital - a.capital)
+      .slice(0, 8);
+  }, [data.items]);
 
   // Define columns for Tanstack Table
   const columns: ColumnDef<VelocityItem>[] = useMemo(
@@ -534,6 +588,90 @@ export function VelocityReportClient({ data: initialData }: VelocityReportClient
         />
         </div>
       </LoadingOverlay>
+
+      {/* Velocity Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Status Distribution */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Status Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="count"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {statusChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [value, "Products"]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Capital by Category */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Capital by Category</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryCapitalData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis 
+                    type="number" 
+                    tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} 
+                    tick={{ fontSize: 11 }} 
+                    stroke="#78716c" 
+                  />
+                  <YAxis 
+                    type="category" 
+                    dataKey="name" 
+                    width={70} 
+                    tick={{ fontSize: 10 }} 
+                    stroke="#78716c" 
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number, name: string) => [
+                      `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+                      name === "capital" ? "Total Capital" : "Dead Stock Capital"
+                    ]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
+                  <Bar dataKey="capital" name="Total Capital" fill="#2EAFC5" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="deadStock" name="Dead Stock" fill="#AC0F16" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Capital Analysis */}
       <LoadingOverlay isLoading={isPending}>

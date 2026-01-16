@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   IconLayoutDashboard,
   IconShoppingCart,
@@ -17,6 +17,9 @@ import {
   IconFileText,
   IconBuildingStore,
   IconCalendarEvent,
+  IconChevronDown,
+  IconTruckDelivery,
+  IconRotate,
 } from "@tabler/icons-react";
 import {
   MotionSidebar,
@@ -26,7 +29,6 @@ import {
   MotionSidebarFooter,
   MotionSidebarLink,
 } from "@/components/ui/motion-sidebar";
-import { Button } from "@/components/ui/button";
 import logoFull from "../../assets/christian_minimart_logo_words.png";
 import logoFullDark from "../../assets/christian_minimart_logo_dark_words.png";
 import logoIcon from "../../assets/christian_minimart_logo_collapsed.png";
@@ -62,11 +64,30 @@ const navItems: NavItem[] = [
     href: "/admin/orders",
     label: "Orders",
     icon: IconClipboardList,
+    subItems: [
+      {
+        href: "/admin/order-history",
+        label: "History",
+        icon: IconHistory,
+      },
+    ],
   },
   {
     href: "/admin/inventory",
     label: "Inventory",
     icon: IconPackage,
+    subItems: [
+      {
+        href: "/admin/deliveries",
+        label: "Deliveries",
+        icon: IconTruckDelivery,
+      },
+      {
+        href: "/admin/returns",
+        label: "Returns",
+        icon: IconRotate,
+      },
+    ],
   },
   {
     href: "/admin/suppliers",
@@ -113,12 +134,32 @@ interface SidebarContentProps extends AppSidebarMotionProps {
 
 function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarContentProps) {
   const pathname = usePathname();
-  const { resolvedTheme, setTheme } = useTheme();
+  const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  // Track which nav items have expanded sub-menus
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    // Auto-expand parent if current path matches a sub-item
+    navItems.forEach((item) => {
+      if (item.subItems?.some((sub) => pathname === sub.href || pathname.startsWith(sub.href + "/"))) {
+        setExpandedItems((prev) => new Set(prev).add(item.href));
+      }
+    });
+  }, [pathname]);
+
+  const toggleExpanded = (href: string) => {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(href)) {
+        next.delete(href);
+      } else {
+        next.add(href);
+      }
+      return next;
+    });
+  };
 
   const isDark = mounted && resolvedTheme === "dark";
 
@@ -174,88 +215,144 @@ function SidebarContent({ pendingOrdersCount = 0, open, setOpen }: SidebarConten
         <nav className="flex flex-col gap-1 font-semibold">
           {navItems.map((item) => {
             const isActive = pathname === item.href || 
-              (item.href !== "/admin" && pathname.startsWith(item.href));
+              (item.href !== "/admin" && pathname.startsWith(item.href) && !item.subItems?.some(sub => pathname.startsWith(sub.href)));
             const hasSubItems = item.subItems && item.subItems.length > 0;
-            const isSubActive = hasSubItems && item.subItems?.some(sub => pathname === sub.href);
+            const isSubActive = hasSubItems && item.subItems?.some(sub => pathname === sub.href || pathname.startsWith(sub.href + "/"));
+            const isExpanded = expandedItems.has(item.href);
             // Show badge on "Orders" nav item when there are pending orders
             const showBadge = item.label === "Orders" && pendingOrdersCount > 0;
             const Icon = item.icon;
 
             return (
               <div key={item.href} className="relative group/nav">
-                <div onClick={hasSubItems ? undefined : handleLinkClick}>
-                  <MotionSidebarLink
-                    link={{
-                      label: item.label,
-                      href: item.href,
-                      icon: (
-                        <div className="relative">
-                          <Icon 
-                            className={cn(
-                              "size-5",
-                              isActive 
-                                ? "text-primary-foreground" 
-                                : item.highlight 
-                                  ? "text-secondary" 
-                                  : "text-sidebar-foreground"
-                            )} 
-                          />
-                          {/* Badge overlay on icon when collapsed - Red circular badge */}
-                          {showBadge && !open && (
-                            <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white ring-2 ring-sidebar">
-                              {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
-                            </span>
-                          )}
-                        </div>
-                      ),
-                    }}
-                    isActive={isActive}
-                    className={cn(
-                      item.highlight && !isActive
-                        ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
-                        : ""
-                    )}
-                  />
+                {/* Main nav item with chevron for items with subitems */}
+                <div className="relative flex items-center">
+                  <div 
+                    className="flex-1"
+                    onClick={handleLinkClick}
+                  >
+                    <MotionSidebarLink
+                      link={{
+                        label: item.label,
+                        href: item.href,
+                        icon: (
+                          <div className="relative">
+                            <Icon 
+                              className={cn(
+                                "size-5",
+                                isActive || isSubActive
+                                  ? "text-primary-foreground" 
+                                  : item.highlight 
+                                    ? "text-secondary" 
+                                    : "text-sidebar-foreground"
+                              )} 
+                            />
+                            {/* Badge overlay on icon when collapsed */}
+                            {showBadge && !open && (
+                              <span className="absolute -top-1.5 -right-1.5 size-4 flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white ring-2 ring-sidebar">
+                                {pendingOrdersCount > 9 ? "9+" : pendingOrdersCount}
+                              </span>
+                            )}
+                          </div>
+                        ),
+                      }}
+                      isActive={isActive || isSubActive}
+                      className={cn(
+                        item.highlight && !isActive && !isSubActive
+                          ? "ring-1 ring-secondary/50 bg-secondary/10 text-secondary font-medium hover:bg-secondary/20"
+                          : ""
+                      )}
+                    />
+                  </div>
+                  {/* Chevron for expanded sidebar with subitems */}
+                  {hasSubItems && open && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleExpanded(item.href);
+                      }}
+                      className={cn(
+                        "absolute right-2 p-1 rounded transition-all",
+                        isActive || isSubActive
+                          ? "text-primary-foreground hover:bg-white/20"
+                          : item.highlight
+                            ? "text-secondary hover:bg-secondary/20"
+                            : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                      )}
+                    >
+                      <IconChevronDown 
+                        className={cn(
+                          "size-4 transition-transform duration-200",
+                          isExpanded && "rotate-180"
+                        )} 
+                      />
+                    </button>
+                  )}
                 </div>
                 {/* Badge shown inline when sidebar is open */}
-                {showBadge && open && (
+                {showBadge && open && !hasSubItems && (
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 text-xs font-bold rounded-full bg-destructive text-white animate-pulse">
                     {pendingOrdersCount}
                   </span>
                 )}
                 
-                {/* Sub-items: Show directly when open, show on hover when collapsed */}
-                {hasSubItems && open && (
-                  <div className="ml-6 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
-                    {item.subItems?.map((subItem) => {
-                      const isSubItemActive = pathname === subItem.href;
-                      const SubIcon = subItem.icon;
-                      return (
-                        <Link
-                          key={subItem.href}
-                          href={subItem.href}
-                          onClick={handleLinkClick}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors",
-                            isSubItemActive
-                              ? "bg-primary text-primary-foreground font-medium"
-                              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                          )}
-                        >
-                          <SubIcon className="size-4" />
-                          <span>{subItem.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Sub-items: Collapsible when open */}
+                <AnimatePresence>
+                  {hasSubItems && open && isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="ml-6 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
+                        {item.subItems?.map((subItem) => {
+                          const isSubItemActive = pathname === subItem.href || pathname.startsWith(subItem.href + "/");
+                          const SubIcon = subItem.icon;
+                          return (
+                            <Link
+                              key={subItem.href}
+                              href={subItem.href}
+                              onClick={handleLinkClick}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors",
+                                isSubItemActive
+                                  ? "bg-primary text-primary-foreground font-medium"
+                                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                              )}
+                            >
+                              <SubIcon className="size-4" />
+                              <span>{subItem.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
                 
                 {/* Sub-items popup on hover when collapsed */}
                 {hasSubItems && !open && (
                   <div className="absolute left-full top-0 ml-2 opacity-0 pointer-events-none group-hover/nav:opacity-100 group-hover/nav:pointer-events-auto transition-opacity z-50">
-                    <div className="bg-sidebar border border-sidebar-border rounded-lg shadow-lg py-2 min-w-[140px]">
+                    <div className="bg-sidebar border border-sidebar-border rounded-lg shadow-lg py-2 min-w-[160px]">
+                      {/* Parent link in popup */}
+                      <Link
+                        href={item.href}
+                        onClick={handleLinkClick}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors border-b border-sidebar-border mb-1",
+                          isActive
+                            ? "bg-primary text-primary-foreground"
+                            : "text-sidebar-foreground hover:bg-sidebar-accent"
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        <span>{item.label}</span>
+                      </Link>
                       {item.subItems?.map((subItem) => {
-                        const isSubItemActive = pathname === subItem.href;
+                        const isSubItemActive = pathname === subItem.href || pathname.startsWith(subItem.href + "/");
                         const SubIcon = subItem.icon;
                         return (
                           <Link

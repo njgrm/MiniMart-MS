@@ -27,6 +27,19 @@ import {
   Boxes,
 } from "lucide-react";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  Legend,
+} from "recharts";
+import {
   Table,
   TableBody,
   TableCell,
@@ -192,6 +205,37 @@ export function ProfitMarginClient({ data: initialData }: ProfitMarginClientProp
       return matchesStatus && matchesCategory;
     });
   }, [data.items, statusFilter, categoryFilter]);
+
+  // Chart data for margin distribution (status breakdown)
+  const statusChartData = useMemo(() => {
+    const counts: Record<string, number> = {
+      negative: 0,
+      low: 0,
+      moderate: 0,
+      healthy: 0,
+    };
+    data.items.forEach((item) => {
+      counts[item.status]++;
+    });
+    return [
+      { name: "Negative", value: counts.negative, fill: "#AC0F16" },
+      { name: "Low", value: counts.low, fill: "#F1782F" },
+      { name: "Moderate", value: counts.moderate, fill: "#3b82f6" },
+      { name: "Healthy", value: counts.healthy, fill: "#2EAFC5" },
+    ].filter(d => d.value > 0);
+  }, [data.items]);
+
+  // Chart data for top/bottom margin products
+  const marginBarData = useMemo(() => {
+    const sorted = [...data.items].sort((a, b) => a.margin_percent - b.margin_percent);
+    const bottom5 = sorted.slice(0, 5);
+    const top5 = sorted.slice(-5).reverse();
+    return [...bottom5, ...top5].map(item => ({
+      name: item.product_name.length > 20 ? item.product_name.slice(0, 20) + "..." : item.product_name,
+      margin: item.margin_percent,
+      fill: item.margin_percent < 0 ? "#AC0F16" : item.margin_percent < 10 ? "#F1782F" : item.margin_percent < 25 ? "#3b82f6" : "#2EAFC5",
+    }));
+  }, [data.items]);
 
   // Define columns for Tanstack Table
   const columns: ColumnDef<MarginItem>[] = useMemo(
@@ -540,6 +584,78 @@ export function ProfitMarginClient({ data: initialData }: ProfitMarginClientProp
           </div>
         </div>
       )}
+
+      {/* Margin Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Status Distribution Pie Chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Margin Status Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
+                  >
+                    {statusChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [value, "Products"]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top/Bottom Margin Products */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Top & Bottom Margin Products</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={marginBarData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                  <XAxis type="number" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} stroke="#78716c" />
+                  <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} stroke="#78716c" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #e5e5e5",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => [`${value.toFixed(1)}%`, "Margin"]}
+                  />
+                  <Bar dataKey="margin" radius={[0, 4, 4, 0]}>
+                    {marginBarData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Detailed Table - Card Wrapper */}
       <LoadingOverlay isLoading={isPending}>

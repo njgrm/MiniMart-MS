@@ -920,11 +920,11 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
         </div>
 
         {/* ============================================================= */}
-        {/* Row 3: Peak Traffic Heatmap (1 col) + Product Insights (3 cols) */}
+        {/* Row 3: Peak Traffic Heatmap (2 cols) + Product Insights (2 cols) */}
         {/* ============================================================= */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Peak Traffic Heatmap (1 column) */}
-          <Card className="shadow-sm lg:col-span-1">
+          {/* Peak Traffic Heatmap (2 columns) */}
+          <Card className="shadow-sm lg:col-span-2">
             <CardHeader className="pb-0">
               <div>
                 <CardTitle className="text-foreground flex items-center gap-2 text-base">
@@ -950,8 +950,8 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
             </CardContent>
           </Card>
 
-          {/* Product Insights - Tabbed Card (3 columns) */}
-          <Card className="shadow-sm lg:col-span-3">
+          {/* Product Insights - Tabbed Card (2 columns) */}
+          <Card className="shadow-sm lg:col-span-2">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
@@ -1009,39 +1009,17 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
             </CardHeader>
             <CardContent>
               {productInsightsTab === "movers" ? (
-                /* Top Movers Table - All products with profit */
-                <ScrollArea className="h-[320px]">
+                /* Top Movers Table - All products with profit - Full Height */
+                <ScrollArea className="h-[400px]">
                   {topMovers.length > 0 ? (
-                    <div className="space-y-0">
-                      {/* Summary Stats */}
-                      <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg">
-                          <p className="text-[10px] text-emerald-600 font-medium">Total Revenue</p>
-                          <p className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                            {formatCurrency(topMovers.reduce((sum, p) => sum + p.total_revenue, 0))}
-                          </p>
-                        </div>
-                        <div className="p-2 bg-cyan-50 dark:bg-cyan-950/30 rounded-lg">
-                          <p className="text-[10px] text-cyan-600 font-medium">Total Profit</p>
-                          <p className="text-sm font-bold tabular-nums text-cyan-700 dark:text-cyan-400">
-                            {formatCurrency(topMovers.reduce((sum, p) => sum + p.total_profit, 0))}
-                          </p>
-                        </div>
-                        <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
-                          <p className="text-[10px] text-amber-600 font-medium">Items Sold</p>
-                          <p className="text-sm font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                            {topMovers.reduce((sum, p) => sum + p.total_sold, 0).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Products Table */}
+                    <div>
+                      {/* Products Table - Larger, more readable */}
                       <Table>
                         <TableHeader>
                           <TableRow className="hover:bg-transparent">
-                            <TableHead className="text-[10px] w-10">#</TableHead>
-                            <TableHead className="text-[10px]">Product</TableHead>
-                            <TableHead className="text-[10px] w-[140px]">
+                            <TableHead className="text-[11px] w-8 font-semibold">#</TableHead>
+                            <TableHead className="text-[11px] font-semibold w-[140px]">Product</TableHead>
+                            <TableHead className="text-[11px] font-semibold">
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="cursor-help underline decoration-dotted">Velocity</span>
@@ -1051,10 +1029,10 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                                 </TooltipContent>
                               </Tooltip>
                             </TableHead>
-                            <TableHead className="text-[10px] text-right">Sold</TableHead>
-                            <TableHead className="text-[10px] text-right">Revenue</TableHead>
-                            <TableHead className="text-[10px] text-right">Profit</TableHead>
-                            <TableHead className="text-[10px] text-right">Stock</TableHead>
+                            <TableHead className="text-[11px] text-right font-semibold w-14">Sold</TableHead>
+                            <TableHead className="text-[11px] text-right font-semibold w-20">Revenue</TableHead>
+                            <TableHead className="text-[11px] text-right font-semibold w-20">Profit</TableHead>
+                            <TableHead className="text-[11px] text-right font-semibold w-14">Stock</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1074,9 +1052,9 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                                     {index + 1}
                                   </div>
                                 </TableCell>
-                                <TableCell className="py-1">
+                                <TableCell className="py-1.5">
                                   <div className="flex items-center gap-2">
-                                    <div className="size-7 rounded overflow-hidden bg-muted shrink-0">
+                                    <div className="size-8 rounded overflow-hidden bg-muted shrink-0">
                                       {product.image_url ? (
                                         <img 
                                           src={product.image_url} 
@@ -1086,28 +1064,28 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                                         />
                                       ) : (
                                         <div className="size-full flex items-center justify-center">
-                                          <Package className="size-3 text-muted-foreground/50" />
+                                          <Package className="size-3.5 text-muted-foreground/50" />
                                         </div>
                                       )}
                                     </div>
                                     <div className="min-w-0">
-                                      <p className="text-[10px] font-medium truncate max-w-[120px]">{product.product_name}</p>
-                                      <p className="text-[9px] text-muted-foreground capitalize">{product.category.toLowerCase()}</p>
+                                      <p className="text-xs font-medium truncate max-w-[100px]">{product.product_name}</p>
+                                      <p className="text-[10px] text-muted-foreground capitalize">{product.category.toLowerCase()}</p>
                                     </div>
                                   </div>
                                 </TableCell>
-                                <TableCell className="py-1">
-                                  {/* Velocity with visual bar */}
+                                <TableCell className="py-1.5">
+                                  {/* Velocity with visual bar - wider bar */}
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <div className="flex items-center gap-2 cursor-help">
-                                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                                      <div className="flex items-center gap-2 cursor-help min-w-[120px]">
+                                        <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden min-w-[80px]">
                                           <div 
                                             className="h-full rounded-full transition-all" 
                                             style={{ width: `${barWidth}%`, backgroundColor: color }}
                                           />
                                         </div>
-                                        <span className="text-[10px] font-bold tabular-nums shrink-0 w-10 text-right" style={{ color }}>
+                                        <span className="text-xs font-bold tabular-nums shrink-0 w-12 text-right" style={{ color }}>
                                           {product.velocity}/d
                                         </span>
                                       </div>
@@ -1117,19 +1095,19 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                                     </TooltipContent>
                                   </Tooltip>
                                 </TableCell>
-                                <TableCell className="py-1 text-right">
-                                  <span className="text-[10px] tabular-nums">{product.total_sold}</span>
+                                <TableCell className="py-1.5 text-right">
+                                  <span className="text-xs tabular-nums font-medium">{product.total_sold}</span>
                                 </TableCell>
-                                <TableCell className="py-1 text-right">
-                                  <span className="text-[10px] tabular-nums">{formatCurrency(product.total_revenue)}</span>
+                                <TableCell className="py-1.5 text-right">
+                                  <span className="text-xs tabular-nums">{formatCurrency(product.total_revenue)}</span>
                                 </TableCell>
-                                <TableCell className="py-1 text-right">
-                                  <span className={`text-[10px] tabular-nums font-medium ${product.total_profit > 0 ? 'text-emerald-600' : 'text-destructive'}`}>
+                                <TableCell className="py-1.5 text-right">
+                                  <span className={`text-xs tabular-nums font-semibold ${product.total_profit > 0 ? 'text-emerald-600' : 'text-destructive'}`}>
                                     {formatCurrency(product.total_profit)}
                                   </span>
                                 </TableCell>
-                                <TableCell className="py-1 text-right">
-                                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${
+                                <TableCell className="py-1.5 text-right">
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                     product.current_stock === 0 
                                       ? "bg-destructive/20 text-destructive" 
                                       : product.current_stock <= 10 
@@ -1235,7 +1213,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                   {categoryData.length > 0 ? (
                     <div className="flex flex-col lg:flex-row gap-4">
                       {/* Donut Chart */}
-                      <div className="h-[200px] lg:w-1/3 shrink-0">
+                      <div className="h-[280px] lg:w-2/5 shrink-0">
                         <ResponsiveContainer width="100%" height="100%" debounce={100}>
                           <RechartsPie>
                             <Pie
@@ -1244,13 +1222,13 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
                               nameKey="label"
                               cx="50%"
                               cy="50%"
-                              innerRadius={40}
-                              outerRadius={70}
+                              innerRadius={50}
+                              outerRadius={90}
                               paddingAngle={2}
-                              labelLine={false}
-                          label={({ percentage }) => {
-                            if (percentage < 8) return null;
-                            return `${percentage}%`;
+                              labelLine={true}
+                          label={({ label, percentage }) => {
+                            if (percentage < 5) return null;
+                            return `${label} (${percentage}%)`;
                           }}
                         >
                           {categoryData.map((entry, index) => (
@@ -1743,7 +1721,7 @@ export function AnalyticsDashboard({ data, financialStats }: AnalyticsDashboardP
 }
 
 // =============================================================================
-// Peak Traffic Heatmap Component
+// Peak Traffic Heatmap Component - Calendar-style Design
 // =============================================================================
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -1754,6 +1732,13 @@ const formatHourLabel = (hour: number): string => {
   if (hour === 12) return "12PM";
   if (hour > 12) return `${hour - 12}PM`;
   return `${hour}AM`;
+};
+
+// Compact hour label for grid
+const formatHourCompact = (hour: number): string => {
+  if (hour === 12) return "12P";
+  if (hour > 12) return `${hour - 12}P`;
+  return `${hour}A`;
 };
 
 function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; chartData: DashboardChartDataPoint[] }) {
@@ -1843,22 +1828,29 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
     };
   }, [heatmapData]);
 
-  // Get color based on intensity
+  // Get color based on intensity - using gradient for smooth heatmap look
   const getColor = (value: number) => {
     const intensity = value / maxValue;
-    if (intensity === 0) return "bg-muted/30";
-    if (intensity < 0.25) return "bg-cyan-100 dark:bg-cyan-950/40";
-    if (intensity < 0.5) return "bg-cyan-300 dark:bg-cyan-800/60";
-    if (intensity < 0.75) return "bg-cyan-500 dark:bg-cyan-600";
+    if (intensity === 0) return "bg-slate-100 dark:bg-slate-800/40";
+    if (intensity < 0.2) return "bg-cyan-100 dark:bg-cyan-950/50";
+    if (intensity < 0.4) return "bg-cyan-200 dark:bg-cyan-900/60";
+    if (intensity < 0.6) return "bg-cyan-400 dark:bg-cyan-700";
+    if (intensity < 0.8) return "bg-cyan-500 dark:bg-cyan-600";
     return "bg-cyan-600 dark:bg-cyan-500";
+  };
+
+  // Get text color for cell labels
+  const getTextColor = (value: number) => {
+    const intensity = value / maxValue;
+    if (intensity >= 0.5) return "text-white";
+    return "text-slate-500 dark:text-slate-400";
   };
 
   return (
     <div className="h-full flex flex-col">
-
-       {/* Smart Insight */}
+      {/* Smart Insight */}
       {smartInsight.hasData && (
-        <div className="mt-0 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50">
+        <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 mb-3">
           <div className="flex items-start gap-2">
             <Flame className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800 dark:text-amber-200">
@@ -1867,76 +1859,91 @@ function PeakTrafficHeatmap({ data, chartData }: { data: HourlyTrafficResult[]; 
           </div>
         </div>
       )}
-      {/* Hour labels */}
-      <div className="flex mb-1">
-        <div className="w-10" /> {/* Spacer for day labels */}
-        {HOURS.map((hour) => (
-          <div key={hour} className="flex-1 text-center">
-            <span className="text-[9px] text-muted-foreground">
-              {formatHourLabel(hour)}
-            </span>
-          </div>
-        ))}
-      </div>
       
-      {/* Heatmap grid */}
-      <div className="flex-1 flex flex-col gap-1.5 mt-2">
-        {heatmapData.map((row, dayIdx) => (
-          <div key={dayIdx} className="flex gap-1.5 flex-1">
-            {/* Day label */}
-            <div className="w-10 flex items-center justify-end pr-2">
-              <span className="text-[10px] font-medium text-muted-foreground">
-                {DAYS_OF_WEEK[dayIdx]}
-              </span>
-            </div>
-            {/* Cells - rounded squares with better spacing */}
-            {row.map((cell, hourIdx) => (
-              <Tooltip key={hourIdx}>
-                <TooltipTrigger asChild>
-                  <div
-                    className={`flex-1 aspect-square rounded-md cursor-pointer transition-all hover:ring-2 hover:ring-cyan-400 hover:scale-105 min-h-[16px] ${getColor(cell.value)}`}
-                  />
-                </TooltipTrigger>
-                <TooltipContent 
-                  side="top" 
-                  className="bg-popover text-popover-foreground border shadow-lg p-2"
-                >
-                  <div className="font-medium text-xs text-foreground">
-                    {cell.day} @ {formatHourLabel(cell.hour)}
-                  </div>
-                  <div className="flex items-center justify-between gap-3 mt-1">
-                    <span className="text-[10px] text-muted-foreground">Transactions:</span>
-                    <span className="text-xs font-semibold tabular-nums">{cell.value}</span>
-                  </div>
-                  {cell.revenue > 0 && (
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] text-muted-foreground">Revenue:</span>
-                      <span className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                        ₱{cell.revenue.toLocaleString("en-PH", { maximumFractionDigits: 0 })}
-                      </span>
-                    </div>
-                  )}
-                </TooltipContent>
-              </Tooltip>
+      {/* Heatmap Grid - Responsive Table Style */}
+      <div className="flex-1 overflow-auto">
+        <div className="min-w-[280px]">
+          {/* Header row with hours */}
+          <div className="grid gap-px" style={{ gridTemplateColumns: "48px repeat(12, 1fr)" }}>
+            <div className="h-6" /> {/* Corner spacer */}
+            {HOURS.map((hour) => (
+              <div key={hour} className="h-6 flex items-center justify-center">
+                <span className="text-[9px] font-medium text-muted-foreground">
+                  {formatHourCompact(hour)}
+                </span>
+              </div>
             ))}
           </div>
-        ))}
-      </div>
-      
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-2 mt-3 pt-2 border-t border-border/50">
-        <span className="text-[10px] text-muted-foreground">Low</span>
-        <div className="flex gap-1">
-          <div className="size-4 rounded-md bg-muted/30" />
-          <div className="size-4 rounded-md bg-cyan-100 dark:bg-cyan-950/40" />
-          <div className="size-4 rounded-md bg-cyan-300 dark:bg-cyan-800/60" />
-          <div className="size-4 rounded-md bg-cyan-500 dark:bg-cyan-600" />
-          <div className="size-4 rounded-md bg-cyan-600 dark:bg-cyan-500" />
+          
+          {/* Data rows */}
+          <div className="flex flex-col gap-px bg-border/30 rounded-lg overflow-hidden">
+            {heatmapData.map((row, dayIdx) => (
+              <div 
+                key={dayIdx} 
+                className="grid gap-px"
+                style={{ gridTemplateColumns: "48px repeat(12, 1fr)" }}
+              >
+                {/* Day label */}
+                <div className="h-8 flex items-center justify-end pr-2 bg-card">
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {DAYS_OF_WEEK[dayIdx]}
+                  </span>
+                </div>
+                {/* Cells */}
+                {row.map((cell, hourIdx) => (
+                  <Tooltip key={hourIdx}>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={`h-8 flex items-center justify-center cursor-pointer transition-all hover:ring-1 hover:ring-cyan-400 hover:ring-inset ${getColor(cell.value)}`}
+                      >
+                        {cell.value > 0 && (
+                          <span className={`text-[8px] font-semibold tabular-nums ${getTextColor(cell.value)}`}>
+                            {cell.value}
+                          </span>
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent 
+                      side="top" 
+                      className="bg-popover text-popover-foreground border shadow-lg p-2"
+                    >
+                      <div className="font-medium text-xs text-foreground">
+                        {cell.day} @ {formatHourLabel(cell.hour)}
+                      </div>
+                      <div className="flex items-center justify-between gap-3 mt-1">
+                        <span className="text-[10px] text-muted-foreground">Transactions:</span>
+                        <span className="text-xs font-semibold tabular-nums">{cell.value}</span>
+                      </div>
+                      {cell.revenue > 0 && (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[10px] text-muted-foreground">Revenue:</span>
+                          <span className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            ₱{cell.revenue.toLocaleString("en-PH", { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
-        <span className="text-[10px] text-muted-foreground">High</span>
       </div>
       
-     
+      {/* Compact Legend */}
+      <div className="flex items-center justify-center gap-1.5 mt-3 pt-2 border-t border-border/50">
+        <span className="text-[9px] text-muted-foreground">Low</span>
+        <div className="flex">
+          <div className="w-4 h-2.5 bg-slate-100 dark:bg-slate-800/40" />
+          <div className="w-4 h-2.5 bg-cyan-100 dark:bg-cyan-950/50" />
+          <div className="w-4 h-2.5 bg-cyan-200 dark:bg-cyan-900/60" />
+          <div className="w-4 h-2.5 bg-cyan-400 dark:bg-cyan-700" />
+          <div className="w-4 h-2.5 bg-cyan-500 dark:bg-cyan-600" />
+          <div className="w-4 h-2.5 bg-cyan-600 dark:bg-cyan-500" />
+        </div>
+        <span className="text-[9px] text-muted-foreground">High</span>
+      </div>
     </div>
   );
 }
@@ -1950,9 +1957,9 @@ type SortOrder = "asc" | "desc";
 
 const CATEGORIES = [
   { value: "all", label: "All Categories" },
-  { value: "SOFTDRINKS_CASE", label: "Soft Drinks Case" },
-  { value: "SODA", label: "Soft Drinks" },
-  { value: "SNACK", label: "Snack" },
+  { value: "SOFTDRINKS_CASE", label: "Softdrinks Case" },
+  { value: "SODA", label: "Soda" },
+  { value: "SNACK", label: "Snacks" },
   { value: "CANNED_GOODS", label: "Canned Goods" },
   { value: "BEVERAGES", label: "Beverages" },
   { value: "DAIRY", label: "Dairy" },
