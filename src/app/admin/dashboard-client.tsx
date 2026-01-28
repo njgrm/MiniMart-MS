@@ -232,8 +232,36 @@ export function DashboardClient({
     transactions: calcPercentChange(displayStats.primary.count, displayStats.comparison.count),
   }), [displayStats]);
 
-  // Percentage badge component - Smart comparison: hide negative % for "Today"
-  const PercentBadge = ({ value, inverted = false }: { value: number; inverted?: boolean }) => {
+  // Generate comparison period label based on selected preset
+  const getComparisonLabel = (): string => {
+    switch (selectedPreset) {
+      case "Today":
+        return "vs Yesterday";
+      case "Yesterday":
+        return "vs 2 days ago";
+      case "Last 7 days":
+        return "vs previous 7 days";
+      case "Last 30 days":
+        return "vs previous 30 days";
+      case "Last 90 days":
+        return "vs previous 90 days";
+      case "Last 6 months":
+        return "vs previous 6 months";
+      case "This month":
+        return "vs last month";
+      case "Last month":
+        return "vs month before";
+      case "2026":
+        return "vs 2025";
+      case "2025":
+        return "vs 2024";
+      default:
+        return "vs previous period";
+    }
+  };
+
+  // Percentage badge component with tooltip - Smart comparison: hide negative % for "Today"
+  const PercentBadge = ({ value, inverted = false, metric }: { value: number; inverted?: boolean; metric: string }) => {
     const isPositive = inverted ? value <= 0 : value >= 0;
     
     // Smart Trend Logic: If showing "Today", only show POSITIVE trends
@@ -241,15 +269,27 @@ export function DashboardClient({
     const showTrend = selectedPreset !== "Today" || isPositive;
     if (!showTrend) return null;
     
+    const comparisonLabel = getComparisonLabel();
+    const tooltipText = `${metric}: ${value >= 0 ? "+" : ""}${value}% ${comparisonLabel}`;
+    
     return (
-      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 ${
-        isPositive 
-          ? "bg-[#2EAFC5]/20 text-[#2EAFC5]" 
-          : "bg-destructive/20 text-destructive"
-      }`}>
-        {isPositive ? <IconTrendingUp className="size-3" /> : <IconTrendingDown className="size-3" />}
-        {value >= 0 ? "+" : ""}{value}%
-      </span>
+      <TooltipProvider delayDuration={100}>
+        <TooltipUI>
+          <TooltipTrigger asChild>
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded inline-flex items-center gap-0.5 cursor-help ${
+              isPositive 
+                ? "bg-[#2EAFC5]/20 text-[#2EAFC5]" 
+                : "bg-destructive/20 text-destructive"
+            }`}>
+              {isPositive ? <IconTrendingUp className="size-3" /> : <IconTrendingDown className="size-3" />}
+              {value >= 0 ? "+" : ""}{value}%
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            <p>{tooltipText}</p>
+          </TooltipContent>
+        </TooltipUI>
+      </TooltipProvider>
     );
   };
 
@@ -396,7 +436,7 @@ export function DashboardClient({
             <div className="size-7 rounded-lg bg-[#AC0F16]/20 flex items-center justify-center">
               <IconCurrencyPeso className="size-4 text-[#AC0F16]" />
             </div>
-            <PercentBadge value={percentages.profit} />
+            <PercentBadge value={percentages.profit} metric="Profit" />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{formatPeso(displayStats.primary.profit)}</p>
           <div className="flex items-center gap-1">
@@ -424,7 +464,7 @@ export function DashboardClient({
             <div className="size-7 rounded-lg bg-[#2EAFC5]/20 flex items-center justify-center">
               <IconWallet className="size-4 text-[#2EAFC5]" />
             </div>
-            <PercentBadge value={percentages.revenue} />
+            <PercentBadge value={percentages.revenue} metric="Revenue" />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{formatPeso(displayStats.primary.revenue)}</p>
           <div className="flex items-center gap-1">
@@ -452,7 +492,7 @@ export function DashboardClient({
             <div className="size-7 rounded-lg bg-[#F1782F]/20 flex items-center justify-center">
               <IconShoppingCart className="size-4 text-[#F1782F]" />
             </div>
-            <PercentBadge value={percentages.cost} inverted />
+            <PercentBadge value={percentages.cost} inverted metric="Cost" />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{formatPeso(displayStats.primary.cost)}</p>
           <div className="flex items-center gap-1">
@@ -480,7 +520,7 @@ export function DashboardClient({
             <div className="size-7 rounded-lg bg-[#AC0F16]/20 flex items-center justify-center">
               <IconReceipt className="size-4 text-[#AC0F16]" />
             </div>
-            <PercentBadge value={percentages.transactions} />
+            <PercentBadge value={percentages.transactions} metric="Transactions" />
           </div>
           <p className="text-lg font-bold tabular-nums text-foreground">{displayStats.primary.count}</p>
           <div className="flex items-center gap-1">

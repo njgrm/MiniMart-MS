@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Standalone output for Docker optimization
+  output: "standalone",
   // Allow sharp to be used as an external package for image processing
   serverExternalPackages: ["sharp", "@imgly/background-removal-node"],
   experimental: {

@@ -57,11 +57,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { batchRestockProducts } from "@/actions/inventory";
 import { uploadReceiptImage } from "@/actions/upload";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { ProductData } from "./inventory-client";
+import type { ProductData, SupplierOption } from "./inventory-client";
 
 interface BatchRestockItem {
   product_id: number;
@@ -77,6 +84,7 @@ interface BatchRestockDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: ProductData[];
+  suppliers: SupplierOption[];
   onSuccess?: () => void;
 }
 
@@ -84,6 +92,7 @@ export function BatchRestockDialog({
   open,
   onOpenChange,
   products,
+  suppliers,
   onSuccess,
 }: BatchRestockDialogProps) {
   const [isPending, startTransition] = useTransition();
@@ -98,11 +107,22 @@ export function BatchRestockDialog({
   const [showConfirmation, setShowConfirmation] = useState(false);
 
   // Delivery info (shared across all items)
-  const [supplierName, setSupplierName] = useState("");
+  const [supplierId, setSupplierId] = useState<string>("");
+  const [newSupplierName, setNewSupplierName] = useState("");
   const [reference, setReference] = useState("");
   const [reason, setReason] = useState("");
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+
+  // Get supplier name for display/submission
+  const supplierName = useMemo(() => {
+    if (supplierId === "new") return newSupplierName.trim();
+    if (supplierId) {
+      const supplier = suppliers.find(s => s.id === parseInt(supplierId));
+      return supplier?.name || "";
+    }
+    return "";
+  }, [supplierId, newSupplierName, suppliers]);
 
   // Items to restock
   const [items, setItems] = useState<BatchRestockItem[]>([]);
@@ -112,7 +132,8 @@ export function BatchRestockDialog({
 
   // Reset form when dialog opens
   const resetForm = () => {
-    setSupplierName("");
+    setSupplierId("");
+    setNewSupplierName("");
     setReference("");
     setReason("");
     setReceiptFile(null);
@@ -402,15 +423,34 @@ export function BatchRestockDialog({
                 <CollapsibleContent>
                   <div className="px-4 pb-4 pt-2 bg-card space-y-4">
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="supplier" className="text-xs">Supplier Name</Label>
-                        <Input
-                          id="supplier"
-                          value={supplierName}
-                          onChange={(e) => setSupplierName(e.target.value)}
-                          placeholder="e.g., ABC Distributors"
-                          className="h-9"
-                        />
+                      <div className={`space-y-1.5 ${supplierId === "new" ? "col-span-2" : ""}`}>
+                        <Label htmlFor="supplier" className="text-xs">Supplier</Label>
+                        <div className="flex gap-2">
+                          <Select value={supplierId} onValueChange={setSupplierId}>
+                            <SelectTrigger className="h-9 flex-1">
+                              <SelectValue placeholder="Select supplier..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {suppliers.map((s) => (
+                                <SelectItem key={s.id} value={String(s.id)}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="new" className="text-primary font-medium">
+                                + Add New Supplier
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {supplierId === "new" && (
+                            <Input
+                              value={newSupplierName}
+                              onChange={(e) => setNewSupplierName(e.target.value)}
+                              placeholder="New supplier name..."
+                              className="h-9 flex-1"
+                              autoFocus
+                            />
+                          )}
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="reference" className="text-xs">Invoice / Reference #</Label>

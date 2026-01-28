@@ -25,8 +25,19 @@ import {
   Pencil,
   Filter,
   CalendarRange,
+  Sparkles,
+  Sun,
+  Heart,
+  Gift,
+  Star,
+  Church,
+  Flag,
+  GraduationCap,
+  Candy,
+  TreeDeciduous,
+  Check,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, addDays, setYear, getYear, startOfYear, endOfYear, subDays } from "date-fns";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +95,7 @@ import {
   restoreEvent,
   toggleEventActive,
   importEventsCsv,
+  getEvents,
   type CreateEventInput,
   type UpdateEventInput,
   type CsvEventRow,
@@ -99,7 +111,7 @@ interface EventData {
   source: EventSource;
   start_date: Date;
   end_date: Date;
-  multiplier: number;
+  multiplier: number | null;
   affected_brand: string | null;
   affected_category: string | null;
   is_active: boolean;
@@ -127,6 +139,7 @@ export function EventManagerClient({ initialEvents }: EventManagerClientProps) {
   const [showArchived, setShowArchived] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isHolidayPresetsOpen, setIsHolidayPresetsOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<EventData | null>(null);
   const [archiveEventId, setArchiveEventId] = useState<number | null>(null);
   const [deleteEventId, setDeleteEventId] = useState<number | null>(null);
@@ -261,6 +274,22 @@ export function EventManagerClient({ initialEvents }: EventManagerClientProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Dialog open={isHolidayPresetsOpen} onOpenChange={setIsHolidayPresetsOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2 border-primary/30 text-primary hover:bg-primary/5">
+                <Sparkles className="h-4 w-4" />
+                PH Holidays
+              </Button>
+            </DialogTrigger>
+            <HolidayPresetsDialog
+              existingEvents={events}
+              onClose={() => setIsHolidayPresetsOpen(false)}
+              onSuccess={(newEvents) => {
+                setEvents((prev) => [...newEvents, ...prev]);
+                setIsHolidayPresetsOpen(false);
+              }}
+            />
+          </Dialog>
           <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -270,9 +299,9 @@ export function EventManagerClient({ initialEvents }: EventManagerClientProps) {
             </DialogTrigger>
             <ImportEventsDialog
               onClose={() => setIsImportDialogOpen(false)}
-              onSuccess={() => {
+              onSuccess={(refreshedEvents) => {
+                setEvents(refreshedEvents);
                 setIsImportDialogOpen(false);
-                router.refresh();
               }}
             />
           </Dialog>
@@ -395,7 +424,7 @@ export function EventManagerClient({ initialEvents }: EventManagerClientProps) {
                 <TableBody>
                   {filteredEvents.map((event) => {
                     const badge = getSourceBadge(event.source);
-                    const multiplier = event.multiplier;
+                    const multiplier = event.multiplier ?? 1.0;
                     
                     return (
                       <TableRow key={event.id}>
@@ -758,7 +787,7 @@ function EditEventDialog({ event, onClose, onSuccess }: EditEventDialogProps) {
     name: event.name,
     description: event.description || "",
     source: event.source,
-    multiplier: event.multiplier.toString(),
+    multiplier: (event.multiplier ?? 1.0).toString(),
     affectedBrand: event.affected_brand || "",
   });
 
@@ -923,7 +952,7 @@ function EditEventDialog({ event, onClose, onSuccess }: EditEventDialogProps) {
 
 interface ImportEventsDialogProps {
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (refreshedEvents: EventData[]) => void;
 }
 
 interface ValidationError {
@@ -1093,7 +1122,9 @@ function ImportEventsDialog({ onClose, onSuccess }: ImportEventsDialogProps) {
             }))
           );
         } else {
-          onSuccess();
+          // Fetch fresh events list and pass to parent
+          const refreshedEvents = await getEvents();
+          onSuccess(refreshedEvents);
           handleClose();
         }
       } else {
@@ -1231,6 +1262,516 @@ function ImportEventsDialog({ onClose, onSuccess }: ImportEventsDialogProps) {
             <>
               <CheckCircle2 className="h-4 w-4" />
               Import Events
+            </>
+          )}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+// =============================================================================
+// Philippine Holiday Presets Dialog Component
+// =============================================================================
+
+interface PhilippineHoliday {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  getDateRange: (year: number) => { start: Date; end: Date };
+  multiplier: number;
+  category: "religious" | "national" | "commercial" | "seasonal";
+}
+
+// Calculate Easter Sunday using Anonymous Gregorian algorithm
+function getEasterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month, day);
+}
+
+// Philippine Holidays with dynamic date calculations
+const PHILIPPINE_HOLIDAYS: PhilippineHoliday[] = [
+  // === MAJOR COMMERCIAL PEAKS ===
+  {
+    id: "christmas-season",
+    name: "Christmas Season",
+    description: "Dec 1-25 (Ber months peak, gift buying)",
+    icon: <Gift className="h-4 w-4 text-red-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 11, 1), // Dec 1
+      end: new Date(year, 11, 25), // Dec 25
+    }),
+    multiplier: 3.0,
+    category: "commercial",
+  },
+  {
+    id: "new-year",
+    name: "New Year Celebration",
+    description: "Dec 26 - Jan 2 (Media Noche supplies)",
+    icon: <Sparkles className="h-4 w-4 text-yellow-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 11, 26), // Dec 26
+      end: new Date(year + 1, 0, 2), // Jan 2 next year
+    }),
+    multiplier: 2.5,
+    category: "commercial",
+  },
+  {
+    id: "valentines",
+    name: "Valentine's Day",
+    description: "Feb 10-14 (Chocolates, snacks)",
+    icon: <Heart className="h-4 w-4 text-pink-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 1, 10), // Feb 10
+      end: new Date(year, 1, 14), // Feb 14
+    }),
+    multiplier: 1.5,
+    category: "commercial",
+  },
+  {
+    id: "back-to-school",
+    name: "Back to School",
+    description: "Late July - Aug (School supplies rush)",
+    icon: <GraduationCap className="h-4 w-4 text-blue-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 6, 20), // July 20
+      end: new Date(year, 7, 15), // Aug 15
+    }),
+    multiplier: 2.0,
+    category: "seasonal",
+  },
+  {
+    id: "halloween",
+    name: "Halloween / Undas",
+    description: "Oct 28 - Nov 2 (All Saints & Souls Day)",
+    icon: <Candy className="h-4 w-4 text-orange-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 9, 28), // Oct 28
+      end: new Date(year, 10, 2), // Nov 2
+    }),
+    multiplier: 2.0,
+    category: "commercial",
+  },
+  // === RELIGIOUS HOLIDAYS ===
+  {
+    id: "holy-week",
+    name: "Holy Week",
+    description: "Palm Sunday to Easter (Stock up before)",
+    icon: <Church className="h-4 w-4 text-purple-500" />,
+    getDateRange: (year) => {
+      const easter = getEasterSunday(year);
+      return {
+        start: subDays(easter, 7), // Palm Sunday
+        end: easter, // Easter Sunday
+      };
+    },
+    multiplier: 2.5,
+    category: "religious",
+  },
+  {
+    id: "chinese-new-year",
+    name: "Chinese New Year",
+    description: "Jan/Feb (Tikoy, fortune items)",
+    icon: <Star className="h-4 w-4 text-red-600" />,
+    getDateRange: (year) => {
+      // Approximate - usually late Jan to mid Feb
+      // For simplicity, we'll use a fixed range that covers most CNY dates
+      return {
+        start: new Date(year, 0, 20), // Jan 20
+        end: new Date(year, 1, 15), // Feb 15
+      };
+    },
+    multiplier: 1.5,
+    category: "religious",
+  },
+  // === NATIONAL HOLIDAYS ===
+  {
+    id: "independence-day",
+    name: "Independence Day",
+    description: "June 12 (Fiesta supplies)",
+    icon: <Flag className="h-4 w-4 text-blue-600" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 5, 10), // June 10
+      end: new Date(year, 5, 12), // June 12
+    }),
+    multiplier: 1.5,
+    category: "national",
+  },
+  {
+    id: "bonifacio-day",
+    name: "Bonifacio Day",
+    description: "Nov 30 (Long weekend prep)",
+    icon: <Flag className="h-4 w-4 text-yellow-600" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 10, 28), // Nov 28
+      end: new Date(year, 10, 30), // Nov 30
+    }),
+    multiplier: 1.5,
+    category: "national",
+  },
+  {
+    id: "rizal-day",
+    name: "Rizal Day",
+    description: "Dec 30 (Pre-New Year buying)",
+    icon: <Flag className="h-4 w-4 text-green-600" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 11, 28), // Dec 28
+      end: new Date(year, 11, 30), // Dec 30
+    }),
+    multiplier: 1.5,
+    category: "national",
+  },
+  // === SEASONAL PEAKS ===
+  {
+    id: "summer-peak",
+    name: "Summer Peak",
+    description: "Apr-May (Beverages, ice cream)",
+    icon: <Sun className="h-4 w-4 text-amber-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 3, 1), // Apr 1
+      end: new Date(year, 4, 31), // May 31
+    }),
+    multiplier: 1.5,
+    category: "seasonal",
+  },
+  {
+    id: "rainy-season",
+    name: "Rainy Season Start",
+    description: "June (Canned goods, instant noodles)",
+    icon: <TreeDeciduous className="h-4 w-4 text-teal-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 5, 1), // June 1
+      end: new Date(year, 5, 30), // June 30
+    }),
+    multiplier: 1.3,
+    category: "seasonal",
+  },
+  {
+    id: "ber-months-start",
+    name: "Ber Months Start",
+    description: "Sep 1-15 (Early Christmas shopping)",
+    icon: <PartyPopper className="h-4 w-4 text-green-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 8, 1), // Sep 1
+      end: new Date(year, 8, 15), // Sep 15
+    }),
+    multiplier: 1.5,
+    category: "seasonal",
+  },
+  // === PAYDAY CYCLES ===
+  {
+    id: "payday-15th",
+    name: "Monthly Payday (15th)",
+    description: "14th-16th of each month (recurring)",
+    icon: <Calendar className="h-4 w-4 text-emerald-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 0, 14), // Example: Jan 14
+      end: new Date(year, 0, 16), // Jan 16
+    }),
+    multiplier: 1.3,
+    category: "commercial",
+  },
+  {
+    id: "payday-30th",
+    name: "Monthly Payday (30th)",
+    description: "29th-1st of each month (recurring)",
+    icon: <Calendar className="h-4 w-4 text-emerald-500" />,
+    getDateRange: (year) => ({
+      start: new Date(year, 0, 29), // Example: Jan 29
+      end: new Date(year, 0, 31), // Jan 31
+    }),
+    multiplier: 1.3,
+    category: "commercial",
+  },
+];
+
+const CATEGORY_LABELS: Record<string, { label: string; className: string }> = {
+  commercial: { label: "Commercial", className: "bg-blue-100 text-blue-700" },
+  religious: { label: "Religious", className: "bg-purple-100 text-purple-700" },
+  national: { label: "National", className: "bg-green-100 text-green-700" },
+  seasonal: { label: "Seasonal", className: "bg-amber-100 text-amber-700" },
+};
+
+interface HolidayPresetsDialogProps {
+  existingEvents: EventData[];
+  onClose: () => void;
+  onSuccess: (events: EventData[]) => void;
+}
+
+function HolidayPresetsDialog({ existingEvents, onClose, onSuccess }: HolidayPresetsDialogProps) {
+  const currentYear = getYear(new Date());
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedHolidays, setSelectedHolidays] = useState<Set<string>>(new Set());
+  const [isPending, startTransition] = useTransition();
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  // Check which holidays already exist for the selected year
+  const existingHolidayIds = new Set(
+    existingEvents
+      .filter((e) => e.source === "HOLIDAY")
+      .map((e) => {
+        // Try to match by name
+        const holiday = PHILIPPINE_HOLIDAYS.find((h) => 
+          e.name.toLowerCase().includes(h.name.toLowerCase().split(" ")[0])
+        );
+        if (holiday) {
+          const eventYear = getYear(new Date(e.start_date));
+          return `${holiday.id}-${eventYear}`;
+        }
+        return null;
+      })
+      .filter(Boolean)
+  );
+
+  const toggleHoliday = (id: string) => {
+    setSelectedHolidays((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    const visible = PHILIPPINE_HOLIDAYS.filter(
+      (h) => categoryFilter === "all" || h.category === categoryFilter
+    );
+    const allIds = new Set(visible.map((h) => h.id));
+    // Only add those not already existing
+    const newSelection = new Set(selectedHolidays);
+    visible.forEach((h) => {
+      if (!existingHolidayIds.has(`${h.id}-${selectedYear}`)) {
+        newSelection.add(h.id);
+      }
+    });
+    setSelectedHolidays(newSelection);
+  };
+
+  const clearSelection = () => {
+    setSelectedHolidays(new Set());
+  };
+
+  const filteredHolidays = PHILIPPINE_HOLIDAYS.filter(
+    (h) => categoryFilter === "all" || h.category === categoryFilter
+  );
+
+  const handleImport = async () => {
+    if (selectedHolidays.size === 0) {
+      toast.error("Please select at least one holiday");
+      return;
+    }
+
+    startTransition(async () => {
+      const createdEvents: EventData[] = [];
+      const errors: string[] = [];
+
+      for (const holidayId of selectedHolidays) {
+        const holiday = PHILIPPINE_HOLIDAYS.find((h) => h.id === holidayId);
+        if (!holiday) continue;
+
+        // Skip if already exists
+        if (existingHolidayIds.has(`${holiday.id}-${selectedYear}`)) {
+          continue;
+        }
+
+        const dateRange = holiday.getDateRange(selectedYear);
+        
+        const input: CreateEventInput = {
+          name: `${holiday.name} ${selectedYear}`,
+          description: holiday.description,
+          source: "HOLIDAY",
+          startDate: format(dateRange.start, "yyyy-MM-dd"),
+          endDate: format(dateRange.end, "yyyy-MM-dd"),
+          multiplier: holiday.multiplier,
+        };
+
+        const result = await createEvent(input);
+        
+        if (result.success && result.data) {
+          createdEvents.push(result.data as unknown as EventData);
+        } else {
+          errors.push(`${holiday.name}: ${result.error || "Failed"}`);
+        }
+      }
+
+      if (createdEvents.length > 0) {
+        toast.success(`Created ${createdEvents.length} holiday event${createdEvents.length !== 1 ? "s" : ""}`);
+        onSuccess(createdEvents);
+      }
+      
+      if (errors.length > 0) {
+        toast.error(`${errors.length} failed: ${errors[0]}`);
+      }
+    });
+  };
+
+  return (
+    <DialogContent className="sm:max-w-[650px] max-h-[85vh] flex flex-col">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          Philippine Holiday Presets
+        </DialogTitle>
+        <DialogDescription>
+          Quickly add common Philippine holidays and seasonal peaks to your event calendar.
+          Events marked with a checkmark already exist.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="flex flex-col gap-4 flex-1 min-h-0">
+        {/* Year Selector and Filters */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={(currentYear - 1).toString()}>{currentYear - 1}</SelectItem>
+              <SelectItem value={currentYear.toString()}>{currentYear}</SelectItem>
+              <SelectItem value={(currentYear + 1).toString()}>{currentYear + 1}</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[130px]">
+              <Filter className="h-3.5 w-3.5 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="commercial">Commercial</SelectItem>
+              <SelectItem value="religious">Religious</SelectItem>
+              <SelectItem value="national">National</SelectItem>
+              <SelectItem value="seasonal">Seasonal</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <div className="flex-1" />
+
+          <Button variant="outline" size="sm" onClick={selectAllVisible} className="text-xs">
+            Select All
+          </Button>
+          <Button variant="ghost" size="sm" onClick={clearSelection} className="text-xs">
+            Clear
+          </Button>
+        </div>
+
+        {/* Holidays List */}
+        <ScrollArea className="flex-1 min-h-0 border rounded-lg">
+          <div className="p-2 space-y-1">
+            {filteredHolidays.map((holiday) => {
+              const dateRange = holiday.getDateRange(selectedYear);
+              const alreadyExists = existingHolidayIds.has(`${holiday.id}-${selectedYear}`);
+              const isSelected = selectedHolidays.has(holiday.id);
+              const catConfig = CATEGORY_LABELS[holiday.category];
+
+              return (
+                <div
+                  key={holiday.id}
+                  onClick={() => !alreadyExists && toggleHoliday(holiday.id)}
+                  className={`
+                    flex items-center gap-3 p-3 rounded-lg transition-colors cursor-pointer
+                    ${alreadyExists 
+                      ? "bg-muted/50 opacity-60 cursor-not-allowed" 
+                      : isSelected 
+                        ? "bg-primary/10 border border-primary/30" 
+                        : "hover:bg-muted/50 border border-transparent"
+                    }
+                  `}
+                >
+                  {/* Checkbox / Check Icon */}
+                  <div className={`
+                    flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center
+                    ${alreadyExists 
+                      ? "bg-green-100 border-green-500" 
+                      : isSelected 
+                        ? "bg-primary border-primary" 
+                        : "border-muted-foreground/30"
+                    }
+                  `}>
+                    {(alreadyExists || isSelected) && (
+                      <Check className={`h-3 w-3 ${alreadyExists ? "text-green-600" : "text-white"}`} />
+                    )}
+                  </div>
+
+                  {/* Icon */}
+                  <div className="flex-shrink-0">{holiday.icon}</div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground text-sm">{holiday.name}</span>
+                      <Badge className={`text-[10px] px-1.5 py-0 ${catConfig.className}`}>
+                        {catConfig.label}
+                      </Badge>
+                      {alreadyExists && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-green-600">
+                          Added
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{holiday.description}</p>
+                  </div>
+
+                  {/* Date & Multiplier */}
+                  <div className="flex-shrink-0 text-right">
+                    <p className="text-xs text-foreground font-mono">
+                      {format(dateRange.start, "MMM d")} - {format(dateRange.end, "MMM d")}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{holiday.multiplier}x boost</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+
+        {/* Selected Summary */}
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm text-muted-foreground">
+            {selectedHolidays.size} holiday{selectedHolidays.size !== 1 ? "s" : ""} selected
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {existingHolidayIds.size > 0 && `${existingHolidayIds.size} already added`}
+          </p>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleImport}
+          disabled={isPending || selectedHolidays.size === 0}
+          className="gap-2"
+        >
+          {isPending ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Adding...
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Add {selectedHolidays.size} Event{selectedHolidays.size !== 1 ? "s" : ""}
             </>
           )}
         </Button>

@@ -1,0 +1,42 @@
+services:
+  # The Next.js Application
+  app:
+    container_name: christian-minimart-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # Connection string uses the service name 'db' instead of localhost
+      - DATABASE_URL=postgresql://postgres:password@db:5432/christian_minimart?schema=public
+      - NEXTAUTH_SECRET=changereplacethiswithsecuresecret
+      - NEXTAUTH_URL=http://localhost:3000
+    depends_on:
+      - db
+    networks:
+      - pos-network
+
+  # The Database
+  db:
+    container_name: christian-minimart-db
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=christian_minimart
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - pos-network
+
+networks:
+  pos-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

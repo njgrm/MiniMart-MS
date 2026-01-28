@@ -1020,51 +1020,7 @@ export function ProductsTable({
           </Tooltip>
         </TooltipProvider>
 
-        {/* Out of Stock Button - Highest Priority */}
-        {outOfStockItems > 0 && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => {
-                    table.getColumn("status")?.setFilterValue("OUT_OF_STOCK");
-                  }}
-                  className="flex items-center gap-1.5 h-10 px-2 lg:px-3 rounded-md bg-destructive dark:bg-destructive/20 border border-destructive dark:border-destructive/40 text-white dark:text-destructive shadow-warm-sm dark:shadow-none hover:bg-destructive/90 dark:hover:bg-destructive/30 transition-colors cursor-pointer shrink-0"
-                >
-                  <Package className="h-4 w-4" />
-                  <span className="text-sm font-medium">{outOfStockItems}</span>
-                  <span className="text-xs opacity-90 dark:opacity-80 hidden lg:inline">Out</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="lg:hidden">
-                <p>{outOfStockItems} Out of Stock</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
-        {/* Low Stock Button */}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => {
-                  table.getColumn("status")?.setFilterValue("LOW_STOCK");
-                }}
-                className="flex items-center gap-1.5 h-10 px-2 lg:px-3 rounded-md bg-secondary dark:bg-secondary/20 border border-secondary dark:border-secondary/40 text-white dark:text-secondary shadow-warm-sm dark:shadow-none hover:bg-secondary/90 dark:hover:bg-secondary/30 transition-colors cursor-pointer shrink-0"
-              >
-                <AlertTriangle className="h-4 w-4" />
-                <span className="text-sm font-medium">{lowStockItems}</span>
-                <span className="text-xs opacity-90 dark:opacity-80 hidden lg:inline">Low</span>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="lg:hidden">
-              <p>{lowStockItems} Low Stock</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+       
 
         <TooltipProvider>
           <Tooltip>

@@ -8,7 +8,72 @@ All notable changes to Christian Minimart POS System will be documented in this 
 
 ### Admin UI & History Pages Improvements
 
-#### 1. Sidebar Navigation Fix
+#### 1. Batch Returns - Auto-Filter by Supplier
+- **New Feature:** When a supplier is selected for return, the batch table automatically filters to show only items from that supplier
+- This prevents accidentally returning items to the wrong supplier
+- Visual badge indicator shows "Filtered: {Supplier Name}" when active
+
+**Files Modified:**
+- `src/app/admin/reports/expiring/return/return-client.tsx`
+
+#### 2. Batch Restock - Supplier Dropdown
+- **Fixed:** Batch restock modal now uses supplier dropdown instead of manual text input
+- Select from existing suppliers or add new supplier inline
+- Consistent with supplier selection pattern used in returns page
+
+**Files Modified:**
+- `src/app/admin/inventory/batch-restock-dialog.tsx`
+- `src/app/admin/inventory/inventory-client.tsx`
+- `src/app/admin/inventory/page.tsx`
+
+#### 3. Notification Store - UUID Fix
+- **Fixed:** `crypto.randomUUID is not a function` runtime error in vendor order page
+- Added `generateId()` fallback function that works in all environments
+- Uses `crypto.randomUUID()` when available, falls back to manual UUID generation
+
+**Files Modified:**
+- `src/stores/use-notification-store.ts`
+
+#### 4. Dashboard Trend Marker Tooltips
+- **New Feature:** Added tooltips to all PercentBadge trend markers in main dashboard
+- Tooltips show comparison context: "Profit: +15.2% vs Yesterday" or "Revenue: -3.1% vs Last 7 Days"
+- Dynamic comparison label based on selected date preset (Today, Last 7 Days, Last 30 Days, etc.)
+- Provides immediate context for what time periods are being compared
+
+**Files Modified:**
+- `src/app/admin/dashboard-client.tsx`
+
+#### 2. Page Refresh Bug Fixes
+- **Fixed:** Supplier page not refreshing instantly after adding new supplier
+  - Root cause: `useState(initialSuppliers)` pattern prevents React from updating when parent re-renders
+  - Fix: Use prop directly instead of storing in state, allowing `router.refresh()` to work properly
+- **Fixed:** Event Manager import CSV not refreshing the list
+  - Root cause: Same useState pattern with `router.refresh()`
+  - Fix: Import dialog now fetches fresh events after success and passes them to parent's `setEvents`
+
+**Files Modified:**
+- `src/app/admin/suppliers/suppliers-client.tsx`
+- `src/app/admin/analytics/events/event-manager-client.tsx`
+
+#### 3. Philippine Holiday Presets for Event Manager
+- **New Feature:** "PH Holidays" button in Event Manager header
+- Pre-built presets for 14 major Philippine holidays and seasonal peaks:
+  - **Commercial:** Christmas Season, New Year, Valentine's Day, Halloween/Undas, Payday Cycles
+  - **Religious:** Holy Week (auto-calculated Easter), Chinese New Year
+  - **National:** Independence Day, Bonifacio Day, Rizal Day
+  - **Seasonal:** Summer Peak, Rainy Season, Ber Months, Back to School
+- Dynamic date calculation for any year (including moveable feasts like Easter)
+- Category filter (Commercial/Religious/National/Seasonal)
+- Year selector (previous/current/next year)
+- Select All / Clear buttons for bulk selection
+- Visual indicators for already-added holidays
+- One-click bulk import of selected holidays
+- Each holiday includes appropriate sales multiplier (1.3x - 3.0x)
+
+**Files Modified:**
+- `src/app/admin/analytics/events/event-manager-client.tsx`
+
+#### 2. Sidebar Navigation Fix
 - **Fixed:** Clicking nav items with sub-items now navigates to the main page (Orders, Inventory, Analytics)
 - **Chevron-only toggle:** Only clicking the chevron icon expands/collapses sub-items
 - Previously clicking anywhere on the nav item would toggle dropdown instead of navigating

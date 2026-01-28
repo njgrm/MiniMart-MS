@@ -226,6 +226,13 @@ export function BatchReturnClient({
     return [...expiringItems].sort((a, b) => (urgencyOrder[a.urgency] ?? 5) - (urgencyOrder[b.urgency] ?? 5));
   }, [expiringItems]);
 
+  // Get selected supplier name for auto-filtering
+  const selectedSupplierName = useMemo(() => {
+    if (!supplierId || supplierId === "__NEW__") return null;
+    const supplier = suppliers.find(s => s.id === parseInt(supplierId));
+    return supplier?.name || null;
+  }, [supplierId, suppliers]);
+
   const filteredItems = useMemo(() => {
     let items = availableItems;
     
@@ -234,8 +241,11 @@ export function BatchReturnClient({
       items = items.filter(i => i.urgency === urgencyFilter);
     }
     
-    // Apply supplier filter
-    if (supplierFilter !== "all") {
+    // Auto-filter by selected supplier (when returning, only show items from that supplier)
+    if (selectedSupplierName) {
+      items = items.filter(i => i.supplier_name?.toLowerCase() === selectedSupplierName.toLowerCase());
+    } else if (supplierFilter !== "all") {
+      // Fallback to manual supplier filter if no supplier selected for return
       items = items.filter(i => i.supplier_name === supplierFilter);
     }
     
@@ -252,7 +262,7 @@ export function BatchReturnClient({
     }
     
     return items;
-  }, [availableItems, searchQuery, supplierFilter, urgencyFilter]);
+  }, [availableItems, searchQuery, supplierFilter, urgencyFilter, selectedSupplierName]);
 
   // Get selected items
   const selectedItems = useMemo(() => 
@@ -526,7 +536,15 @@ export function BatchReturnClient({
         <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader className="pb-3 pt-4 px-4 shrink-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <CardTitle className="text-sm">Select Batches ({filteredItems.length})</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">Select Batches ({filteredItems.length})</CardTitle>
+                {selectedSupplierName && (
+                  <Badge variant="secondary" className="text-[10px] gap-1">
+                    <Building2 className="h-3 w-3" />
+                    Filtered: {selectedSupplierName}
+                  </Badge>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Button type="button" variant="outline" size="sm" onClick={selectAllExpired} className="h-7 text-[10px] px-2">
                   <XCircle className="h-3 w-3 mr-1 text-[#AC0F16]" />Expired

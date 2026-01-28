@@ -70,7 +70,8 @@ interface SuppliersClientProps {
 export function SuppliersClient({ initialSuppliers }: SuppliersClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [suppliers] = useState(initialSuppliers);
+  // Use prop directly - don't store in state or it won't update on router.refresh()
+  const suppliers = initialSuppliers;
   const [globalFilter, setGlobalFilter] = useState("");
   const [activeTab, setActiveTab] = useState<"active" | "archived">("active");
   const [addDialogOpen, setAddDialogOpen] = useState(false);

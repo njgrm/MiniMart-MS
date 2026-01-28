@@ -1,5 +1,0 @@
-- [ ] Analyze the motion sidebar components to understand current hover behavior
-- [ ] Identify the root cause of the "spazzing out" issue
-- [ ] Fix the hover state logic to maintain proper sidebar visibility
-- [ ] Test the implementation to ensure it works correctly
-- [ ] Verify the fix across different screen sizes

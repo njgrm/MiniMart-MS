@@ -37,12 +37,18 @@ export interface ProductData {
   velocity_status: "OUT_OF_STOCK" | "CRITICAL" | "LOW" | "HEALTHY" | "DEAD_STOCK";
 }
 
+export interface SupplierOption {
+  id: number;
+  name: string;
+}
+
 interface InventoryClientProps {
   initialProducts: ProductData[];
   initialArchivedProducts: ArchivedProduct[];
+  suppliers: SupplierOption[];
 }
 
-export function InventoryClient({ initialProducts, initialArchivedProducts }: InventoryClientProps) {
+export function InventoryClient({ initialProducts, initialArchivedProducts, suppliers }: InventoryClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState<ProductData[]>(initialProducts);
@@ -253,6 +259,7 @@ export function InventoryClient({ initialProducts, initialArchivedProducts }: In
         open={isBatchRestockOpen}
         onOpenChange={setIsBatchRestockOpen}
         products={products}
+        suppliers={suppliers}
         onSuccess={() => {
           router.refresh();
         }}
